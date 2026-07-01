@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartlight.backend.mapper.SensorDataMapper">
+
+    <!-- 基础结果映射 -->
+    <resultMap id="BaseResultMap" type="com.smartlight.backend.entity.SensorData">
+        <id column="id" property="id"/>
+        <result column="light_id" property="lightId"/>
+        <result column="illuminance" property="illuminance"/>
+        <result column="power" property="power"/>
+        <result column="voltage" property="voltage"/>
+        <result column="current" property="current"/>
+        <result column="temperature" property="temperature"/>
+        <result column="humidity" property="humidity"/>
+        <result column="collect_time" property="collectTime"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+</mapper>
