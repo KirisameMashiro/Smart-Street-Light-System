@@ -49,9 +49,27 @@
               登 录
             </el-button>
           </el-form-item>
+          <el-form-item>
+            <el-button
+              class="submit-btn"
+              @click="onDemoLogin('admin')"
+            >
+              演示模式（管理员）
+            </el-button>
+          </el-form-item>
+          <el-form-item>
+            <el-button
+              class="submit-btn"
+              plain
+              @click="onDemoLogin('operator')"
+            >
+              演示模式（运维）
+            </el-button>
+          </el-form-item>
         </el-form>
 
         <div class="hint">
+          <span>后端未启动时，点击"演示模式"可直接进入</span>
           <span>默认账号：admin / admin123</span>
           <span>运维账号：operator / 123456</span>
         </div>
@@ -105,6 +123,18 @@ async function onSubmit() {
   } finally {
     loading.value = false
   }
+}
+
+// 演示模式：不调后端接口，直接写入用户信息进入系统
+function onDemoLogin(role) {
+  const demoUsers = {
+    admin: { id: 1, username: 'admin', realName: '系统管理员', role: 'admin', status: 1 },
+    operator: { id: 2, username: 'operator', realName: '运维人员', role: 'operator', status: 1 }
+  }
+  userStore.setUser(demoUsers[role])
+  ElMessage.success('已进入演示模式')
+  const redirect = route.query.redirect || '/dashboard'
+  router.push(redirect)
 }
 </script>
 
