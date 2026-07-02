@@ -63,6 +63,17 @@
       </el-col>
     </el-row>
 
+    <!-- 各行政区设备分布 -->
+    <div class="chart-card" style="margin-top: 16px">
+      <div class="chart-title">各行政区设备分布</div>
+      <el-empty
+        v-if="districtError || districtData.length === 0"
+        description="后端接口缺失或暂无数据"
+        :image-size="80"
+      />
+      <div v-else ref="districtRef" class="chart-box"></div>
+    </div>
+
     <!-- 最近报警 -->
     <div class="chart-card" style="margin-top: 16px">
       <div class="chart-title" style="display:flex;justify-content:space-between;align-items:center">
@@ -104,15 +115,22 @@ import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import StatCard from '@/components/StatCard.vue'
-import { getLightStats, getAllLights } from '@/api/light'
+import { getLightStats, getAllLights, getLightGroupStats } from '@/api/light'
 import { getAlertPage, getUnhandledCount } from '@/api/alert'
-import { ALERT_TYPE_MAP, ALERT_LEVEL_MAP } from '@/utils/constants'
+import {
+  ALERT_TYPE_MAP,
+  ALERT_LEVEL_MAP,
+  STATUS_COLORS
+} from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
 
 const loading = ref(false)
 const stats = reactive({ total: 0, online: 0, offline: 0, fault: 0 })
 const unhandled = ref(0)
 const recentAlerts = ref([])
+const allLights = ref([])
+const districtData = ref([])
+const districtError = ref(false)
 
 const onlineRate = computed(() =>
   stats.total ? ((stats.online / stats.total) * 100).toFixed(1) : '0.0'
@@ -120,28 +138,78 @@ const onlineRate = computed(() =>
 
 const pieRef = ref()
 const barRef = ref()
+const districtRef = ref()
 let pieChart = null
 let barChart = null
+let districtChart = null
 
 async function loadStats() {
-  const res = await getLightStats()
-  Object.assign(stats, res.data || {})
+  try {
+    const res = await getLightStats()
+    Object.assign(stats, res.data || {})
+  } catch (e) {
+    // 拦截器已提示
+  }
 }
 
 async function loadUnhandled() {
-  const res = await getUnhandledCount()
-  unhandled.value = res.data || 0
+  try {
+    const res = await getUnhandledCount()
+    unhandled.value = res.data || 0
+  } catch (e) {
+    // 拦截器已提示
+  }
 }
 
 async function loadRecentAlerts() {
-  const res = await getAlertPage({ pageNum: 1, pageSize: 5, status: 0 })
-  recentAlerts.value = res.data?.records || []
+  try {
+    const res = await getAlertPage({ pageNum: 1, pageSize: 5, status: 0 })
+    recentAlerts.value = res.data?.records || []
+  } catch (e) {
+    recentAlerts.value = []
+  }
+}
+
+async function loadAllLights() {
+  try {
+    const res = await getAllLights()
+    allLights.value = res.data || []
+  } catch (e) {
+    allLights.value = []
+  }
+}
+
+// 归一化分组统计返回结构（兼容 name/groupKey/district 与 count/total/value）
+function normalizeGroup(item) {
+  return {
+    name: item.name || item.groupKey || item.district || item.key || '未知',
+    value: Number(item.count ?? item.total ?? item.value ?? 0)
+  }
+}
+
+async function loadDistrict() {
+  try {
+    const res = await getLightGroupStats('district')
+    const arr = Array.isArray(res.data) ? res.data : []
+    districtData.value = arr.map(normalizeGroup)
+    districtError.value = false
+  } catch (e) {
+    // 后端 group-stats 接口缺失：占位显示
+    districtData.value = []
+    districtError.value = true
+  }
 }
 
 async function loadAll() {
   loading.value = true
   try {
-    await Promise.all([loadStats(), loadUnhandled(), loadRecentAlerts()])
+    await Promise.all([
+      loadStats(),
+      loadUnhandled(),
+      loadRecentAlerts(),
+      loadAllLights(),
+      loadDistrict()
+    ])
     await nextTick()
     renderCharts()
   } finally {
@@ -150,13 +218,13 @@ async function loadAll() {
 }
 
 function renderCharts() {
-  // 状态分布饼图
+  // 状态分布饼图（LIGHT_STATUS 着色）
   if (pieRef.value) {
     pieChart = pieChart || echarts.init(pieRef.value)
     pieChart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
       legend: { bottom: 0 },
-      color: ['#67c23a', '#909399', '#f56c6c'],
+      color: [STATUS_COLORS.on, STATUS_COLORS.off, STATUS_COLORS.fault],
       series: [
         {
           name: '路灯状态',
@@ -175,42 +243,70 @@ function renderCharts() {
     })
   }
 
-  // 设备类型分布柱状图
+  // 设备类型分布柱状图（前端聚合）
   if (barRef.value) {
     barChart = barChart || echarts.init(barRef.value)
-    getAllLights().then((res) => {
-      const all = res.data || []
-      const typeMap = {}
-      all.forEach((l) => {
-        const t = l.deviceType || '未知'
-        typeMap[t] = (typeMap[t] || 0) + 1
-      })
-      const names = Object.keys(typeMap)
-      const values = names.map((n) => typeMap[n])
-      barChart.setOption({
-        tooltip: { trigger: 'axis' },
-        grid: { left: 40, right: 20, top: 20, bottom: 30 },
-        xAxis: {
-          type: 'category',
-          data: names,
-          axisLabel: { interval: 0, rotate: names.length > 4 ? 20 : 0 }
-        },
-        yAxis: { type: 'value', minInterval: 1 },
-        series: [
-          {
-            type: 'bar',
-            data: values,
-            barMaxWidth: 40,
-            itemStyle: {
-              borderRadius: [4, 4, 0, 0],
-              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: '#409eff' },
-                { offset: 1, color: '#79bbff' }
-              ])
-            }
+    const typeMap = {}
+    allLights.value.forEach((l) => {
+      const t = l.deviceType || '未知'
+      typeMap[t] = (typeMap[t] || 0) + 1
+    })
+    const names = Object.keys(typeMap)
+    const values = names.map((n) => typeMap[n])
+    barChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 40, right: 20, top: 20, bottom: 30 },
+      xAxis: {
+        type: 'category',
+        data: names,
+        axisLabel: { interval: 0, rotate: names.length > 4 ? 20 : 0 }
+      },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [
+        {
+          type: 'bar',
+          data: values,
+          barMaxWidth: 40,
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#409eff' },
+              { offset: 1, color: '#79bbff' }
+            ])
           }
-        ]
-      })
+        }
+      ]
+    })
+  }
+
+  // 各行政区设备分布柱状图
+  if (districtRef.value && districtData.value.length > 0) {
+    districtChart = districtChart || echarts.init(districtRef.value)
+    const names = districtData.value.map((d) => d.name)
+    const values = districtData.value.map((d) => d.value)
+    districtChart.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: 40, right: 20, top: 20, bottom: 40 },
+      xAxis: {
+        type: 'category',
+        data: names,
+        axisLabel: { interval: 0, rotate: names.length > 5 ? 20 : 0 }
+      },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [
+        {
+          type: 'bar',
+          data: values,
+          barMaxWidth: 48,
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#67c23a' },
+              { offset: 1, color: '#95d475' }
+            ])
+          }
+        }
+      ]
     })
   }
 }
@@ -218,6 +314,7 @@ function renderCharts() {
 function onResize() {
   pieChart?.resize()
   barChart?.resize()
+  districtChart?.resize()
 }
 
 onMounted(() => {
@@ -229,6 +326,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', onResize)
   pieChart?.dispose()
   barChart?.dispose()
+  districtChart?.dispose()
 })
 </script>
 

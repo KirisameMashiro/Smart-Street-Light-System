@@ -1,6 +1,5 @@
 <template>
   <el-container class="layout">
-    <!-- 侧边栏 -->
     <el-aside :width="collapsed ? '64px' : '220px'" class="aside">
       <div class="logo">
         <el-icon class="logo-icon"><Sunny /></el-icon>
@@ -10,23 +9,39 @@
         :default-active="activeMenu"
         :collapse="collapsed"
         :collapse-transition="false"
+        :default-openeds="openedMenus"
         background-color="#001529"
         text-color="#b7c0cd"
         active-text-color="#fff"
         router
         unique-opened
       >
-        <template v-for="item in menuItems" :key="item.path">
-          <el-menu-item :index="item.path">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <template #title>{{ item.title }}</template>
+        <template v-for="group in visibleMenu" :key="group.title">
+          <!-- 分组 -->
+          <el-sub-menu v-if="group.children" :index="group.title">
+            <template #title>
+              <el-icon><component :is="group.icon" /></el-icon>
+              <span>{{ group.title }}</span>
+            </template>
+            <el-menu-item
+              v-for="item in group.children"
+              :key="item.path"
+              :index="item.path"
+            >
+              <el-icon><component :is="item.icon" /></el-icon>
+              <template #title>{{ item.title }}</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <!-- 单项 -->
+          <el-menu-item v-else :index="group.path">
+            <el-icon><component :is="group.icon" /></el-icon>
+            <template #title>{{ group.title }}</template>
           </el-menu-item>
         </template>
       </el-menu>
     </el-aside>
 
     <el-container>
-      <!-- 顶栏 -->
       <el-header class="header">
         <div class="header-left">
           <el-icon class="collapse-btn" @click="collapsed = !collapsed">
@@ -35,6 +50,7 @@
           </el-icon>
           <el-breadcrumb separator="/">
             <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item>{{ currentGroup }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
         </div>
@@ -48,20 +64,20 @@
                 {{ displayName.charAt(0).toUpperCase() }}
               </el-avatar>
               <span class="username">{{ displayName }}</span>
-              <el-tag size="small" :type="isAdmin ? 'danger' : 'primary'" effect="plain">
-                {{ isAdmin ? '管理员' : '运维' }}
+              <el-tag size="small" :type="roleTagType" effect="plain">
+                {{ roleLabel }}
               </el-tag>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="logout" icon="SwitchButton">退出登录</el-dropdown-item>
+                <el-dropdown-item command="assistant" icon="ChatDotRound">AI 运维助手</el-dropdown-item>
+                <el-dropdown-item command="logout" icon="SwitchButton" divided>退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
         </div>
       </el-header>
 
-      <!-- 内容区 -->
       <el-main class="main">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -76,9 +92,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessageBox, ElMessage, ElNotification } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getUnhandledCount } from '@/api/alert'
+import { getUnhandledCount, getAlertPage } from '@/api/alert'
+import { logOperation } from '@/utils/log'
+import { USER_ROLE_MAP } from '@/utils/constants'
 
 const route = useRoute()
 const router = useRouter()
@@ -89,49 +107,162 @@ const unhandledCount = ref(0)
 let pollTimer = null
 
 const isAdmin = computed(() => userStore.isAdmin)
+const role = computed(() => userStore.user?.role || 'operator')
 const displayName = computed(() => userStore.displayName)
+const roleLabel = computed(() => USER_ROLE_MAP[role.value]?.label || role.value)
+const roleTagType = computed(() => USER_ROLE_MAP[role.value]?.type || 'primary')
 
-const menuItems = computed(() => {
-  const base = [
-    { path: '/dashboard', title: '控制台', icon: 'Odometer' },
-    { path: '/lights', title: '路灯管理', icon: 'Sunny' },
-    { path: '/sensor-data', title: '传感器数据', icon: 'DataLine' },
-    { path: '/alerts', title: '报警管理', icon: 'Bell' }
-  ]
-  if (isAdmin.value) {
-    base.push({ path: '/users', title: '用户管理', icon: 'User' })
+// 菜单配置：roles 为空表示所有角色可见
+const menuConfig = [
+  { title: '控制台', path: '/dashboard', icon: 'Odometer' },
+  {
+    title: '设备管理',
+    icon: 'Box',
+    roles: ['admin', 'municipal', 'operator'],
+    children: [
+      { title: '设备档案', path: '/devices/archive', icon: 'Document' },
+      { title: '台账统计', path: '/devices/ledger', icon: 'PieChart' }
+    ]
+  },
+  {
+    title: '实时监测',
+    icon: 'Monitor',
+    roles: ['admin', 'municipal', 'operator'],
+    children: [
+      { title: '设备监控', path: '/monitor/realtime', icon: 'Aim' },
+      { title: '传感器数据', path: '/monitor/sensor-data', icon: 'DataLine' }
+    ]
+  },
+  {
+    title: '照明控制',
+    icon: 'Switch',
+    roles: ['admin', 'municipal', 'operator'],
+    children: [
+      { title: '远程控制', path: '/control/remote', icon: 'SetUp' },
+      { title: '定时策略', path: '/control/strategy', icon: 'Clock' },
+      { title: '阈值联动', path: '/control/threshold', icon: 'Connection' },
+      { title: '操作日志', path: '/control/log', icon: 'List' }
+    ]
+  },
+  {
+    title: '告警管理',
+    path: '/alerts',
+    icon: 'Bell',
+    roles: ['admin', 'municipal', 'operator']
+  },
+  {
+    title: '碳减排分析',
+    path: '/carbon',
+    icon: 'TrendCharts',
+    roles: ['admin', 'municipal']
+  },
+  {
+    title: 'AI 智能中心',
+    icon: 'MagicStick',
+    roles: ['admin', 'municipal', 'operator'],
+    children: [
+      { title: 'AI 预测调光', path: '/ai/predict', icon: 'MagicStick' },
+      { title: 'AI 运维助手', path: '/ai/assistant', icon: 'ChatDotRound' },
+      { title: '知识库管理', path: '/ai/knowledge', icon: 'Collection', roles: ['admin'] }
+    ]
+  },
+  {
+    title: '系统管理',
+    icon: 'Setting',
+    roles: ['admin'],
+    children: [
+      { title: '用户管理', path: '/system/users', icon: 'User' },
+      { title: '操作审计', path: '/system/audit', icon: 'DocumentChecked' },
+      { title: '参数配置', path: '/system/config', icon: 'Tools' }
+    ]
   }
-  return base
-})
+]
+
+function itemVisible(item) {
+  const roles = item.roles
+  if (!roles || roles.length === 0) return true
+  return roles.includes(role.value)
+}
+
+const visibleMenu = computed(() =>
+  menuConfig
+    .filter(itemVisible)
+    .map((group) => {
+      if (group.children) {
+        return { ...group, children: group.children.filter(itemVisible) }
+      }
+      return group
+    })
+    .filter((g) => !g.children || g.children.length > 0)
+)
+
+const openedMenus = computed(() =>
+  visibleMenu.value.filter((g) => g.children).map((g) => g.title)
+)
 
 const activeMenu = computed(() => {
-  // 详情页高亮父级菜单
-  if (route.path.startsWith('/lights')) return '/lights'
+  if (route.path.startsWith('/devices')) return route.path
+  if (route.path.startsWith('/monitor')) return route.path
+  if (route.path.startsWith('/control')) return route.path
+  if (route.path.startsWith('/system')) return route.path
+  if (route.path.startsWith('/ai')) return route.path
   return route.path
 })
 
 const currentTitle = computed(() => route.meta?.title || '')
+const currentGroup = computed(() => {
+  for (const g of visibleMenu.value) {
+    if (g.children) {
+      if (g.children.some((c) => c.path === route.path)) return g.title
+    } else if (g.path === route.path) return g.title
+  }
+  return ''
+})
 
 async function fetchUnhandled() {
   try {
     const res = await getUnhandledCount()
-    unhandledCount.value = res.data || 0
+    const cnt = res.data || 0
+    // 新增告警弹窗提醒
+    if (cnt > unhandledCount.value && unhandledCount.value !== 0) {
+      popupNewAlerts(cnt - unhandledCount.value)
+    }
+    unhandledCount.value = cnt
   } catch (e) {
-    // 静默处理
+    // 静默
+  }
+}
+
+async function popupNewAlerts(n) {
+  try {
+    const res = await getAlertPage({ pageNum: 1, pageSize: n, status: 0 })
+    const list = res.data?.records || []
+    list.slice(0, 3).forEach((a) => {
+      ElNotification({
+        title: '新告警提醒',
+        message: `${a.message || '设备异常'}（共 ${n} 条未处理）`,
+        type: 'warning',
+        duration: 6000,
+        onClick: () => router.push('/alerts')
+      })
+    })
+  } catch (e) {
+    // ignore
   }
 }
 
 function onCommand(cmd) {
   if (cmd === 'logout') {
-    ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-      type: 'warning'
-    })
+    ElMessageBox.confirm('确定要退出登录吗？', '提示', { type: 'warning' })
       .then(() => {
+        logOperation('user_login', `用户 ${displayName.value} 退出登录`)
         userStore.logout()
         ElMessage.success('已退出登录')
         router.push('/login')
       })
       .catch(() => {})
+  } else if (cmd === 'assistant') {
+    router.push('/ai/assistant')
   }
 }
 
@@ -153,7 +284,8 @@ onUnmounted(() => {
 .aside {
   background-color: #001529;
   transition: width 0.25s;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .logo {
@@ -179,6 +311,15 @@ onUnmounted(() => {
 
 .aside :deep(.el-menu) {
   border-right: none;
+}
+
+.aside :deep(.el-sub-menu__title:hover),
+.aside :deep(.el-menu-item:hover) {
+  background-color: #1d2b3f !important;
+}
+
+.aside :deep(.el-menu-item.is-active) {
+  background-color: var(--primary) !important;
 }
 
 .header {

@@ -1,5 +1,9 @@
 import request from './request'
 
+// 路灯设备 API
+// [后端已实现] 分页/列表/详情/增改删/批量开关/亮度/状态统计
+// [后端缺失] 分组统计 group-stats、累计能耗 energy
+
 // 分页查询路灯
 export function getLightPage(params) {
   return request.get('/lights/page', { params })
@@ -15,7 +19,7 @@ export function getLightById(id) {
   return request.get(`/lights/${id}`)
 }
 
-// 新增路灯
+// 新增路灯（含前端扩展字段 district/road/commissionDate/totalEnergy，后端实体缺失将忽略）
 export function addLight(data) {
   return request.post('/lights', data)
 }
@@ -42,7 +46,12 @@ export function setLightBrightness(id, brightness) {
   })
 }
 
-// 路灯状态统计
+// 路灯状态统计（总数、在线/离线/故障）
 export function getLightStats() {
   return request.get('/lights/stats')
+}
+
+// [后端缺失] 分组统计（按行政区/路段/类型）
+export function getLightGroupStats(groupBy) {
+  return request.get('/lights/group-stats', { params: { groupBy } })
 }

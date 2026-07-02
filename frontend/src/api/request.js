@@ -7,7 +7,7 @@ const service = axios.create({
   timeout: 15000
 })
 
-// 请求拦截器：附带当前登录用户标识（后端未要求 token，这里作为身份传递）
+// 请求拦截器：附带当前登录用户标识
 service.interceptors.request.use(
   (config) => {
     const userStr = localStorage.getItem('smartlight_user')
@@ -30,7 +30,7 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response) => {
     const res = response.data
-    // 非 Result 结构（如直接返回二进制等），原样返回
+    // 非 Result 结构，原样返回
     if (res === null || typeof res !== 'object' || res.code === undefined) {
       return res
     }
@@ -48,7 +48,19 @@ service.interceptors.response.use(
     return Promise.reject(new Error(res.message || 'Error'))
   },
   (error) => {
-    const msg = error?.response?.data?.message || error.message || '网络异常'
+    const status = error?.response?.status
+    const url = error?.config?.url || ''
+    // 404：后端接口缺失，给出明确提示便于定位
+    if (status === 404) {
+      const method = (error?.config?.method || 'get').toUpperCase()
+      ElMessage.error(`后端接口缺失或未实现：${method} ${url}`)
+      return Promise.reject(new Error(`后端接口缺失：${method} ${url}`))
+    }
+    const msg =
+      error?.response?.data?.message ||
+      error?.response?.statusText ||
+      error.message ||
+      '网络异常'
     ElMessage.error(msg)
     return Promise.reject(error)
   }
