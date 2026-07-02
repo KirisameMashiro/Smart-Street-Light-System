@@ -92,3 +92,68 @@ INSERT INTO `light` (`light_code`, `light_name`, `location`, `longitude`, `latit
 ('SL-002', '路灯A-02', '人民路中段', 118.124567, 36.124567, 1, 75, 'LED-100W', 100.00),
 ('SL-003', '路灯B-01', '建设路与和平路交叉口', 118.125678, 36.125678, 0, 0, 'LED-150W', 150.00),
 ('SL-004', '路灯B-02', '建设路北段', 118.126789, 36.126789, 2, 0, 'LED-150W', 150.00);
+
+-- ========== 以下为前后端对接新增的表和字段 ==========
+
+-- 路灯设备表补充字段 (已用 ALTER 执行，此处仅作记录)
+-- ALTER TABLE light ADD COLUMN district VARCHAR(50) DEFAULT NULL COMMENT '行政区';
+-- ALTER TABLE light ADD COLUMN road VARCHAR(100) DEFAULT NULL COMMENT '路段';
+
+-- 操作日志表
+CREATE TABLE IF NOT EXISTS `operation_log` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `operator` VARCHAR(50) DEFAULT NULL COMMENT '操作人用户名',
+    `operator_name` VARCHAR(50) DEFAULT NULL COMMENT '操作人姓名',
+    `type` VARCHAR(50) DEFAULT NULL COMMENT '操作类型',
+    `content` VARCHAR(500) DEFAULT NULL COMMENT '操作内容',
+    `result` VARCHAR(50) DEFAULT NULL COMMENT '操作结果',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_type` (`type`),
+    KEY `idx_operator` (`operator`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
+
+-- 系统配置表
+CREATE TABLE IF NOT EXISTS `system_config` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `config_key` VARCHAR(100) NOT NULL UNIQUE COMMENT '配置键',
+    `config_value` VARCHAR(500) DEFAULT NULL COMMENT '配置值',
+    `description` VARCHAR(200) DEFAULT NULL COMMENT '配置描述',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
+
+-- 告警规则表
+CREATE TABLE IF NOT EXISTS `alert_rule` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `rule_type` VARCHAR(50) DEFAULT NULL COMMENT '规则类型',
+    `rule_name` VARCHAR(100) DEFAULT NULL COMMENT '规则名称',
+    `threshold` VARCHAR(100) DEFAULT NULL COMMENT '阈值',
+    `enabled` INT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `description` VARCHAR(200) DEFAULT NULL COMMENT '规则描述',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警规则表';
+
+-- AI知识库表
+CREATE TABLE IF NOT EXISTS `knowledge` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `title` VARCHAR(200) DEFAULT NULL COMMENT '知识标题',
+    `content` TEXT DEFAULT NULL COMMENT '知识内容',
+    `category` VARCHAR(50) DEFAULT NULL COMMENT '知识分类',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
+
+-- 插入默认系统配置
+INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
+('energy_baseline_power', '250', '传统钠灯基准功率(W)'),
+('energy_baseline_hours', '12', '日均照明时长(h)'),
+('co2_factor', '0.997', '碳排放因子(kg CO₂/kWh)')
+ON DUPLICATE KEY UPDATE `config_value`=VALUES(`config_value`);
+
+-- 更新示例路灯的行政区/路段
+UPDATE `light` SET `district`='中心区', `road`='人民路' WHERE `light_code` IN ('SL-001','SL-002');
+UPDATE `light` SET `district`='城北区', `road`='建设路' WHERE `light_code` IN ('SL-003','SL-004');

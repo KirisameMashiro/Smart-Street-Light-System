@@ -44,6 +44,12 @@ public class Light {
     /** 备注 */
     private String remark;
 
+    /** 行政区 */
+    private String district;
+
+    /** 路段 */
+    private String road;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

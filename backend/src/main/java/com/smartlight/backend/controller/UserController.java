@@ -65,4 +65,38 @@ public class UserController {
     public Result<Boolean> delete(@PathVariable Long id) {
         return Result.success(userService.removeById(id));
     }
+
+    /**
+     * 获取当前用户个人信息
+     */
+    @GetMapping("/profile")
+    public Result<User> getProfile(@RequestHeader("X-Username") String username) {
+        if (username == null || username.isEmpty()) {
+            return Result.unauthorized("未登录");
+        }
+        User user = userService.getByUsername(username);
+        if (user == null) {
+            return Result.unauthorized("用户不存在");
+        }
+        user.setPassword(null);
+        return Result.success(user);
+    }
+
+    /**
+     * 更新当前用户个人信息
+     */
+    @PutMapping("/profile")
+    public Result<Boolean> updateProfile(@RequestHeader("X-Username") String username, @RequestBody User update) {
+        if (username == null || username.isEmpty()) {
+            return Result.unauthorized("未登录");
+        }
+        User user = userService.getByUsername(username);
+        if (user == null) {
+            return Result.unauthorized("用户不存在");
+        }
+        if (update.getPhone() != null) user.setPhone(update.getPhone());
+        if (update.getEmail() != null) user.setEmail(update.getEmail());
+        if (update.getRealName() != null) user.setRealName(update.getRealName());
+        return Result.success(userService.updateById(user));
+    }
 }
