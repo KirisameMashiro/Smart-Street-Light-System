@@ -7,7 +7,20 @@
           {{ unhandled }} 条未处理
         </el-tag>
       </h2>
-      <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+      <div class="toolbar">
+        <span class="text-muted">自动刷新</span>
+        <el-switch v-model="autoRefresh" />
+        <el-input-number
+          v-model="interval"
+          :min="1"
+          :max="60"
+          :step="1"
+          size="small"
+          style="width: 110px"
+        />
+        <span class="text-muted">秒</span>
+        <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+      </div>
     </div>
 
     <!-- 筛选 -->
@@ -163,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { getAlertPage, handleAlert, getUnhandledCount } from '@/api/alert'
@@ -174,12 +187,14 @@ import { formatDateTime } from '@/utils/format'
 
 const userStore = useUserStore()
 const loading = ref(false)
+const autoRefresh = ref(false)
+const interval = ref(5)
 const submitting = ref(false)
 const tableData = ref([])
 const total = ref(0)
 const unhandled = ref(0)
 const lightOptions = ref([])
-let pollTimer = null
+let timer = null
 
 const query = reactive({
   pageNum: 1,
@@ -272,13 +287,35 @@ async function onSubmitHandle() {
   }
 }
 
+function startPolling() {
+  stopPolling()
+  if (!autoRefresh.value) return
+  timer = setInterval(() => {
+    loadAll()
+  }, interval.value * 1000)
+}
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+watch(autoRefresh, (v) => {
+  if (v) startPolling()
+  else stopPolling()
+})
+watch(interval, () => {
+  if (autoRefresh.value) startPolling()
+})
+
 onMounted(async () => {
   await loadLights()
   loadAll()
-  pollTimer = setInterval(loadUnhandled, 30000)
+  startPolling()
 })
 
 onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
+  stopPolling()
 })
 </script>

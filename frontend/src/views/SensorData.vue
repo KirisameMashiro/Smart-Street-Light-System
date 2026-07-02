@@ -2,7 +2,20 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">传感器数据</h2>
-      <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+      <div class="toolbar">
+        <span class="text-muted">自动刷新</span>
+        <el-switch v-model="autoRefresh" />
+        <el-input-number
+          v-model="interval"
+          :min="1"
+          :max="60"
+          :step="1"
+          size="small"
+          style="width: 110px"
+        />
+        <span class="text-muted">秒</span>
+        <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
+      </div>
     </div>
 
     <!-- 筛选 -->
@@ -71,17 +84,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { getSensorDataPage } from '@/api/sensor'
 import { getAllLights } from '@/api/light'
 import { formatDateTime } from '@/utils/format'
 
 const loading = ref(false)
+const autoRefresh = ref(false)
+const interval = ref(5)
 const tableData = ref([])
 const total = ref(0)
 const lightOptions = ref([])
 const timeRange = ref([])
+let timer = null
 
 const query = reactive({
   pageNum: 1,
@@ -131,8 +147,35 @@ function onReset() {
   onSearch()
 }
 
+function startPolling() {
+  stopPolling()
+  if (!autoRefresh.value) return
+  timer = setInterval(() => {
+    loadData()
+  }, interval.value * 1000)
+}
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+watch(autoRefresh, (v) => {
+  if (v) startPolling()
+  else stopPolling()
+})
+watch(interval, () => {
+  if (autoRefresh.value) startPolling()
+})
+
 onMounted(async () => {
   await loadLights()
   loadData()
+  startPolling()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>

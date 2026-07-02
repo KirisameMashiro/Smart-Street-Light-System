@@ -2,7 +2,20 @@
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">控制台</h2>
-      <el-button :icon="Refresh" @click="loadAll" :loading="loading">刷新</el-button>
+      <div class="toolbar">
+        <span class="text-muted">自动刷新</span>
+        <el-switch v-model="autoRefresh" />
+        <el-input-number
+          v-model="interval"
+          :min="1"
+          :max="60"
+          :step="1"
+          size="small"
+          style="width: 110px"
+        />
+        <span class="text-muted">秒</span>
+        <el-button :icon="Refresh" @click="loadAll" :loading="loading">刷新</el-button>
+      </div>
     </div>
 
     <!-- 统计卡片 -->
@@ -111,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import StatCard from '@/components/StatCard.vue'
@@ -125,6 +138,8 @@ import {
 import { formatDateTime } from '@/utils/format'
 
 const loading = ref(false)
+const autoRefresh = ref(false)
+const interval = ref(5)
 const stats = reactive({ total: 0, online: 0, offline: 0, fault: 0 })
 const unhandled = ref(0)
 const recentAlerts = ref([])
@@ -317,12 +332,37 @@ function onResize() {
   districtChart?.resize()
 }
 
+let timer = null
+function startPolling() {
+  stopPolling()
+  if (!autoRefresh.value) return
+  timer = setInterval(() => {
+    loadAll()
+  }, interval.value * 1000)
+}
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+watch(autoRefresh, (v) => {
+  if (v) startPolling()
+  else stopPolling()
+})
+watch(interval, () => {
+  if (autoRefresh.value) startPolling()
+})
+
 onMounted(() => {
   loadAll()
+  startPolling()
   window.addEventListener('resize', onResize)
 })
 
 onUnmounted(() => {
+  stopPolling()
   window.removeEventListener('resize', onResize)
   pieChart?.dispose()
   barChart?.dispose()
