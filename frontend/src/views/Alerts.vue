@@ -179,7 +179,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
-import { getAlertPage, handleAlert, getUnhandledCount } from '@/api/alert'
+import { getAlertPage, handleAlert, getUnhandledCount, connectAlertSocket } from '@/api/alert'
 import { getAllLights } from '@/api/light'
 import { useUserStore } from '@/store/user'
 import { ALERT_TYPE_MAP, ALERT_LEVEL_MAP, ALERT_STATUS_MAP } from '@/utils/constants'
@@ -309,13 +309,35 @@ watch(interval, () => {
   if (autoRefresh.value) startPolling()
 })
 
+let ws = null
+
+function connectWS() {
+  ws = connectAlertSocket(
+    (data) => {
+      // 收到新告警推送：刷新列表和未处理计数
+      if (data && data.id) {
+        loadAll()
+        ElMessage.info(`新告警: ${data.message?.substring(0, 50) || ''}...`)
+      }
+    },
+    (error) => {
+      console.error('[Alerts] WebSocket error:', error)
+    }
+  )
+}
+
 onMounted(async () => {
   await loadLights()
   loadAll()
   startPolling()
+  connectWS()
 })
 
 onUnmounted(() => {
   stopPolling()
+  if (ws) {
+    ws.onclose = null  // 阻止自动重连
+    ws.close()
+  }
 })
 </script>
