@@ -1,6 +1,11 @@
 <template>
   <el-container class="layout">
-    <el-aside :width="collapsed ? '64px' : '220px'" class="aside">
+    <!-- 桌面端侧边栏 -->
+    <el-aside
+      :width="isMobile ? '0' : (collapsed ? '64px' : '220px')"
+      class="aside desktop-aside"
+      :class="{ 'is-collapsed': collapsed }"
+    >
       <div class="logo">
         <el-icon class="logo-icon"><Sunny /></el-icon>
         <span v-show="!collapsed" class="logo-text">智慧路灯</span>
@@ -17,7 +22,6 @@
         unique-opened
       >
         <template v-for="group in visibleMenu" :key="group.title">
-          <!-- 分组 -->
           <el-sub-menu v-if="group.children" :index="group.title">
             <template #title>
               <el-icon><component :is="group.icon" /></el-icon>
@@ -32,7 +36,6 @@
               <template #title>{{ item.title }}</template>
             </el-menu-item>
           </el-sub-menu>
-          <!-- 单项 -->
           <el-menu-item v-else :index="group.path">
             <el-icon><component :is="group.icon" /></el-icon>
             <template #title>{{ group.title }}</template>
@@ -41,30 +44,91 @@
       </el-menu>
     </el-aside>
 
+    <!-- 移动端侧边栏抽屉 -->
+    <div
+      v-if="isMobile"
+      class="mobile-drawer-mask"
+      :class="{ open: mobileMenuOpen }"
+      @click="mobileMenuOpen = false"
+    >
+      <div class="mobile-drawer" @click.stop>
+        <div class="logo">
+          <el-icon class="logo-icon"><Sunny /></el-icon>
+          <span class="logo-text">智慧路灯</span>
+        </div>
+        <el-menu
+          :default-active="activeMenu"
+          background-color="#001529"
+          text-color="#b7c0cd"
+          active-text-color="#fff"
+          router
+          @select="mobileMenuOpen = false"
+        >
+          <template v-for="group in visibleMenu" :key="group.title">
+            <el-sub-menu v-if="group.children" :index="group.title">
+              <template #title>
+                <el-icon><component :is="group.icon" /></el-icon>
+                <span>{{ group.title }}</span>
+              </template>
+              <el-menu-item
+                v-for="item in group.children"
+                :key="item.path"
+                :index="item.path"
+              >
+                <el-icon><component :is="item.icon" /></el-icon>
+                <template #title>{{ item.title }}</template>
+              </el-menu-item>
+            </el-sub-menu>
+            <el-menu-item v-else :index="group.path">
+              <el-icon><component :is="group.icon" /></el-icon>
+              <template #title>{{ group.title }}</template>
+            </el-menu-item>
+          </template>
+        </el-menu>
+      </div>
+    </div>
+
     <el-container>
-      <el-header class="header">
+      <el-header class="header" :class="{ 'is-mobile': isMobile }">
         <div class="header-left">
-          <el-icon class="collapse-btn" @click="collapsed = !collapsed">
+          <!-- 移动端汉堡菜单 -->
+          <el-icon
+            v-if="isMobile"
+            class="collapse-btn mobile-menu-btn"
+            @click="mobileMenuOpen = !mobileMenuOpen"
+          >
+            <Menu />
+          </el-icon>
+          <el-icon
+            v-else
+            class="collapse-btn"
+            @click="collapsed = !collapsed"
+          >
             <Fold v-if="!collapsed" />
             <Expand v-else />
           </el-icon>
-          <el-breadcrumb separator="/">
+          <el-breadcrumb
+            v-if="!isMobile"
+            separator="/"
+            class="hide-mobile"
+          >
             <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentGroup }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
+          <span v-else class="mobile-page-title">{{ currentTitle || '智慧路灯' }}</span>
         </div>
         <div class="header-right">
           <el-badge :value="unhandledCount" :hidden="unhandledCount === 0" :max="99">
             <el-icon class="bell-icon" @click="$router.push('/alerts')"><Bell /></el-icon>
           </el-badge>
-          <el-dropdown @command="onCommand">
+          <el-dropdown @command="onCommand" trigger="click">
             <span class="user-info">
-              <el-avatar :size="30" class="avatar">
+              <el-avatar :size="isMobile ? 28 : 30" class="avatar">
                 {{ displayName.charAt(0).toUpperCase() }}
               </el-avatar>
-              <span class="username">{{ displayName }}</span>
-              <el-tag size="small" :type="roleTagType" effect="plain">
+              <span v-if="!isMobile" class="username">{{ displayName }}</span>
+              <el-tag v-if="!isMobile" size="small" :type="roleTagType" effect="plain">
                 {{ roleLabel }}
               </el-tag>
             </span>
@@ -104,6 +168,8 @@ const userStore = useUserStore()
 
 const collapsed = ref(false)
 const unhandledCount = ref(0)
+const mobileMenuOpen = ref(false)
+const isMobile = ref(false)
 let pollTimer = null
 
 const isAdmin = computed(() => userStore.isAdmin)
@@ -111,6 +177,14 @@ const role = computed(() => userStore.user?.role || 'operator')
 const displayName = computed(() => userStore.displayName)
 const roleLabel = computed(() => USER_ROLE_MAP[role.value]?.label || role.value)
 const roleTagType = computed(() => USER_ROLE_MAP[role.value]?.type || 'primary')
+
+// 检测是否为移动端
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768
+  if (!isMobile.value) {
+    mobileMenuOpen.value = false
+  }
+}
 
 // 菜单配置：roles 为空表示所有角色可见
 const menuConfig = [
@@ -223,7 +297,6 @@ async function fetchUnhandled() {
   try {
     const res = await getUnhandledCount()
     const cnt = res.data || 0
-    // 新增告警弹窗提醒
     if (cnt > unhandledCount.value && unhandledCount.value !== 0) {
       popupNewAlerts(cnt - unhandledCount.value)
     }
@@ -267,11 +340,14 @@ function onCommand(cmd) {
 }
 
 onMounted(() => {
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
   fetchUnhandled()
   pollTimer = setInterval(fetchUnhandled, 30000)
 })
 
 onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
   if (pollTimer) clearInterval(pollTimer)
 })
 </script>
@@ -286,6 +362,10 @@ onUnmounted(() => {
   transition: width 0.25s;
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+.desktop-aside {
+  flex-shrink: 0;
 }
 
 .logo {
@@ -343,6 +423,17 @@ onUnmounted(() => {
   color: #5a5e66;
 }
 
+.mobile-menu-btn {
+  font-size: 22px;
+  padding: 4px;
+}
+
+.mobile-page-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -378,6 +469,59 @@ onUnmounted(() => {
   background-color: var(--bg);
   padding: 0;
   overflow-y: auto;
+}
+
+/* 移动端抽屉菜单 */
+.mobile-drawer-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+
+.mobile-drawer-mask.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mobile-drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100%;
+  background-color: #001529;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+  overflow-y: auto;
+}
+
+.mobile-drawer-mask.open .mobile-drawer {
+  transform: translateX(0);
+}
+
+.mobile-drawer :deep(.el-menu) {
+  border-right: none;
+}
+
+/* 移动端顶部栏紧凑 */
+.header.is-mobile {
+  padding: 0 12px;
+  height: 50px;
+}
+
+.header.is-mobile .header-right {
+  gap: 12px;
+}
+
+.header.is-mobile .bell-icon {
+  font-size: 18px;
 }
 
 .fade-enter-active,

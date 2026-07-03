@@ -10,13 +10,17 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  optimizeDeps: {
+    include: ['leaflet'],
+    needsInterop: ['leaflet']
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,
     open: false,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8090',
         changeOrigin: true
       }
     }

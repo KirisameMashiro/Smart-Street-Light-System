@@ -389,4 +389,20 @@ onUnmounted(() => {
   height: 300px;
   width: 100%;
 }
+
+@media (max-width: 768px) {
+  .chart-box {
+    height: 220px;
+  }
+
+  .chart-card {
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+
+  .chart-title {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+}
 </style>

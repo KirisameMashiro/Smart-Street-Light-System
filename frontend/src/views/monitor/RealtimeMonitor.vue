@@ -128,9 +128,81 @@
     </div>
 
     <!-- 地图模式 -->
-    <div v-else class="table-card">
-      <div ref="mapRef" class="map-box"></div>
+    <div v-else class="map-card">
+      <div class="map-header">
+        <span class="text-muted">底图：</span>
+        <el-radio-group v-model="mapLayer" size="small" @change="onLayerChange">
+          <el-radio-button value="gaode">高德地图</el-radio-button>
+          <el-radio-button value="osm">OpenStreetMap</el-radio-button>
+        </el-radio-group>
+        <span class="text-muted" style="margin-left: auto">
+          在线 <span class="status-dot online"></span> {{ onlineCount }}
+          故障 <span class="status-dot fault"></span> {{ faultCount }}
+          离线 <span class="status-dot offline"></span> {{ offlineCount }}
+        </span>
+      </div>
+      <div ref="mapContainer" class="map-wrapper"></div>
     </div>
+
+    <!-- 设备详情弹窗 -->
+    <el-dialog v-model="detailDialog" title="设备详情" width="420px" :close-on-click-modal="false">
+      <div v-if="selectedLight" class="light-detail">
+        <div class="detail-header">
+          <div class="detail-icon" :class="getMarkerClass(selectedLight.status)">
+            {{ getStatusIcon(selectedLight.status) }}
+          </div>
+          <div class="detail-info">
+            <h3>{{ selectedLight.lightName || selectedLight.lightCode }}</h3>
+            <div class="detail-status">
+              <el-tag
+                :type="LIGHT_STATUS_MAP[selectedLight.status]?.type"
+                size="small"
+              >
+                {{ LIGHT_STATUS_MAP[selectedLight.status]?.label }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+        <div class="detail-body">
+          <div class="detail-row">
+            <span class="detail-label">设备编号</span>
+            <span class="detail-value">{{ selectedLight.lightCode }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">安装位置</span>
+            <span class="detail-value">{{ selectedLight.location || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">行政区</span>
+            <span class="detail-value">{{ selectedLight.district || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">路段</span>
+            <span class="detail-value">{{ selectedLight.road || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">当前亮度</span>
+            <span class="detail-value">{{ selectedLight.brightness || 0 }}%</span>
+          </div>
+          <div class="detail-row" v-if="sensorMap[selectedLight.id]">
+            <span class="detail-label">光照强度</span>
+            <span class="detail-value">{{ sensorMap[selectedLight.id].illuminance }} lux</span>
+          </div>
+          <div class="detail-row" v-if="sensorMap[selectedLight.id]">
+            <span class="detail-label">功率消耗</span>
+            <span class="detail-value">{{ sensorMap[selectedLight.id].power }} W</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="detailDialog = false">关闭</el-button>
+        <el-button
+          v-if="selectedLight && selectedLight.status !== 2"
+          type="primary"
+          @click="openDim(selectedLight); detailDialog = false"
+        >调光</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 调光弹窗 -->
     <el-dialog v-model="dimDialog" title="调光控制" width="380px">
@@ -162,7 +234,8 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import {
   getAllLights,
   batchSwitchLight,
@@ -184,7 +257,6 @@ const interval = ref(5)
 
 const allLights = ref([])
 const sensorMap = reactive({})
-// 传感器接口可用性：null=未知 true=可用 false=缺失（避免轮询重复弹错）
 const sensorApiAvailable = ref(null)
 
 const filter = reactive({ district: undefined, road: undefined })
@@ -209,6 +281,15 @@ const onlineCount = computed(
 const faultCount = computed(
   () => filteredLights.value.filter((l) => l.status === 2).length
 )
+const offlineCount = computed(
+  () => filteredLights.value.filter((l) => l.status === 0).length
+)
+
+const lightsWithLocation = computed(() =>
+  filteredLights.value.filter(
+    (l) => l.longitude != null && l.latitude != null && l.longitude !== 0 && l.latitude !== 0
+  )
+)
 
 function applySensor(id, d) {
   if (!d) {
@@ -222,7 +303,6 @@ function applySensor(id, d) {
   }
 }
 
-// 并发执行（限制并发数）
 async function runConcurrent(items, limit, fn) {
   const queue = [...items]
   async function worker() {
@@ -231,9 +311,7 @@ async function runConcurrent(items, limit, fn) {
       if (!item) break
       try {
         await fn(item)
-      } catch (e) {
-        // 单项失败忽略
-      }
+      } catch (e) {}
     }
   }
   const workers = Array.from(
@@ -243,117 +321,178 @@ async function runConcurrent(items, limit, fn) {
   await Promise.all(workers)
 }
 
-// 探测并加载传感器数据：先取首盏探测接口是否可用，避免接口缺失时大量重复弹错
 async function loadSensorData(lights) {
   if (!lights || lights.length === 0) return
   if (sensorApiAvailable.value === false) return
 
-  // 首次：用第一盏探测
   if (sensorApiAvailable.value === null) {
     try {
       const res = await getLatestSensorData(lights[0].id)
       sensorApiAvailable.value = true
       applySensor(lights[0].id, res.data)
     } catch (e) {
-      // 接口缺失：标记后跳过其余，不再重复弹错
       sensorApiAvailable.value = false
       return
     }
   }
 
-  // 并发加载其余（限制 8）
   await runConcurrent(lights.slice(1), 8, async (l) => {
     try {
       const res = await getLatestSensorData(l.id)
       applySensor(l.id, res.data)
-    } catch (e) {
-      // 单灯失败忽略
-    }
+    } catch (e) {}
   })
 }
 
-// 地图散点
-const mapRef = ref()
-let mapChart = null
+// 地图相关
+const mapContainer = ref(null)
+let mapInstance = null
+let tileLayer = null
+let markersLayer = null
+const markerMap = reactive({})
 
-function statusColor(status) {
-  if (status === 1) return STATUS_COLORS.on
-  if (status === 2) return STATUS_COLORS.fault
-  return STATUS_COLORS.off
+const mapLayer = ref('gaode')
+const mapZoom = ref(13)
+const mapCenter = ref([31.2304, 121.4737])
+
+const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
+const gaodeSubdomains = ['1', '2', '3', '4']
+const osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const osmSubdomains = ['a', 'b', 'c']
+
+function getMarkerColor(status) {
+  if (status === 1) return '#67c23a'
+  if (status === 2) return '#f56c6c'
+  return '#909399'
 }
 
-function renderMap() {
-  if (!mapRef.value) return
-  // 若 DOM 已变（模式切换后），重新初始化
-  if (!mapChart || mapChart.getDom() !== mapRef.value) {
-    mapChart?.dispose()
-    mapChart = echarts.init(mapRef.value)
+function getStatusIcon(status) {
+  if (status === 1) return '◎'
+  if (status === 2) return '✕'
+  return '○'
+}
+
+function getMarkerClass(status) {
+  if (status === 1) return 'marker-online'
+  if (status === 2) return 'marker-fault'
+  return 'marker-offline'
+}
+
+function createMarkerIcon(light) {
+  const color = getMarkerColor(light.status)
+  const iconHtml = `<div class="light-marker ${getMarkerClass(light.status)}">
+    <div class="marker-inner" style="background-color: ${color}">
+      <span class="marker-icon">${getStatusIcon(light.status)}</span>
+    </div>
+    ${light.status === 2 ? '<div class="marker-pulse"></div>' : ''}
+  </div>`
+  
+  return L.divIcon({
+    html: iconHtml,
+    className: '',
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28]
+  })
+}
+
+function initMap() {
+  if (!mapContainer.value) return
+  
+  if (mapInstance) {
+    mapInstance.remove()
+    mapInstance = null
   }
-  const data = filteredLights.value
-    .filter((l) => l.longitude != null && l.latitude != null)
-    .map((l) => ({
-      name: l.lightName || l.lightCode,
-      value: [Number(l.longitude), Number(l.latitude), l.status],
-      location: l.location,
-      code: l.lightCode
-    }))
-  mapChart.setOption(
-    {
-      tooltip: {
-        trigger: 'item',
-        formatter: (p) => {
-          const d = p.data
-          const st = LIGHT_STATUS_MAP[d.value?.[2]]?.label || '未知'
-          return `<b>${d.name}</b><br/>状态：${st}<br/>位置：${d.location || '-'}<br/>编号：${d.code || '-'}`
-        }
-      },
-      grid: { left: 50, right: 20, top: 20, bottom: 40 },
-      xAxis: {
-        type: 'value',
-        name: '经度',
-        nameLocation: 'middle',
-        nameGap: 28,
-        scale: true
-      },
-      yAxis: {
-        type: 'value',
-        name: '纬度',
-        nameLocation: 'middle',
-        nameGap: 36,
-        scale: true
-      },
-      visualMap: {
-        type: 'piecewise',
-        left: 12,
-        top: 12,
-        dimension: 2,
-        categories: [0, 1, 2],
-        inRange: {
-          color: [STATUS_COLORS.off, STATUS_COLORS.on, STATUS_COLORS.fault]
-        },
-        formatter: (v) => LIGHT_STATUS_MAP[v]?.label || String(v),
-        itemWidth: 14,
-        itemHeight: 14
-      },
-      series: [
-        {
-          name: '路灯',
-          type: 'scatter',
-          data,
-          symbolSize: (val) => (val && val[2] === 2 ? 24 : 12),
-          itemStyle: {
-            shadowBlur: 6,
-            shadowColor: 'rgba(0,0,0,0.15)'
-          },
-          emphasis: { focus: 'self' }
-        }
-      ]
-    },
-    true
-  )
+
+  mapInstance = L.map(mapContainer.value, {
+    center: mapCenter.value,
+    zoom: mapZoom.value,
+    zoomControl: true,
+    attributionControl: false
+  })
+
+  markersLayer = L.layerGroup().addTo(mapInstance)
+  addTileLayer()
 }
 
-// 刷新：reprobe=true 时重新探测传感器接口（手动刷新用）
+function addTileLayer() {
+  if (!mapInstance) return
+  
+  if (tileLayer) {
+    mapInstance.removeLayer(tileLayer)
+    tileLayer = null
+  }
+
+  const url = mapLayer.value === 'gaode' ? gaodeUrl : osmUrl
+  const subdomains = mapLayer.value === 'gaode' ? gaodeSubdomains : osmSubdomains
+
+  tileLayer = L.tileLayer(url, {
+    subdomains,
+    attribution: mapLayer.value === 'gaode' ? '© 高德地图' : '© OpenStreetMap contributors',
+    maxZoom: 18,
+    minZoom: 3
+  }).addTo(mapInstance)
+}
+
+function renderMarkers() {
+  if (!markersLayer) return
+
+  const currentIds = new Set()
+
+  lightsWithLocation.value.forEach((light) => {
+    currentIds.add(light.id)
+    
+    if (markerMap[light.id]) {
+      const marker = markerMap[light.id]
+      const icon = createMarkerIcon(light)
+      marker.setIcon(icon)
+    } else {
+      const icon = createMarkerIcon(light)
+      const marker = L.marker(
+        [Number(light.latitude), Number(light.longitude)],
+        { icon }
+      ).addTo(markersLayer)
+      
+      marker.on('click', () => {
+        onMarkerClick(light)
+      })
+      
+      markerMap[light.id] = marker
+    }
+  })
+
+  Object.keys(markerMap).forEach((id) => {
+    if (!currentIds.has(Number(id))) {
+      markersLayer.removeLayer(markerMap[id])
+      delete markerMap[id]
+    }
+  })
+
+  updateMapBounds()
+}
+
+function updateMapBounds() {
+  if (!markersLayer || markersLayer.getLayers().length === 0) return
+  
+  const bounds = markersLayer.getBounds()
+  if (bounds.isValid()) {
+    mapInstance.fitBounds(bounds, { padding: [50, 50] })
+  }
+}
+
+function onLayerChange() {
+  addTileLayer()
+}
+
+const detailDialog = ref(false)
+const selectedLight = ref(null)
+
+function onMarkerClick(light) {
+  selectedLight.value = light
+  loadSensorData([light])
+  detailDialog.value = true
+}
+
 async function refreshAll(reprobe = false) {
   if (reprobe) sensorApiAvailable.value = null
   loading.value = true
@@ -368,8 +507,9 @@ async function refreshAll(reprobe = false) {
   if (mode.value === 'list') {
     await loadSensorData(pagedLights.value)
   } else {
+    await loadSensorData(lightsWithLocation.value)
     await nextTick()
-    renderMap()
+    renderMarkers()
   }
   loading.value = false
 }
@@ -383,11 +523,11 @@ function onFilterChange() {
   if (mode.value === 'list') {
     loadSensorData(pagedLights.value)
   } else {
-    nextTick(renderMap)
+    renderMarkers()
+    loadSensorData(lightsWithLocation.value)
   }
 }
 
-// 单灯开关
 async function onSwitch(row, status) {
   try {
     await batchSwitchLight([row.id], status)
@@ -399,12 +539,9 @@ async function onSwitch(row, status) {
       `${status === 1 ? '开启' : '关闭'}路灯 ${row.lightCode || row.lightName}`,
       '成功'
     )
-  } catch (e) {
-    // 失败提示由拦截器处理
-  }
+  } catch (e) {}
 }
 
-// 调光
 const dimDialog = ref(false)
 const dimRow = ref(null)
 const dimValue = ref(0)
@@ -429,14 +566,11 @@ async function onDim() {
       '成功'
     )
     dimDialog.value = false
-  } catch (e) {
-    // 失败提示由拦截器处理
-  } finally {
+  } catch (e) {} finally {
     dimLoading.value = false
   }
 }
 
-// 轮询
 let timer = null
 function startPolling() {
   stopPolling()
@@ -460,7 +594,6 @@ watch(interval, () => {
   if (autoRefresh.value) startPolling()
 })
 
-// 翻页 / 每页条数变化：重新加载当前页传感器数据
 watch(
   [() => listQuery.pageNum, () => listQuery.pageSize],
   () => {
@@ -470,18 +603,21 @@ watch(
   }
 )
 
-// 模式切换
 watch(mode, async (m) => {
   if (m === 'map') {
     await nextTick()
-    renderMap()
+    initMap()
+    renderMarkers()
+    loadSensorData(lightsWithLocation.value)
   } else {
     await loadSensorData(pagedLights.value)
   }
 })
 
 function onResize() {
-  mapChart?.resize()
+  if (mapInstance) {
+    mapInstance.invalidateSize()
+  }
 }
 
 onMounted(async () => {
@@ -493,14 +629,197 @@ onMounted(async () => {
 onUnmounted(() => {
   stopPolling()
   window.removeEventListener('resize', onResize)
-  mapChart?.dispose()
-  mapChart = null
+  if (mapInstance) {
+    mapInstance.remove()
+    mapInstance = null
+  }
 })
 </script>
 
 <style scoped>
-.map-box {
-  height: 540px;
-  width: 100%;
+.map-card {
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+}
+
+.map-wrapper {
+  flex: 1;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+}
+
+.status-dot.online {
+  background-color: #67c23a;
+}
+
+.status-dot.fault {
+  background-color: #f56c6c;
+}
+
+.status-dot.offline {
+  background-color: #909399;
+}
+
+.light-marker {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.marker-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: #fff;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border: 2px solid #fff;
+}
+
+.marker-online .marker-inner {
+  background-color: #67c23a;
+}
+
+.marker-fault .marker-inner {
+  background-color: #f56c6c;
+}
+
+.marker-offline .marker-inner {
+  background-color: #909399;
+}
+
+.marker-pulse {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: rgba(245, 108, 108, 0.3);
+  animation: pulse 1.5s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.light-detail {
+  padding: 8px 0;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.detail-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #fff;
+}
+
+.detail-icon.marker-online {
+  background-color: #67c23a;
+}
+
+.detail-icon.marker-fault {
+  background-color: #f56c6c;
+}
+
+.detail-icon.marker-offline {
+  background-color: #909399;
+}
+
+.detail-info h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.detail-status {
+  margin-top: 4px;
+}
+
+.detail-body {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px 8px;
+}
+
+.detail-row {
+  display: contents;
+}
+
+.detail-label {
+  color: #909399;
+  font-size: 13px;
+}
+
+.detail-value {
+  color: #303133;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .map-card {
+    height: 400px;
+  }
+
+  .map-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .map-header .text-muted:last-child {
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  .detail-body {
+    grid-template-columns: 80px 1fr;
+  }
 }
 </style>

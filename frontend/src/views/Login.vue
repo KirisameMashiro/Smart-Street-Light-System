@@ -240,18 +240,62 @@ function onDemoLogin(role) {
 }
 
 @media (max-width: 720px) {
+  .login-wrap {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+
   .login-card {
     width: 100%;
     height: auto;
     flex-direction: column;
+    border-radius: 8px;
   }
+
   .login-banner,
   .login-form-area {
     width: 100%;
     padding: 32px 24px;
   }
+
+  .login-banner {
+    padding: 24px;
+    text-align: center;
+  }
+
+  .banner-icon {
+    font-size: 40px;
+  }
+
+  .login-banner h1 {
+    font-size: 20px;
+  }
+
   .feature-list {
     display: none;
+  }
+
+  .form-title {
+    font-size: 20px;
+  }
+
+  .hint {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 380px) {
+  .login-banner {
+    padding: 16px;
+  }
+
+  .login-form-area {
+    padding: 24px 16px;
+  }
+
+  .login-banner h1 {
+    font-size: 18px;
   }
 }
 </style>
