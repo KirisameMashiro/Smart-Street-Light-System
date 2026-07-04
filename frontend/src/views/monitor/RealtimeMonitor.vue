@@ -419,6 +419,7 @@ async function loadSensorData(lights) {
   if (!lights || lights.length === 0) return
   if (sensorApiAvailable.value === false) return
 
+  // 首次探测：用第一盏灯测试 API 是否可用
   if (sensorApiAvailable.value === null) {
     try {
       const res = await getLatestSensorData(lights[0].id)
@@ -428,14 +429,22 @@ async function loadSensorData(lights) {
       sensorApiAvailable.value = false
       return
     }
+    // 首次调用：加载剩余路灯
+    await runConcurrent(lights.slice(1), 8, async (l) => {
+      try {
+        const res = await getLatestSensorData(l.id)
+        applySensor(l.id, res.data)
+      } catch (e) {}
+    })
+  } else {
+    // 后续调用：加载全部路灯（修复之前跳过 lights[0] 的 bug）
+    await runConcurrent(lights, 8, async (l) => {
+      try {
+        const res = await getLatestSensorData(l.id)
+        applySensor(l.id, res.data)
+      } catch (e) {}
+    })
   }
-
-  await runConcurrent(lights.slice(1), 8, async (l) => {
-    try {
-      const res = await getLatestSensorData(l.id)
-      applySensor(l.id, res.data)
-    } catch (e) {}
-  })
 }
 
 // 地图相关
@@ -650,19 +659,18 @@ async function refreshAll(reprobe = false) {
   try {
     const res = await getAllLights()
     allLights.value = res.data || []
+    if (mode.value === 'list') {
+      await loadSensorData(pagedLights.value)
+    } else {
+      await loadSensorData(lightsWithLocation.value)
+      await nextTick()
+      renderMarkers()
+    }
   } catch (e) {
     allLights.value = []
+  } finally {
     loading.value = false
-    return
   }
-  if (mode.value === 'list') {
-    await loadSensorData(pagedLights.value)
-  } else {
-    await loadSensorData(lightsWithLocation.value)
-    await nextTick()
-    renderMarkers()
-  }
-  loading.value = false
 }
 
 function onManualRefresh() {
@@ -803,13 +811,22 @@ let timer = null
 function startPolling() {
   stopPolling()
   if (!autoRefresh.value) return
-  timer = setInterval(() => {
-    refreshAll(false)
+  scheduleNext()
+}
+function scheduleNext() {
+  // 用递归 setTimeout 替代 setInterval，确保上一次 refreshAll 完成后再调度下一次，
+  // 避免请求慢于间隔时多次重叠导致旧响应覆盖新数据
+  timer = setTimeout(async () => {
+    if (!autoRefresh.value) return
+    try {
+      await refreshAll(false)
+    } catch (e) {}
+    if (autoRefresh.value) scheduleNext()
   }, interval.value * 1000)
 }
 function stopPolling() {
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
   }
 }
