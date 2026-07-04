@@ -19,3 +19,46 @@ export function handleAlert(id, data) {
 export function getUnhandledCount() {
   return request.get('/alerts/unhandled-count')
 }
+
+/**
+ * 连接告警 WebSocket
+ * 通过 Vite proxy /ws → 后端 ws://localhost:8080/ws/alert
+ *
+ * @param {Function} onMessage - 收到推送消息的回调 (data) => {}
+ * @param {Function} onError   - 连接错误的回调 (error) => {}
+ * @returns {WebSocket}
+ */
+export function connectAlertSocket(onMessage, onError) {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${location.host}/ws/alert`
+  const ws = new WebSocket(wsUrl)
+
+  ws.onopen = () => {
+    console.log('[AlertWS] WebSocket connected:', wsUrl)
+  }
+
+  ws.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data)
+      if (payload.type === 'new_alert') {
+        onMessage(payload.data)
+      }
+    } catch (e) {
+      console.error('[AlertWS] Message parse error:', e)
+    }
+  }
+
+  ws.onerror = (error) => {
+    console.error('[AlertWS] Connection error:', error)
+    if (onError) onError(error)
+  }
+
+  ws.onclose = (event) => {
+    console.log('[AlertWS] Disconnected, reconnect in 3s...', event.code, event.reason)
+    setTimeout(() => {
+      connectAlertSocket(onMessage, onError)
+    }, 3000)
+  }
+
+  return ws
+}
