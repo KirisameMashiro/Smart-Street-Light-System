@@ -58,7 +58,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
         }
 
         List<AlertRule> enabledRules = alertRuleMapper.selectList(
-                new LambdaQueryWrapper<AlertRule>().eq(AlertRule::getEnabled, 1));
+                new LambdaQueryWrapper<AlertRule>().eq(AlertRule::getEnabled, true));
 
         for (AlertRule rule : enabledRules) {
             EvaluateResult result = alertRuleEvaluator.evaluate(rule, sensorData, light);
@@ -84,7 +84,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
         List<Light> lights = lightMapper.selectList(null);
         // 查询所有启用的规则
         List<AlertRule> enabledRules = alertRuleMapper.selectList(
-                new LambdaQueryWrapper<AlertRule>().eq(AlertRule::getEnabled, 1));
+                new LambdaQueryWrapper<AlertRule>().eq(AlertRule::getEnabled, true));
 
         if (enabledRules.isEmpty()) {
             log.debug("没有启用的告警规则，跳过检查");
