@@ -69,7 +69,7 @@
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="所属路灯" width="170">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="$router.push(`/lights/${row.lightId}`)">
+            <el-link type="primary" :underline="false" @click="$router.push(`/devices/${row.lightId}`)">
               {{ lightNameOf(row.lightId) }}
             </el-link>
           </template>

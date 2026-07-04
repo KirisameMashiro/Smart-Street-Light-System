@@ -99,36 +99,6 @@
             {{ sensorMap[row.id]?.totalEnergy != null ? sensorMap[row.id].totalEnergy.toFixed(2) : '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
-          <template #default="{ row }">
-            <el-button
-              v-if="row.status !== 1"
-              link
-              type="success"
-              :disabled="row.status === 2"
-              @click="onSwitch(row, 1)"
-            >开灯</el-button>
-            <el-button
-              v-else
-              link
-              type="info"
-              :disabled="row.status === 2"
-              @click="onSwitch(row, 0)"
-            >关灯</el-button>
-            <el-button
-              link
-              type="primary"
-              :disabled="row.status === 2"
-              @click="openDim(row)"
-            >调光</el-button>
-            <el-tag
-              v-if="row.status === 2"
-              type="danger"
-              size="small"
-              style="margin-left: 4px"
-            >故障</el-tag>
-          </template>
-        </el-table-column>
       </el-table>
       <div class="pagination-bar">
         <el-pagination
@@ -215,35 +185,6 @@
       </div>
       <template #footer>
         <el-button @click="detailDialog = false">关闭</el-button>
-        <el-button
-          v-if="selectedLight && selectedLight.status !== 2"
-          type="primary"
-          @click="openDim(selectedLight); detailDialog = false"
-        >调光</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 调光弹窗 -->
-    <el-dialog v-model="dimDialog" title="调光控制" width="380px">
-      <div v-if="dimRow" style="text-align: center">
-        <div style="margin-bottom: 16px; color: #606266">
-          <b>{{ dimRow.lightCode }}</b>
-          <span v-if="dimRow.lightName"> - {{ dimRow.lightName }}</span>
-        </div>
-        <el-slider
-          v-model="dimValue"
-          :min="0"
-          :max="100"
-          :disabled="dimRow.status === 2"
-          style="padding: 0 16px"
-        />
-        <div style="margin-top: 8px; font-size: 13px; color: #909399">
-          当前亮度：{{ dimValue }}%
-        </div>
-      </div>
-      <template #footer>
-        <el-button @click="dimDialog = false">取消</el-button>
-        <el-button type="primary" :loading="dimLoading" @click="onDim">应用</el-button>
       </template>
     </el-dialog>
 
@@ -283,15 +224,10 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import {
-  getAllLights,
-  batchSwitchLight,
-  setLightBrightness
-} from '@/api/light'
+import { getAllLights } from '@/api/light'
 import { getLatestSensorData } from '@/api/sensor'
 import {
   LIGHT_STATUS_MAP,
@@ -299,7 +235,6 @@ import {
   ROAD_OPTIONS,
   STATUS_COLORS
 } from '@/utils/constants'
-import { logOperation } from '@/utils/log'
 
 const loading = ref(false)
 const mode = ref('list')
@@ -419,6 +354,7 @@ async function loadSensorData(lights) {
   if (!lights || lights.length === 0) return
   if (sensorApiAvailable.value === false) return
 
+  // 首次探测：用第一盏灯测试 API 是否可用
   if (sensorApiAvailable.value === null) {
     try {
       const res = await getLatestSensorData(lights[0].id)
@@ -428,14 +364,22 @@ async function loadSensorData(lights) {
       sensorApiAvailable.value = false
       return
     }
+    // 首次调用：加载剩余路灯
+    await runConcurrent(lights.slice(1), 8, async (l) => {
+      try {
+        const res = await getLatestSensorData(l.id)
+        applySensor(l.id, res.data)
+      } catch (e) {}
+    })
+  } else {
+    // 后续调用：加载全部路灯（修复之前跳过 lights[0] 的 bug）
+    await runConcurrent(lights, 8, async (l) => {
+      try {
+        const res = await getLatestSensorData(l.id)
+        applySensor(l.id, res.data)
+      } catch (e) {}
+    })
   }
-
-  await runConcurrent(lights.slice(1), 8, async (l) => {
-    try {
-      const res = await getLatestSensorData(l.id)
-      applySensor(l.id, res.data)
-    } catch (e) {}
-  })
 }
 
 // 地图相关
@@ -650,19 +594,18 @@ async function refreshAll(reprobe = false) {
   try {
     const res = await getAllLights()
     allLights.value = res.data || []
+    if (mode.value === 'list') {
+      await loadSensorData(pagedLights.value)
+    } else {
+      await loadSensorData(lightsWithLocation.value)
+      await nextTick()
+      renderMarkers()
+    }
   } catch (e) {
     allLights.value = []
+  } finally {
     loading.value = false
-    return
   }
-  if (mode.value === 'list') {
-    await loadSensorData(pagedLights.value)
-  } else {
-    await loadSensorData(lightsWithLocation.value)
-    await nextTick()
-    renderMarkers()
-  }
-  loading.value = false
 }
 
 function onManualRefresh() {
@@ -752,64 +695,26 @@ function onRoadChange(road) {
   applyFilter()
 }
 
-async function onSwitch(row, status) {
-  try {
-    await batchSwitchLight([row.id], status)
-    row.status = status
-    if (status === 0) row.brightness = 0
-    ElMessage.success(status === 1 ? '已开灯' : '已关灯')
-    logOperation(
-      status === 1 ? 'switch_on' : 'switch_off',
-      `${status === 1 ? '开启' : '关闭'}路灯 ${row.lightCode || row.lightName}`,
-      '成功'
-    )
-    // 同步更新地图上的 marker 图标（无论当前模式，确保切换到地图时状态正确）
-    if (markerMap[row.id]) {
-      markerMap[row.id].setIcon(createMarkerIcon(row))
-    }
-  } catch (e) {}
-}
-
-const dimDialog = ref(false)
-const dimRow = ref(null)
-const dimValue = ref(0)
-const dimLoading = ref(false)
-
-function openDim(row) {
-  dimRow.value = row
-  dimValue.value = row.brightness ?? 0
-  dimDialog.value = true
-}
-
-async function onDim() {
-  if (!dimRow.value) return
-  dimLoading.value = true
-  try {
-    await setLightBrightness(dimRow.value.id, dimValue.value)
-    dimRow.value.brightness = dimValue.value
-    ElMessage.success(`亮度已调整为 ${dimValue.value}%`)
-    logOperation(
-      'dimming',
-      `调光 ${dimRow.value.lightCode || dimRow.value.lightName} 至 ${dimValue.value}%`,
-      '成功'
-    )
-    dimDialog.value = false
-  } catch (e) {} finally {
-    dimLoading.value = false
-  }
-}
-
 let timer = null
 function startPolling() {
   stopPolling()
   if (!autoRefresh.value) return
-  timer = setInterval(() => {
-    refreshAll(false)
+  scheduleNext()
+}
+function scheduleNext() {
+  // 用递归 setTimeout 替代 setInterval，确保上一次 refreshAll 完成后再调度下一次，
+  // 避免请求慢于间隔时多次重叠导致旧响应覆盖新数据
+  timer = setTimeout(async () => {
+    if (!autoRefresh.value) return
+    try {
+      await refreshAll(false)
+    } catch (e) {}
+    if (autoRefresh.value) scheduleNext()
   }, interval.value * 1000)
 }
 function stopPolling() {
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
   }
 }

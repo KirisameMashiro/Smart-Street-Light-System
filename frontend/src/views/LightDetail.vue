@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:12px">
-        <el-button :icon="ArrowLeft" @click="$router.push('/lights')">返回</el-button>
+        <el-button :icon="ArrowLeft" @click="$router.push('/devices/archive')">返回</el-button>
         <h2 class="page-title">路灯详情</h2>
       </div>
       <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
@@ -27,7 +27,7 @@
         <el-descriptions-item label="额定功率(W)">{{ light.ratedPower ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="当前亮度(%)">
           <el-slider
-            :model-value="light.brightness"
+            v-model="light.brightness"
             :min="0"
             :max="100"
             :disabled="light.status === 2"
@@ -72,6 +72,10 @@
               <div class="m-label">湿度</div>
               <div class="m-value">{{ latest.humidity ?? '-' }}<span>%RH</span></div>
             </div>
+            <div class="metric" style="--c:#9c27b0">
+              <div class="m-label">累计耗电</div>
+              <div class="m-value">{{ latest.totalEnergy != null ? latest.totalEnergy.toFixed(2) : '-' }}<span>kWh</span></div>
+            </div>
             <div class="metric full" style="--c:#0c2461">
               <div class="m-label">采集时间</div>
               <div class="m-value" style="font-size:18px">{{ formatDateTime(latest.collectTime) }}</div>
@@ -88,12 +92,13 @@
           </div>
           <div v-if="average">
             <el-descriptions :column="2" border>
-              <el-descriptions-item label="平均光照(lux)">{{ average.illuminance ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均功率(W)">{{ average.power ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均电压(V)">{{ average.voltage ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均电流(A)">{{ average.current ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均温度(°C)">{{ average.temperature ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均湿度(%RH)">{{ average.humidity ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均光照(lux)">{{ average.illuminance?.toFixed(2) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均功率(W)">{{ average.power?.toFixed(2) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均电压(V)">{{ average.voltage?.toFixed(2) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均电流(A)">{{ average.current?.toFixed(3) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均温度(°C)">{{ average.temperature?.toFixed(2) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均湿度(%RH)">{{ average.humidity?.toFixed(2) ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均累计耗电(kWh)">{{ average.totalEnergy != null ? average.totalEnergy.toFixed(2) : '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
           <el-empty v-else description="暂无统计数据" :image-size="80" />
@@ -113,6 +118,11 @@
           <el-table-column prop="current" label="电流(A)" />
           <el-table-column prop="temperature" label="温度(°C)" />
           <el-table-column prop="humidity" label="湿度(%RH)" />
+          <el-table-column label="累计耗电(kWh)" width="130">
+            <template #default="{ row }">
+              {{ row.totalEnergy != null ? row.totalEnergy.toFixed(2) : '-' }}
+            </template>
+          </el-table-column>
           <el-table-column label="采集时间" width="180">
             <template #default="{ row }">{{ formatDateTime(row.collectTime) }}</template>
           </el-table-column>
@@ -202,12 +212,13 @@ async function loadAll() {
 }
 
 async function onBrightnessChange(val) {
+  const oldVal = light.value.brightness
   try {
     await setLightBrightness(lightId, val)
-    light.value.brightness = val
     ElMessage.success('亮度已更新')
   } catch (e) {
-    // ignore
+    light.value.brightness = oldVal
+    ElMessage.error('亮度更新失败')
   }
 }
 
