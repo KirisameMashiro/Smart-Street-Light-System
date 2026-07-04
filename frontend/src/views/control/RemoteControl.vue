@@ -259,49 +259,66 @@ function onSelectSingle(row) {
 
 // 批量开关灯（基于勾选）
 async function onBatchSwitch(status) {
-  const ids = selection.value.map((r) => r.id)
-  if (!ids.length) return
+  const validIds = selection.value.filter((r) => r.status !== 2).map((r) => r.id)
+  const faultCount = selection.value.filter((r) => r.status === 2).length
+  if (!validIds.length) {
+    if (faultCount > 0) {
+      ElMessage.warning(`选中的 ${selection.value.length} 盏路灯均为故障状态，无法进行开关操作`)
+    }
+    return
+  }
   const text = status === 1 ? '开启' : '关闭'
+  const confirmText = faultCount > 0
+    ? `确定要${text}选中的 ${validIds.length} 盏路灯吗？（${faultCount} 盏故障路灯将被跳过）`
+    : `确定要${text}选中的 ${validIds.length} 盏路灯吗？`
   try {
-    await ElMessageBox.confirm(
-      `确定要${text}选中的 ${ids.length} 盏路灯吗？`,
-      '批量操作',
-      { type: 'warning' }
-    )
+    await ElMessageBox.confirm(confirmText, '批量操作', { type: 'warning' })
   } catch (e) {
-    return // 用户取消
+    return
   }
   try {
-    await batchSwitchLight(ids, status)
-    ElMessage.success(`已${text} ${ids.length} 盏路灯`)
-    await logOperation('batch_switch', `批量${text} ${ids.length} 盏路灯`, '成功')
+    await batchSwitchLight(validIds, status)
+    const message = faultCount > 0
+      ? `已${text} ${validIds.length} 盏路灯（${faultCount} 盏故障路灯已跳过）`
+      : `已${text} ${validIds.length} 盏路灯`
+    ElMessage.success(message)
+    await logOperation('batch_switch', `批量${text} ${validIds.length} 盏路灯`, '成功')
     loadData()
   } catch (e) {
-    await logOperation('batch_switch', `批量${text} ${ids.length} 盏路灯`, '失败')
+    await logOperation('batch_switch', `批量${text} ${validIds.length} 盏路灯`, '失败')
   }
 }
 
 // 分组批量开关
 async function onGroupSwitch(group, status) {
-  const ids = group.ids
-  if (!ids.length) return
+  const groupData = filteredData.value.filter((d) => d[groupBy.value] === group.key)
+  const validIds = groupData.filter((d) => d.status !== 2).map((d) => d.id)
+  const faultCount = groupData.filter((d) => d.status === 2).length
+  if (!validIds.length) {
+    if (faultCount > 0) {
+      ElMessage.warning(`「${group.label}」分组下的 ${group.count} 盏路灯均为故障状态，无法进行开关操作`)
+    }
+    return
+  }
   const text = status === 1 ? '开启' : '关闭'
+  const confirmText = faultCount > 0
+    ? `确定要${text}「${group.label}」分组下的 ${validIds.length} 盏路灯吗？（${faultCount} 盏故障路灯将被跳过）`
+    : `确定要${text}「${group.label}」分组下的 ${validIds.length} 盏路灯吗？`
   try {
-    await ElMessageBox.confirm(
-      `确定要${text}「${group.label}」分组下的 ${ids.length} 盏路灯吗？`,
-      '分组操作',
-      { type: 'warning' }
-    )
+    await ElMessageBox.confirm(confirmText, '分组操作', { type: 'warning' })
   } catch (e) {
     return
   }
   try {
-    await batchSwitchLight(ids, status)
-    ElMessage.success(`已${text}「${group.label}」 ${ids.length} 盏路灯`)
-    await logOperation('batch_switch', `分组${text}「${group.label}」${ids.length} 盏路灯`, '成功')
+    await batchSwitchLight(validIds, status)
+    const message = faultCount > 0
+      ? `已${text}「${group.label}」 ${validIds.length} 盏路灯（${faultCount} 盏故障路灯已跳过）`
+      : `已${text}「${group.label}」 ${validIds.length} 盏路灯`
+    ElMessage.success(message)
+    await logOperation('batch_switch', `分组${text}「${group.label}」${validIds.length} 盏路灯`, '成功')
     loadData()
   } catch (e) {
-    await logOperation('batch_switch', `分组${text}「${group.label}」${ids.length} 盏路灯`, '失败')
+    await logOperation('batch_switch', `分组${text}「${group.label}」${validIds.length} 盏路灯`, '失败')
   }
 }
 
