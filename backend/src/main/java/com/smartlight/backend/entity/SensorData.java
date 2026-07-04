@@ -35,6 +35,9 @@ public class SensorData {
     /** 湿度 (%RH) */
     private Double humidity;
 
+    /** 累计耗电量 (kWh) */
+    private Double totalEnergy;
+
     /** 数据采集时间 */
     private LocalDateTime collectTime;
 

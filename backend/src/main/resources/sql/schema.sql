@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS `sensor_data` (
     `current` DECIMAL(10, 3) DEFAULT NULL COMMENT '电流 (A)',
     `temperature` DECIMAL(5, 2) DEFAULT NULL COMMENT '温度 (°C)',
     `humidity` DECIMAL(5, 2) DEFAULT NULL COMMENT '湿度 (%RH)',
+    `total_energy` DECIMAL(12, 2) DEFAULT NULL COMMENT '累计耗电量(kWh)',
     `collect_time` DATETIME NOT NULL COMMENT '数据采集时间',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),

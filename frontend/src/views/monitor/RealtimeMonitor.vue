@@ -88,9 +88,9 @@
             {{ sensorMap[row.id]?.power ?? '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="累计耗电" width="100">
-          <template #default>
-            <span class="text-muted">-</span>
+        <el-table-column label="累计耗电(kWh)" width="120">
+          <template #default="{ row }">
+            {{ sensorMap[row.id]?.totalEnergy != null ? sensorMap[row.id].totalEnergy.toFixed(2) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right" class-name="table-ops">
@@ -191,6 +191,10 @@
           <div class="detail-row" v-if="sensorMap[selectedLight.id]">
             <span class="detail-label">功率消耗</span>
             <span class="detail-value">{{ sensorMap[selectedLight.id].power }} W</span>
+          </div>
+          <div class="detail-row" v-if="sensorMap[selectedLight.id] && sensorMap[selectedLight.id].totalEnergy != null">
+            <span class="detail-label">累计耗电</span>
+            <span class="detail-value">{{ sensorMap[selectedLight.id].totalEnergy.toFixed(2) }} kWh</span>
           </div>
         </div>
       </div>
@@ -299,6 +303,7 @@ function applySensor(id, d) {
   sensorMap[id] = {
     illuminance: d.illuminance,
     power: d.power,
+    totalEnergy: d.totalEnergy,
     collectTime: d.collectTime
   }
 }
