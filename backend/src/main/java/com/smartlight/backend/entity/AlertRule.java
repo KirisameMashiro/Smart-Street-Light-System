@@ -12,7 +12,7 @@ public class AlertRule {
     private String ruleType;
     private String ruleName;
     private String threshold;
-    private Integer enabled;
+    private Boolean enabled;
     private String description;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
