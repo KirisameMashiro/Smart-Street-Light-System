@@ -29,25 +29,31 @@
         v-model="filter.district"
         placeholder="行政区"
         clearable
-        style="width: 140px"
-        @change="onFilterChange"
+        style="width: 160px"
+        @change="onDistrictChange"
       >
         <el-option
-          v-for="o in DISTRICT_OPTIONS"
+          v-for="o in availableDistricts"
           :key="o.value"
           :label="o.label"
           :value="o.value"
-        />
+        >
+          <span>{{ o.label }}</span>
+          <span
+            v-if="filter.road && o.hasRoad"
+            style="margin-left: 6px; color: #67c23a; font-size: 12px"
+          >✓ 包含{{ filter.road }}</span>
+        </el-option>
       </el-select>
       <el-select
         v-model="filter.road"
         placeholder="路段"
         clearable
-        style="width: 140px"
-        @change="onFilterChange"
+        style="width: 160px"
+        @change="onRoadChange"
       >
         <el-option
-          v-for="o in ROAD_OPTIONS"
+          v-for="o in availableRoads"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -93,18 +99,20 @@
             <span class="text-muted">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right" class-name="table-ops">
+        <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
           <template #default="{ row }">
             <el-button
               v-if="row.status !== 1"
               link
               type="success"
+              :disabled="row.status === 2"
               @click="onSwitch(row, 1)"
             >开灯</el-button>
             <el-button
               v-else
               link
               type="info"
+              :disabled="row.status === 2"
               @click="onSwitch(row, 0)"
             >关灯</el-button>
             <el-button
@@ -113,6 +121,12 @@
               :disabled="row.status === 2"
               @click="openDim(row)"
             >调光</el-button>
+            <el-tag
+              v-if="row.status === 2"
+              type="danger"
+              size="small"
+              style="margin-left: 4px"
+            >故障</el-tag>
           </template>
         </el-table-column>
       </el-table>
@@ -131,10 +145,11 @@
     <div v-else class="map-card">
       <div class="map-header">
         <span class="text-muted">底图：</span>
-        <el-radio-group v-model="mapLayer" size="small" @change="onLayerChange">
-          <el-radio-button value="gaode">高德地图</el-radio-button>
-          <el-radio-button value="osm">OpenStreetMap</el-radio-button>
-        </el-radio-group>
+        <span class="map-layer-name">高德地图</span>
+        <span class="map-info">
+          <span class="map-info-item">缩放级别: <b>{{ currentZoom }}</b></span>
+          <span class="map-info-item">比例尺: <b>{{ scaleText }}</b></span>
+        </span>
         <span class="text-muted" style="margin-left: auto">
           在线 <span class="status-dot online"></span> {{ onlineCount }}
           故障 <span class="status-dot fault"></span> {{ faultCount }}
@@ -227,6 +242,38 @@
         <el-button type="primary" :loading="dimLoading" @click="onDim">应用</el-button>
       </template>
     </el-dialog>
+
+    <!-- 路段跨行政区选择弹窗 -->
+    <el-dialog
+      v-model="districtSelectDialog"
+      title="请选择行政区"
+      width="360px"
+      :close-on-click-modal="false"
+      :show-close="false"
+    >
+      <div v-if="pendingRoad" style="padding: 8px 0">
+        <p style="margin: 0 0 16px 0; color: #606266; font-size: 14px">
+          路段“<b>{{ pendingRoad }}</b>”存在于多个行政区：
+        </p>
+        <p style="margin: 0 0 16px 0; color: #f56c6c; font-size: 13px">
+          {{ pendingDistricts.join('、') }}
+        </p>
+        <el-select v-model="selectedPendingDistrict" placeholder="请选择行政区" style="width: 100%">
+          <el-option
+            v-for="d in pendingDistricts"
+            :key="d"
+            :label="d"
+            :value="d"
+          />
+        </el-select>
+      </div>
+      <template #footer>
+        <el-button @click="onCancelDistrictSelect">取消</el-button>
+        <el-button type="primary" :disabled="!selectedPendingDistrict" @click="onConfirmDistrictSelect">
+          确定
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -261,6 +308,48 @@ const sensorApiAvailable = ref(null)
 
 const filter = reactive({ district: undefined, road: undefined })
 const listQuery = reactive({ pageNum: 1, pageSize: 10 })
+
+const roadDistrictsMap = computed(() => {
+  const map = new Map()
+  allLights.value.forEach((l) => {
+    if (!l.road || !l.district) return
+    if (!map.has(l.road)) {
+      map.set(l.road, new Set())
+    }
+    map.get(l.road).add(l.district)
+  })
+  return map
+})
+
+const availableDistricts = computed(() => {
+  const districts = new Set()
+  allLights.value.forEach((l) => {
+    if (l.district) districts.add(l.district)
+  })
+  const arr = Array.from(districts)
+  if (arr.length === 0) {
+    return DISTRICT_OPTIONS.map((o) => ({ ...o, hasRoad: false }))
+  }
+  return arr.map((d) => ({
+    value: d,
+    label: d,
+    hasRoad: filter.road
+      ? roadDistrictsMap.value.get(filter.road)?.has(d) ?? false
+      : false
+  }))
+})
+
+const availableRoads = computed(() => {
+  const roads = new Set()
+  allLights.value.forEach((l) => {
+    if (l.road) roads.add(l.road)
+  })
+  const arr = Array.from(roads)
+  if (arr.length === 0) {
+    return ROAD_OPTIONS
+  }
+  return arr.map((r) => ({ value: r, label: r }))
+})
 
 const filteredLights = computed(() =>
   allLights.value.filter((l) => {
@@ -349,16 +438,28 @@ const mapContainer = ref(null)
 let mapInstance = null
 let tileLayer = null
 let markersLayer = null
+let scaleControl = null
 const markerMap = reactive({})
 
 const mapLayer = ref('gaode')
 const mapZoom = ref(13)
 const mapCenter = ref([31.2304, 121.4737])
+// 地图当前缩放级别（实时变化，用于显示）
+const currentZoom = ref(13)
+// 地图比例尺文字（实时变化）
+const scaleText = ref('0 m')
 
 const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
 const gaodeSubdomains = ['1', '2', '3', '4']
-const osmUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const osmSubdomains = ['a', 'b', 'c']
+
+// 行政区中心坐标（用于根据区域自动跳转）
+const DISTRICT_CENTERS = {
+  '城东区': { center: [31.25, 121.55], zoom: 14 },
+  '城西区': { center: [31.25, 121.40], zoom: 14 },
+  '城南区': { center: [31.18, 121.48], zoom: 14 },
+  '城北区': { center: [31.32, 121.48], zoom: 14 },
+  '中心区': { center: [31.235, 121.4737], zoom: 15 }
+}
 
 function getMarkerColor(status) {
   if (status === 1) return '#67c23a'
@@ -380,25 +481,27 @@ function getMarkerClass(status) {
 
 function createMarkerIcon(light) {
   const color = getMarkerColor(light.status)
+  // 大圈套小圈：外层银色大环 + 状态色发光光晕 + 内层状态色小球
   const iconHtml = `<div class="light-marker ${getMarkerClass(light.status)}">
-    <div class="marker-inner" style="background-color: ${color}">
-      <span class="marker-icon">${getStatusIcon(light.status)}</span>
+    ${light.status === 1 ? `<div class="marker-glow" style="background-color: ${color}"></div>` : ''}
+    <div class="marker-outer">
+      <div class="marker-inner" style="background-color: ${color}"></div>
     </div>
     ${light.status === 2 ? '<div class="marker-pulse"></div>' : ''}
   </div>`
-  
+
   return L.divIcon({
     html: iconHtml,
     className: '',
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
-    popupAnchor: [0, -28]
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
   })
 }
 
 function initMap() {
   if (!mapContainer.value) return
-  
+
   if (mapInstance) {
     mapInstance.remove()
     mapInstance = null
@@ -411,24 +514,54 @@ function initMap() {
     attributionControl: false
   })
 
-  markersLayer = L.layerGroup().addTo(mapInstance)
+  markersLayer = L.featureGroup().addTo(mapInstance)
   addTileLayer()
+
+  // 添加比例尺控件
+  if (scaleControl) {
+    mapInstance.removeControl(scaleControl)
+  }
+  scaleControl = L.control.scale({
+    position: 'bottomleft',
+    imperial: false,
+    metric: true,
+    maxWidth: 120
+  }).addTo(mapInstance)
+
+  // 监听缩放事件，实时更新比例尺和缩放级别显示
+  mapInstance.on('zoomend', () => {
+    if (!mapInstance) return
+    const z = mapInstance.getZoom()
+    currentZoom.value = z
+    scaleText.value = computeScaleText(z)
+  })
+  // 初始化比例尺文字
+  currentZoom.value = mapInstance.getZoom()
+  scaleText.value = computeScaleText(mapInstance.getZoom())
+}
+
+// 根据缩放级别估算比例尺文字（米）
+function computeScaleText(zoom) {
+  // 简化估算：每像素对应的米数（Web 墨卡托近似）
+  const metersPerPixel = 156543.03392 * Math.cos((31.23 * Math.PI) / 180) / Math.pow(2, zoom)
+  const meters = Math.round(metersPerPixel * 100) // 取 100 像素宽度
+  if (meters >= 1000) {
+    return (meters / 1000).toFixed(meters >= 5000 ? 0 : 1) + ' km'
+  }
+  return meters + ' m'
 }
 
 function addTileLayer() {
   if (!mapInstance) return
-  
+
   if (tileLayer) {
     mapInstance.removeLayer(tileLayer)
     tileLayer = null
   }
 
-  const url = mapLayer.value === 'gaode' ? gaodeUrl : osmUrl
-  const subdomains = mapLayer.value === 'gaode' ? gaodeSubdomains : osmSubdomains
-
-  tileLayer = L.tileLayer(url, {
-    subdomains,
-    attribution: mapLayer.value === 'gaode' ? '© 高德地图' : '© OpenStreetMap contributors',
+  tileLayer = L.tileLayer(gaodeUrl, {
+    subdomains: gaodeSubdomains,
+    attribution: '© 高德地图',
     maxZoom: 18,
     minZoom: 3
   }).addTo(mapInstance)
@@ -472,16 +605,26 @@ function renderMarkers() {
 }
 
 function updateMapBounds() {
-  if (!markersLayer || markersLayer.getLayers().length === 0) return
-  
-  const bounds = markersLayer.getBounds()
-  if (bounds.isValid()) {
-    mapInstance.fitBounds(bounds, { padding: [50, 50] })
-  }
-}
+  if (!mapInstance || !markersLayer) return
 
-function onLayerChange() {
-  addTileLayer()
+  const layers = markersLayer.getLayers()
+  if (layers.length === 0) return
+
+  try {
+    const bounds = markersLayer.getBounds()
+    if (bounds && bounds.isValid()) {
+      if (layers.length === 1 && layers[0].getLatLng) {
+        const ll = layers[0].getLatLng()
+        mapInstance.setView([ll.lat, ll.lng], 15, { animate: true })
+      } else {
+        mapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 })
+      }
+    }
+  } catch (e) {
+    if (layers[0] && layers[0].getLatLng) {
+      mapInstance.setView(layers[0].getLatLng(), 15)
+    }
+  }
 }
 
 const detailDialog = ref(false)
@@ -518,7 +661,7 @@ function onManualRefresh() {
   refreshAll(true)
 }
 
-function onFilterChange() {
+function applyFilter() {
   listQuery.pageNum = 1
   if (mode.value === 'list') {
     loadSensorData(pagedLights.value)
@@ -526,6 +669,79 @@ function onFilterChange() {
     renderMarkers()
     loadSensorData(lightsWithLocation.value)
   }
+}
+
+function onFilterChange(changedField) {
+  // 如果行政区改变，且当前路段不在该行政区内，清空路段
+  if (changedField === 'district' && filter.road && filter.district) {
+    const districts = roadDistrictsMap.value.get(filter.road)
+    if (districts && !districts.has(filter.district)) {
+      filter.road = undefined
+    }
+  }
+  applyFilter()
+}
+
+function onDistrictChange(v) {
+  onFilterChange('district', v)
+}
+
+const districtSelectDialog = ref(false)
+const pendingRoad = ref('')
+const pendingDistricts = ref([])
+const selectedPendingDistrict = ref('')
+
+function openDistrictSelect(road, districts) {
+  pendingRoad.value = road
+  pendingDistricts.value = Array.from(districts)
+  selectedPendingDistrict.value = ''
+  districtSelectDialog.value = true
+}
+
+function onCancelDistrictSelect() {
+  districtSelectDialog.value = false
+  filter.road = undefined
+  applyFilter()
+}
+
+function onConfirmDistrictSelect() {
+  if (!selectedPendingDistrict.value) return
+  filter.district = selectedPendingDistrict.value
+  districtSelectDialog.value = false
+  applyFilter()
+}
+
+function onRoadChange(road) {
+  if (!road) {
+    filter.district = undefined
+    applyFilter()
+    return
+  }
+
+  const districts = roadDistrictsMap.value.get(road)
+
+  // 如果当前行政区已选择且包含该路段，则保持
+  if (filter.district && districts?.has(filter.district)) {
+    applyFilter()
+    return
+  }
+
+  // 只有一个行政区包含该路段，自动填入
+  if (districts && districts.size === 1) {
+    filter.district = Array.from(districts)[0]
+    applyFilter()
+    return
+  }
+
+  // 多个行政区包含该路段，要求用户选择
+  if (districts && districts.size > 1) {
+    filter.district = undefined
+    applyFilter()
+    openDistrictSelect(road, districts)
+    return
+  }
+
+  applyFilter()
 }
 
 async function onSwitch(row, status) {
@@ -539,6 +755,10 @@ async function onSwitch(row, status) {
       `${status === 1 ? '开启' : '关闭'}路灯 ${row.lightCode || row.lightName}`,
       '成功'
     )
+    // 同步更新地图上的 marker 图标
+    if (mode.value === 'map' && markerMap[row.id]) {
+      markerMap[row.id].setIcon(createMarkerIcon(row))
+    }
   } catch (e) {}
 }
 
@@ -609,6 +829,13 @@ watch(mode, async (m) => {
     initMap()
     renderMarkers()
     loadSensorData(lightsWithLocation.value)
+    // 确保地图容器尺寸正确后再居中
+    setTimeout(() => {
+      if (mapInstance) {
+        mapInstance.invalidateSize()
+        updateMapBounds()
+      }
+    }, 100)
   } else {
     await loadSensorData(pagedLights.value)
   }
@@ -653,6 +880,33 @@ onUnmounted(() => {
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
 }
 
+.map-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 8px;
+  padding: 4px 10px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.map-info-item b {
+  color: #303133;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.map-layer-name {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #409eff;
+  color: #fff;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
 .map-wrapper {
   flex: 1;
   border-radius: 0 0 8px 8px;
@@ -677,61 +931,6 @@ onUnmounted(() => {
 
 .status-dot.offline {
   background-color: #909399;
-}
-
-.light-marker {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-}
-
-.marker-inner {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #fff;
-  font-weight: bold;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 2px solid #fff;
-}
-
-.marker-online .marker-inner {
-  background-color: #67c23a;
-}
-
-.marker-fault .marker-inner {
-  background-color: #f56c6c;
-}
-
-.marker-offline .marker-inner {
-  background-color: #909399;
-}
-
-.marker-pulse {
-  position: absolute;
-  top: -3px;
-  left: -3px;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background-color: rgba(245, 108, 108, 0.3);
-  animation: pulse 1.5s ease-out infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2);
-    opacity: 0;
-  }
 }
 
 .light-detail {
@@ -818,8 +1017,116 @@ onUnmounted(() => {
     margin-top: 4px;
   }
 
+  .map-info {
+    margin-left: 0;
+    gap: 8px;
+    font-size: 11px;
+  }
+
   .detail-body {
     grid-template-columns: 80px 1fr;
   }
+}
+</style>
+
+<style>
+/* Leaflet marker 全局样式 - Leaflet 动态插入的 DOM 不在 Vue scoped 作用域内 */
+.light-marker {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+}
+
+.marker-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background-color: #67c23a;
+  opacity: 0.25;
+  filter: blur(4px);
+  animation: marker-glow 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes marker-glow {
+  0%, 100% {
+    opacity: 0.25;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+.marker-outer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8eaec 0%, #c0c4cc 50%, #909399 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.marker-inner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.6) inset;
+}
+
+.marker-online .marker-inner {
+  background-color: #67c23a;
+}
+
+.marker-fault .marker-inner {
+  background-color: #f56c6c;
+}
+
+.marker-offline .marker-inner {
+  background-color: #909399;
+}
+
+.marker-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background-color: rgba(245, 108, 108, 0.4);
+  animation: marker-pulse 1.5s ease-out infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes marker-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* 修复 Leaflet divIcon 默认的白色背景 */
+.leaflet-div-icon {
+  background: transparent;
+  border: none;
 }
 </style>
