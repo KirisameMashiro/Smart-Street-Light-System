@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Duration;
 
 /**
  * 传感器数据入库服务实现
@@ -37,8 +38,23 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
         entity.setHumidity(dto.getHumidity());
         entity.setCollectTime(dto.getCollectTime() != null ? dto.getCollectTime() : LocalDateTime.now());
 
+        SensorData latest = sensorDataMapper.selectLatestByLightId(dto.getLightId());
+        if (latest != null && latest.getTotalEnergy() != null) {
+            double energyIncrement = 0.0;
+            if (latest.getPower() != null && entity.getPower() != null) {
+                double avgPower = (latest.getPower() + entity.getPower()) / 2;
+                long hours = Duration.between(latest.getCollectTime(), entity.getCollectTime()).toHours();
+                if (hours > 0) {
+                    energyIncrement = avgPower * hours / 1000;
+                }
+            }
+            entity.setTotalEnergy(latest.getTotalEnergy() + energyIncrement);
+        } else {
+            entity.setTotalEnergy(0.0);
+        }
+
         sensorDataMapper.insert(entity);
-        log.info("传感器数据入库成功: lightId={}, collectTime={}", dto.getLightId(), dto.getCollectTime());
+        log.info("传感器数据入库成功: lightId={}, collectTime={}, totalEnergy={}", dto.getLightId(), dto.getCollectTime(), entity.getTotalEnergy());
 
         // 入库后立即触发告警实时检测
         try {
