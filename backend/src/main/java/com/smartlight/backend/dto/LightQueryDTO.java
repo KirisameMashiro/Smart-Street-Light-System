@@ -11,4 +11,7 @@ public class LightQueryDTO {
     private int pageSize = 10;
     private String keyword;
     private Integer status;
+    private String district;
+    private String road;
+    private String deviceType;
 }

@@ -26,9 +26,27 @@ public class LightController {
                 queryDTO.getPageNum(),
                 queryDTO.getPageSize(),
                 queryDTO.getKeyword(),
-                queryDTO.getStatus()
+                queryDTO.getStatus(),
+                queryDTO.getDistrict(),
+                queryDTO.getRoad(),
+                queryDTO.getDeviceType()
         );
         return Result.success(page);
+    }
+
+    @GetMapping("/districts")
+    public Result<List<String>> getDistricts() {
+        return Result.success(lightService.getDistricts());
+    }
+
+    @GetMapping("/roads")
+    public Result<List<String>> getRoads() {
+        return Result.success(lightService.getRoads());
+    }
+
+    @GetMapping("/device-types")
+    public Result<List<String>> getDeviceTypes() {
+        return Result.success(lightService.getDeviceTypes());
     }
 
     @GetMapping

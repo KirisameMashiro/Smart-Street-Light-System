@@ -42,7 +42,7 @@
         @change="onSearch"
       >
         <el-option
-          v-for="o in DISTRICT_OPTIONS"
+          v-for="o in districtOptions"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -56,7 +56,7 @@
         @change="onSearch"
       >
         <el-option
-          v-for="o in ROAD_OPTIONS"
+          v-for="o in roadOptions"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -70,7 +70,7 @@
         @change="onSearch"
       >
         <el-option
-          v-for="o in DEVICE_TYPE_OPTIONS"
+          v-for="o in deviceTypeOptions"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -178,7 +178,7 @@
             <el-form-item label="行政区" prop="district">
               <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%">
                 <el-option
-                  v-for="o in DISTRICT_OPTIONS"
+                  v-for="o in districtOptions"
                   :key="o.value"
                   :label="o.label"
                   :value="o.value"
@@ -190,7 +190,7 @@
             <el-form-item label="路段" prop="road">
               <el-select v-model="form.road" placeholder="请选择" clearable style="width:100%">
                 <el-option
-                  v-for="o in ROAD_OPTIONS"
+                  v-for="o in roadOptions"
                   :key="o.value"
                   :label="o.label"
                   :value="o.value"
@@ -245,7 +245,7 @@
                 style="width:100%"
               >
                 <el-option
-                  v-for="o in DEVICE_TYPE_OPTIONS"
+                  v-for="o in deviceTypeOptions"
                   :key="o.value"
                   :label="o.label"
                   :value="o.value"
@@ -300,14 +300,12 @@ import {
   addLight,
   updateLight,
   deleteLight,
-  batchSwitchLight
+  batchSwitchLight,
+  getDistricts,
+  getRoads,
+  getDeviceTypes
 } from '@/api/light'
-import {
-  LIGHT_STATUS_MAP,
-  DISTRICT_OPTIONS,
-  ROAD_OPTIONS,
-  DEVICE_TYPE_OPTIONS
-} from '@/utils/constants'
+import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
 
@@ -326,6 +324,23 @@ const query = reactive({
   deviceType: undefined,
   status: undefined
 })
+
+const districtOptions = ref([])
+const roadOptions = ref([])
+const deviceTypeOptions = ref([])
+
+async function loadOptions() {
+  try {
+    const [dRes, rRes, tRes] = await Promise.all([
+      getDistricts(),
+      getRoads(),
+      getDeviceTypes()
+    ])
+    districtOptions.value = (dRes.data || []).map((v) => ({ value: v, label: v }))
+    roadOptions.value = (rRes.data || []).map((v) => ({ value: v, label: v }))
+    deviceTypeOptions.value = (tRes.data || []).map((v) => ({ value: v, label: v }))
+  } catch (e) {}
+}
 
 async function loadData() {
   loading.value = true
@@ -535,5 +550,8 @@ async function onSubmit() {
   }
 }
 
-onMounted(loadData)
+onMounted(async () => {
+  await loadOptions()
+  loadData()
+})
 </script>
