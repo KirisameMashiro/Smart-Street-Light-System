@@ -507,6 +507,9 @@ function initMap() {
     mapInstance = null
   }
 
+  // 清空 marker 映射表，因为旧 marker 已随旧地图销毁
+  Object.keys(markerMap).forEach((key) => delete markerMap[key])
+
   mapInstance = L.map(mapContainer.value, {
     center: mapCenter.value,
     zoom: mapZoom.value,
@@ -755,8 +758,8 @@ async function onSwitch(row, status) {
       `${status === 1 ? '开启' : '关闭'}路灯 ${row.lightCode || row.lightName}`,
       '成功'
     )
-    // 同步更新地图上的 marker 图标
-    if (mode.value === 'map' && markerMap[row.id]) {
+    // 同步更新地图上的 marker 图标（无论当前模式，确保切换到地图时状态正确）
+    if (markerMap[row.id]) {
       markerMap[row.id].setIcon(createMarkerIcon(row))
     }
   } catch (e) {}
