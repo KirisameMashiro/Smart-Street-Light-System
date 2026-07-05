@@ -13,20 +13,11 @@
     <!-- 时间范围选择 -->
     <div class="filter-bar">
       <el-radio-group v-model="rangeType" @change="onRangeTypeChange">
-        <el-radio-button value="daily">日度</el-radio-button>
         <el-radio-button value="monthly">月度</el-radio-button>
+        <el-radio-button value="yearly">年度</el-radio-button>
       </el-radio-group>
       <el-date-picker
-        v-if="rangeType === 'daily'"
-        v-model="dateValue"
-        type="date"
-        placeholder="选择日期"
-        value-format="YYYY-MM-DD"
-        style="width: 180px"
-        @change="loadAll"
-      />
-      <el-date-picker
-        v-else
+        v-if="rangeType === 'monthly'"
         v-model="dateValue"
         type="month"
         placeholder="选择月份"
@@ -34,7 +25,20 @@
         style="width: 180px"
         @change="loadAll"
       />
-      <span class="text-muted">统计口径：相比传统钠灯基准能耗</span>
+      <el-date-picker
+        v-else
+        v-model="dateValue"
+        type="year"
+        placeholder="选择年份"
+        value-format="YYYY"
+        style="width: 180px"
+        @change="loadAll"
+      />
+      <span class="text-muted">
+        统计口径：相比传统钠灯基准能耗
+        <template v-if="rangeType === 'monthly'">（月度统计展示该月每日数据）</template>
+        <template v-else>（年度统计展示该年每月数据）</template>
+      </span>
     </div>
 
     <!-- 核心指标卡片 -->
@@ -70,12 +74,12 @@
       <div class="chart-card">
         <div class="chart-title">{{ trendLabel }}趋势</div>
         <el-empty v-if="trendError" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div v-else ref="trendRef" class="chart-box" v-loading="loading"></div>
+        <div v-else ref="trendRef" class="chart-box"></div>
       </div>
       <div class="chart-card">
         <div class="chart-title">路段节电量对比</div>
         <el-empty v-if="roadError" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div v-else ref="roadRef" class="chart-box" v-loading="loading"></div>
+        <div v-else ref="roadRef" class="chart-box"></div>
       </div>
     </div>
 
@@ -85,7 +89,6 @@
       <el-form
         ref="baselineFormRef"
         :model="baseline"
-        v-loading="baselineLoading"
         label-width="200px"
         style="max-width: 600px"
       >
@@ -150,8 +153,8 @@ const rangeType = ref('monthly')
 const dateValue = ref('')
 
 const trendLabel = computed(() => {
-  const map = { daily: '日度', monthly: '月度' }
-  return map[rangeType.value] || '月度'
+  const map = { monthly: '月度每日', yearly: '年度每月' }
+  return map[rangeType.value] || '月度每日'
 })
 
 const summary = reactive({
@@ -183,10 +186,10 @@ const baseline = reactive({
 function defaultPeriod() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
-  if (rangeType.value === 'daily') {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  } else {
+  if (rangeType.value === 'monthly') {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
+  } else {
+    return `${d.getFullYear()}`
   }
 }
 
@@ -214,7 +217,7 @@ async function loadSummary() {
 async function loadTrend() {
   trendError.value = false
   try {
-    const res = await getCarbonTrend({ type: rangeType.value })
+    const res = await getCarbonTrend({ type: rangeType.value, period: dateValue.value })
     trendData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
   } catch (e) {
     trendData.value = []
@@ -248,17 +251,51 @@ async function loadAll() {
 function renderTrend() {
   if (!trendRef.value || trendError.value) return
   trendChart = trendChart || echarts.init(trendRef.value)
+  
   const x = trendData.value.map((it) => it.period || it.date || it.month || '')
   const energy = trendData.value.map((it) => Number(it.savedEnergy ?? 0))
   const co2 = trendData.value.map((it) => Number(it.reducedCo2 ?? 0))
+  
+  const isMonthly = rangeType.value === 'monthly'
+  const axisLabelFormat = isMonthly ? '{value}' : '{value}'
+  
   trendChart.setOption({
-    tooltip: { trigger: 'axis' },
+    tooltip: { 
+      trigger: 'axis',
+      formatter: function(params) {
+        let result = `<div style="font-weight:600;margin-bottom:4px">${params[0].axisValue}</div>`
+        params.forEach(item => {
+          const color = item.color
+          const name = item.seriesName
+          const value = item.value
+          result += `<div style="display:flex;align-items:center;gap:6px;margin:4px 0">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color}"></span>
+            <span>${name}: <strong>${value}</strong></span>
+          </div>`
+        })
+        return result
+      }
+    },
     legend: { data: ['节电量(kWh)', '减排量(kgCO₂)'], bottom: 0 },
     grid: { left: 55, right: 65, top: 45, bottom: 60, containLabel: true },
-    xAxis: { type: 'category', boundaryGap: false, data: x, axisLabel: { fontSize: 11 } },
+    xAxis: { 
+      type: 'category', 
+      boundaryGap: false, 
+      data: x, 
+      axisLabel: { 
+        fontSize: 11,
+        rotate: isMonthly && x.length > 15 ? 45 : 0,
+        formatter: function(value) {
+          if (isMonthly && value.length === 10) {
+            return value.slice(5)
+          }
+          return value
+        }
+      } 
+    },
     yAxis: [
-      { type: 'value', name: '节电量', nameGap: 15 },
-      { type: 'value', name: '减排量', nameGap: 15 }
+      { type: 'value', name: '节电量(kWh)', nameGap: 20 },
+      { type: 'value', name: '减排量(kgCO₂)', nameGap: 20 }
     ],
     series: [
       {
@@ -369,7 +406,7 @@ function exportLocal() {
     ['总节电量', summary.savedEnergy, 'kWh'],
     ['总减排量', summary.reducedCo2, 'kgCO2'],
     ['节能率', summary.energySavingRate, '%'],
-    ['统计类型', rangeType.value, ''],
+    ['统计类型', rangeType.value === 'monthly' ? '月度(每日)' : '年度(每月)', ''],
     ['统计周期', dateValue.value || '', '']
   ]
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryAoA), '核心指标')

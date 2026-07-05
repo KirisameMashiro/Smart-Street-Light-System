@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">操作审计</h2>
@@ -43,7 +43,7 @@
 
     <!-- 表格 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="操作时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>

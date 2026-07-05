@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">AI 预测调光</h2>
@@ -64,7 +64,7 @@
         description="预测结果暂不可用（后端接口缺失）"
         :image-size="80"
       />
-      <div v-else ref="brightRef" class="chart-box" v-loading="loading"></div>
+      <div v-else ref="brightRef" class="chart-box"></div>
     </div>
 
     <el-row :gutter="16" style="margin-top: 16px">
@@ -81,7 +81,7 @@
             description="对比数据暂不可用（后端接口缺失）"
             :image-size="80"
           />
-          <div v-else ref="compareRef" class="chart-box" v-loading="loading"></div>
+          <div v-else ref="compareRef" class="chart-box"></div>
         </div>
       </el-col>
       <el-col :xs="24" :md="8">

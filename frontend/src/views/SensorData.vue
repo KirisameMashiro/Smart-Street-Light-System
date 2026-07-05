@@ -58,7 +58,8 @@
 
     <!-- 表格 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <div class="table-wrapper">
+        <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="所属路灯" width="180">
           <template #default="{ row }">
@@ -75,6 +76,7 @@
           <template #default="{ row }">{{ formatDateTime(row.collectTime) }}</template>
         </el-table-column>
       </el-table>
+      </div>
       <div class="pagination-bar">
         <el-pagination
           v-model:current-page="query.pageNum"
@@ -192,6 +194,11 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (max-width: 768px) {
   .filter-bar {
     flex-wrap: wrap;
@@ -202,6 +209,26 @@ onUnmounted(() => {
   }
   .time-separator {
     display: none;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+  }
+
+  .table-wrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
   }
 }
 </style>

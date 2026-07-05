@@ -7,7 +7,7 @@
     <el-tabs v-model="activeTab" class="config-tabs">
       <!-- 系统参数 -->
       <el-tab-pane label="系统参数" name="system">
-        <div class="table-card" v-loading="configLoading">
+        <div class="table-card">
           <el-form
             ref="configFormRef"
             :model="configForm"
@@ -71,7 +71,7 @@
             <el-button type="primary" :icon="Plus" @click="openRuleDialog()">新增规则</el-button>
             <el-button :icon="Refresh" :loading="ruleLoading" @click="loadRules">刷新</el-button>
           </div>
-          <el-table :data="rules" v-loading="ruleLoading" stripe>
+          <el-table :data="rules" stripe>
             <el-table-column type="index" label="#" width="60" />
             <el-table-column prop="ruleName" label="规则名称" width="160" show-overflow-tooltip />
             <el-table-column label="规则类型" width="140">

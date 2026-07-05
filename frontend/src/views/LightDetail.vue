@@ -9,7 +9,7 @@
     </div>
 
     <!-- 设备信息 -->
-    <div class="detail-card" v-loading="loading">
+    <div class="detail-card">
       <div class="detail-header">
         <div>
           <span class="detail-name">{{ light.lightName || '-' }}</span>
@@ -110,7 +110,7 @@
     <div class="detail-card">
       <div class="card-title">历史传感器数据</div>
       <div class="table-card" style="box-shadow:none">
-        <el-table :data="history" v-loading="loading" stripe size="default">
+        <el-table :data="history" stripe size="default">
           <el-table-column type="index" label="#" width="60" />
           <el-table-column prop="illuminance" label="光照(lux)" />
           <el-table-column prop="power" label="功率(W)" />

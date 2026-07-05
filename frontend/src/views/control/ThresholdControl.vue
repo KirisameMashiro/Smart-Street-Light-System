@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">阈值联动控制</h2>
@@ -25,7 +25,7 @@
     </el-card>
 
     <!-- 总开关 -->
-    <el-card shadow="never" class="switch-card" v-loading="loading">
+    <el-card shadow="never" class="switch-card">
       <div class="switch-row">
         <div class="switch-info">
           <el-icon><Connection /></el-icon>
@@ -42,7 +42,7 @@
     </el-card>
 
     <!-- 配置表单 -->
-    <el-card shadow="never" class="form-card" v-loading="loading">
+    <el-card shadow="never" class="form-card">
       <template #header>
         <div class="panel-header">
           <el-icon><Setting /></el-icon>

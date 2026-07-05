@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">用户管理</h2>
@@ -10,7 +10,7 @@
 
     <!-- 表格 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column prop="username" label="用户名" width="130" />
         <el-table-column prop="realName" label="真实姓名" width="130" />

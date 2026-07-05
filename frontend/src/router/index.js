@@ -117,6 +117,12 @@ const routes = [
         meta: { title: '用户管理', adminOnly: true, keepAlive: true }
       },
       {
+        path: 'system/account',
+        name: 'Account',
+        component: () => import('@/views/system/Account.vue'),
+        meta: { title: '账号管理', keepAlive: true }
+      },
+      {
         path: 'system/audit',
         name: 'OperationAudit',
         component: () => import('@/views/system/OperationAudit.vue'),

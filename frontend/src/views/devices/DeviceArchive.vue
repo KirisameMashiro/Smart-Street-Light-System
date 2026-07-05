@@ -98,7 +98,6 @@
     <div class="table-card">
       <el-table
         :data="tableData"
-        v-loading="loading"
         stripe
         @selection-change="onSelectionChange"
       >

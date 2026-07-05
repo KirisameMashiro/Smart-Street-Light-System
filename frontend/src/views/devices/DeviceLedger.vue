@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">台账统计</h2>
@@ -56,7 +56,6 @@
         </el-radio-group>
       </div>
       <div
-        v-loading="groupLoading"
         class="chart-box"
         style="display:flex;align-items:center;justify-content:center"
       >

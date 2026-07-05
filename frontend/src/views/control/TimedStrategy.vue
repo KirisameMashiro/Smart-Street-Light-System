@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">定时策略</h2>
@@ -10,7 +10,7 @@
 
     <!-- 列表 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="类型" width="100">

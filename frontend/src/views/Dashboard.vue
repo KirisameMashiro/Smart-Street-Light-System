@@ -93,7 +93,7 @@
         <span>最近报警</span>
         <el-button link type="primary" @click="$router.push('/alerts')">查看全部</el-button>
       </div>
-      <el-table :data="recentAlerts" v-loading="loading" stripe size="default">
+      <el-table :data="recentAlerts" stripe size="default">
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="报警类型" width="120">
           <template #default="{ row }">

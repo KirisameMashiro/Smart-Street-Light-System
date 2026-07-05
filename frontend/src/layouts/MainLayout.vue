@@ -123,22 +123,26 @@
             <el-icon class="bell-icon" @click="$router.push('/alerts')"><Bell /></el-icon>
           </el-badge>
           <el-dropdown @command="onCommand" trigger="click">
-            <span class="user-info">
-              <el-avatar :size="isMobile ? 28 : 30" class="avatar">
-                {{ displayName.charAt(0).toUpperCase() }}
-              </el-avatar>
-              <span v-if="!isMobile" class="username">{{ displayName }}</span>
-              <el-tag v-if="!isMobile" size="small" :type="roleTagType" effect="plain">
-                {{ roleLabel }}
-              </el-tag>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="assistant" icon="ChatDotRound">AI 运维助手</el-dropdown-item>
-                <el-dropdown-item command="logout" icon="SwitchButton" divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+        <span class="user-info">
+          <el-avatar :size="isMobile ? 28 : 30" class="avatar">
+            {{ displayName.charAt(0).toUpperCase() }}
+          </el-avatar>
+          <span v-if="!isMobile" class="username">{{ displayName }}</span>
+          <el-tag v-if="!isMobile" size="small" :type="roleTagType" effect="plain">
+            {{ roleLabel }}
+          </el-tag>
+        </span>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="toggle-float-ball">
+              <span>是否开启AI悬浮球</span>
+              <el-switch :model-value="floatBallEnabled" size="small" @change="onToggleFloatBall" />
+            </el-dropdown-item>
+            <el-dropdown-item command="account" icon="UserFilled">账号管理</el-dropdown-item>
+            <el-dropdown-item command="logout" icon="SwitchButton" divided>退出登录</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
         </div>
       </el-header>
 
@@ -172,6 +176,7 @@ const collapsed = ref(false)
 const unhandledCount = ref(0)
 const mobileMenuOpen = ref(false)
 const isMobile = ref(false)
+const floatBallEnabled = ref(false)
 let pollTimer = null
 
 const cachedViews = [
@@ -190,6 +195,7 @@ const cachedViews = [
   'AiAssistant',
   'AiKnowledge',
   'Users',
+  'Account',
   'OperationAudit',
   'SystemConfig'
 ]
@@ -358,12 +364,26 @@ function onCommand(cmd) {
       .catch(() => {})
   } else if (cmd === 'assistant') {
     router.push('/ai/assistant')
+  } else if (cmd === 'account') {
+    router.push('/system/account')
+  }
+}
+
+function onToggleFloatBall(enabled) {
+  floatBallEnabled.value = enabled
+  localStorage.setItem('floatBallEnabled', enabled ? 'true' : 'false')
+  window.dispatchEvent(new CustomEvent('float-ball-toggle', { detail: enabled }))
+  if (enabled) {
+    ElMessage.success('AI悬浮球已开启')
+  } else {
+    ElMessage.info('AI悬浮球已关闭')
   }
 }
 
 onMounted(() => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  floatBallEnabled.value = localStorage.getItem('floatBallEnabled') === 'true'
   fetchUnhandled()
   pollTimer = setInterval(fetchUnhandled, 30000)
 })
@@ -377,6 +397,9 @@ onUnmounted(() => {
 <style scoped>
 .layout {
   height: 100vh;
+  height: 100dvh;
+  display: flex;
+  overflow: hidden;
 }
 
 .aside {
@@ -384,6 +407,7 @@ onUnmounted(() => {
   transition: width 0.25s;
   overflow-x: hidden;
   overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .desktop-aside {
@@ -431,6 +455,7 @@ onUnmounted(() => {
   justify-content: space-between;
   box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
   padding: 0 16px;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -491,7 +516,26 @@ onUnmounted(() => {
   background-color: var(--bg);
   padding: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+  height: auto !important;
+}
+
+:deep(.el-container) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+:deep(.el-main) {
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
 }
 

@@ -11,12 +11,22 @@
 
 * {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
 html,
-body,
+body {
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 #app {
   height: 100%;
+  height: 100dvh;
   margin: 0;
   padding: 0;
 }
@@ -28,6 +38,7 @@ body {
   color: #303133;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  -webkit-overflow-scrolling: touch;
 }
 
 a {
@@ -37,6 +48,8 @@ a {
 
 .page-container {
   padding: 16px;
+  display: block;
+  overflow-x: hidden;
 }
 
 .page-header {

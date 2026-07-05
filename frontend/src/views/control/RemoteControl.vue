@@ -126,7 +126,6 @@
       <el-table
         ref="tableRef"
         :data="filteredData"
-        v-loading="loading"
         stripe
         @selection-change="onSelectionChange"
       >

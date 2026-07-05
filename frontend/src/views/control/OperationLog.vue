@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">操作日志</h2>
@@ -47,7 +47,8 @@
 
     <!-- 表格 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <div class="table-wrapper">
+        <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
@@ -69,6 +70,7 @@
           </template>
         </el-table-column>
       </el-table>
+      </div>
       <div class="pagination-bar">
         <el-pagination
           v-model:current-page="query.pageNum"
@@ -149,3 +151,32 @@ function onReset() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+  }
+
+  .table-wrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+  }
+}
+</style>

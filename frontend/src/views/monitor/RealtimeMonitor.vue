@@ -81,7 +81,7 @@
     <!-- 列表模式 -->
     <div v-if="mode === 'list'" class="table-card">
       <div class="table-wrapper">
-        <el-table :data="page.records" v-loading="loading" stripe>
+        <el-table :data="page.records" stripe>
           <el-table-column prop="lightCode" label="编号" width="110" />
           <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
           <el-table-column prop="location" label="位置" min-width="150" show-overflow-tooltip />
@@ -127,10 +127,10 @@
             </template>
           </el-table-column>
           <el-table-column label="累计耗电(kWh)" width="120">
-            <template #default="{ row }">
-              {{ sensorMap[row.id]?.totalEnergy != null ? sensorMap[row.id].totalEnergy.toFixed(2) : '-' }}
-            </template>
-          </el-table-column>
+          <template #default="{ row }">
+            {{ sensorMap[row.id]?.samplingEnergy != null ? (sensorMap[row.id].samplingEnergy / 1000).toFixed(3) : '-' }}
+          </template>
+        </el-table-column>
         </el-table>
       </div>
       <div class="pagination-bar">
@@ -238,7 +238,7 @@
             </div>
             <div class="detail-row">
               <span class="detail-label">累计耗电</span>
-              <span class="detail-value">{{ sensorMap[selectedLight.id].totalEnergy != null ? sensorMap[selectedLight.id].totalEnergy.toFixed(2) : '-' }} kWh</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].samplingEnergy != null ? (sensorMap[selectedLight.id].samplingEnergy / 1000).toFixed(3) : '-' }} kWh</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">采集时间</span>
@@ -377,7 +377,7 @@ function applySensor(id, d) {
     current: d.current,
     temperature: d.temperature,
     humidity: d.humidity,
-    totalEnergy: d.totalEnergy,
+    samplingEnergy: d.samplingEnergy,
     collectTime: d.collectTime
   }
 }
@@ -797,7 +797,9 @@ onUnmounted(() => {
 
 <style scoped>
 .map-card {
-  height: 560px;
+  max-height: 560px;
+  height: calc(100vh - 380px);
+  min-height: 300px;
   display: flex;
   flex-direction: column;
 }
@@ -867,10 +869,11 @@ onUnmounted(() => {
 
 .table-wrapper {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-wrapper :deep(.el-table) {
-  min-width: 1200px;
+  min-width: 100%;
 }
 
 .light-detail {
@@ -958,6 +961,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .map-card {
     height: 400px;
+    max-height: calc(100vh - 280px);
   }
 
   .map-header {
@@ -994,6 +998,26 @@ onUnmounted(() => {
     margin-left: 0 !important;
     width: 100%;
     text-align: center;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    -ms-overflow-style: -ms-autohiding-scrollbar;
+  }
+
+  .table-wrapper::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+
+  .table-wrapper::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
   }
 }
 </style>

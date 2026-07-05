@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">知识库管理</h2>
@@ -38,7 +38,7 @@
 
     <!-- 表格 -->
     <div class="table-card">
-      <el-table :data="tableData" v-loading="loading" stripe>
+      <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
         <el-table-column prop="question" label="问题" min-width="180" show-overflow-tooltip />
         <el-table-column prop="answer" label="答案" min-width="260" show-overflow-tooltip />
