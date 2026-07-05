@@ -285,6 +285,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'DeviceArchive' })
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {

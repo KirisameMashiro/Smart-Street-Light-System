@@ -124,6 +124,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'Dashboard' })
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'

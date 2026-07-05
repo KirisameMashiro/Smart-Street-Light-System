@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">知识库管理</h2>
@@ -112,6 +112,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'AiKnowledge' })
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'

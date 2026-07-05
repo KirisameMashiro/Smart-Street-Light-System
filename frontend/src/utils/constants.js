@@ -126,17 +126,44 @@ export const STRATEGY_TYPE_MAP = {
   everyday: { label: '每日', type: 'success' }
 }
 
-// ============ 告警规则类型 [前端扩展] ============
+// ============ 告警规则类型 [后端] ============
+// 与后端 AlertRuleEvaluator.mapAlertType / mapAlertLevel 对齐
 export const ALERT_RULE_TYPE_MAP = {
-  offline: '设备离线',
-  fault: '灯具故障',
-  energy: '能耗异常',
-  env: '环境超标',
-  overcurrent: '过流',
-  overvoltage: '过压',
-  undervoltage: '欠压',
-  overheat: '过热'
+  light_fault: { label: '路灯故障检测', level: 4 },
+  sensor_abnormal: { label: '传感器异常', level: 3 },
+  env_warning: { label: '环境预警', level: 2 },
+  power_overload: { label: '功耗异常', level: 2 },
+  low_brightness: { label: '低亮度预警', level: 2 }
 }
+
+// 阈值条件字段选项 [后端 AlertRuleEvaluator.getFieldValue]
+export const THRESHOLD_FIELD_OPTIONS = [
+  { value: '电压', label: '电压', unit: 'V' },
+  { value: '温度', label: '温度', unit: '°C' },
+  { value: '电流', label: '电流', unit: 'A' },
+  { value: '功率', label: '功率', unit: 'W' },
+  { value: '照度', label: '照度', unit: 'lux' },
+  { value: '湿度', label: '湿度', unit: '%RH' },
+  { value: '亮度', label: '亮度', unit: '%' },
+  { value: '关闭时间', label: '关闭时间', unit: 'h' }
+]
+
+// 阈值运算符选项 [后端 AlertRuleEvaluator.compare]
+// 注意: 后端不支持 != 和 ==，= 表示相等判断（带0.001浮点容差）
+export const THRESHOLD_OPERATOR_OPTIONS = [
+  { value: '>', label: '> 大于' },
+  { value: '<', label: '< 小于' },
+  { value: '>=', label: '>= 大于等于' },
+  { value: '<=', label: '<= 小于等于' },
+  { value: '=', label: '= 等于' }
+]
+
+// 时间约束选项 [后端 AlertRuleEvaluator.parseTimeConstraint]
+export const TIME_CONSTRAINT_OPTIONS = [
+  { value: '', label: '无' },
+  { value: '(白天)', label: '仅白天 (10:00-16:00)' },
+  { value: '(夜间)', label: '仅夜间 (20:00-次日6:00)' }
+]
 
 // 颜色复用
 export const STATUS_COLORS = {

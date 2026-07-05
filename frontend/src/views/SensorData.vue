@@ -36,13 +36,20 @@
         />
       </el-select>
       <el-date-picker
-        v-model="timeRange"
-        type="datetimerange"
-        range-separator="至"
-        start-placeholder="开始时间"
-        end-placeholder="结束时间"
+        v-model="startTime"
+        type="datetime"
+        placeholder="开始时间"
         value-format="YYYY-MM-DDTHH:mm:ss"
-        style="width: 380px"
+        style="width: 200px"
+        @change="onSearch"
+      />
+      <span class="time-separator">至</span>
+      <el-date-picker
+        v-model="endTime"
+        type="datetime"
+        placeholder="结束时间"
+        value-format="YYYY-MM-DDTHH:mm:ss"
+        style="width: 200px"
         @change="onSearch"
       />
       <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
@@ -84,6 +91,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'SensorData' })
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { getSensorDataPage } from '@/api/sensor'
@@ -96,7 +104,8 @@ const interval = ref(5)
 const tableData = ref([])
 const total = ref(0)
 const lightOptions = ref([])
-const timeRange = ref([])
+const startTime = ref('')
+const endTime = ref('')
 let timer = null
 
 const query = reactive({
@@ -121,13 +130,8 @@ async function loadData() {
   loading.value = true
   try {
     const params = { ...query }
-    if (timeRange.value && timeRange.value.length === 2) {
-      params.startTime = timeRange.value[0]
-      params.endTime = timeRange.value[1]
-    } else {
-      params.startTime = undefined
-      params.endTime = undefined
-    }
+    params.startTime = startTime.value || undefined
+    params.endTime = endTime.value || undefined
     const res = await getSensorDataPage(params)
     tableData.value = res.data?.records || []
     total.value = res.data?.total || 0
@@ -143,7 +147,8 @@ function onSearch() {
 
 function onReset() {
   query.lightId = undefined
-  timeRange.value = []
+  startTime.value = ''
+  endTime.value = ''
   onSearch()
 }
 
@@ -179,3 +184,24 @@ onUnmounted(() => {
   stopPolling()
 })
 </script>
+
+<style scoped>
+.time-separator {
+  margin: 0 8px;
+  color: #909399;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filter-bar :deep(.el-date-picker) {
+    width: calc(50% - 16px) !important;
+  }
+  .time-separator {
+    display: none;
+  }
+}
+</style>

@@ -73,20 +73,21 @@
           </div>
           <el-table :data="rules" v-loading="ruleLoading" stripe>
             <el-table-column type="index" label="#" width="60" />
+            <el-table-column prop="ruleName" label="规则名称" width="160" show-overflow-tooltip />
             <el-table-column label="规则类型" width="140">
               <template #default="{ row }">
-                {{ ALERT_RULE_TYPE_MAP[row.ruleType] || row.ruleType || '-' }}
+                {{ ALERT_RULE_TYPE_MAP[row.ruleType]?.label || row.ruleType || '-' }}
               </template>
             </el-table-column>
-            <el-table-column prop="threshold" label="阈值" width="120" />
+            <el-table-column prop="threshold" label="阈值表达式" min-width="200" show-overflow-tooltip />
             <el-table-column label="报警级别" width="120">
               <template #default="{ row }">
-                <el-tag :type="ALERT_LEVEL_MAP[row.level]?.type" size="small">
-                  {{ ALERT_LEVEL_MAP[row.level]?.label || '-' }}
+                <el-tag :type="ALERT_LEVEL_MAP[ruleLevelOf(row.ruleType)]?.type" size="small">
+                  {{ ALERT_LEVEL_MAP[ruleLevelOf(row.ruleType)]?.label || '-' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
             <el-table-column label="启用" width="100">
               <template #default="{ row }">
                 <el-switch v-model="row.enabled" @change="onToggleEnabled(row)" />
@@ -107,7 +108,7 @@
     <el-dialog
       v-model="ruleDialogVisible"
       :title="ruleIsEdit ? '编辑告警规则' : '新增告警规则'"
-      width="520px"
+      width="640px"
       @closed="resetRuleForm"
     >
       <el-form
@@ -117,36 +118,110 @@
         label-width="100px"
       >
         <el-form-item label="规则类型" prop="ruleType">
-          <el-select v-model="ruleForm.ruleType" placeholder="请选择规则类型" style="width: 100%">
+          <el-select v-model="ruleForm.ruleType" placeholder="请选择规则类型" style="width: 100%" @change="onRuleTypeChange">
             <el-option
-              v-for="(label, key) in ALERT_RULE_TYPE_MAP"
+              v-for="(info, key) in ALERT_RULE_TYPE_MAP"
               :key="key"
-              :label="label"
+              :label="info.label"
               :value="key"
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="阈值" prop="threshold">
-          <el-input-number
-            v-model="ruleForm.threshold"
-            :step="1"
-            controls-position="right"
-            style="width: 100%"
-          />
+        <el-form-item label="规则名称" prop="ruleName">
+          <el-input v-model="ruleForm.ruleName" placeholder="如：路灯故障检测" />
         </el-form-item>
-        <el-form-item label="报警级别" prop="level">
-          <el-select v-model="ruleForm.level" placeholder="请选择报警级别" style="width: 100%">
-            <el-option
-              v-for="opt in levelOptions"
-              :key="opt.value"
-              :label="opt.label"
-              :value="opt.value"
-            />
-          </el-select>
+
+        <!-- 阈值表达式编辑器 -->
+        <el-form-item label="阈值条件" prop="threshold">
+          <div class="threshold-editor">
+            <div
+              v-for="(cond, idx) in conditions"
+              :key="idx"
+              class="condition-row"
+            >
+              <span v-if="idx > 0" class="or-label">或</span>
+              <el-select
+                v-model="cond.field"
+                placeholder="字段"
+                style="width: 110px"
+                @change="onFieldChange(idx)"
+              >
+                <el-option
+                  v-for="f in THRESHOLD_FIELD_OPTIONS"
+                  :key="f.value"
+                  :label="f.label"
+                  :value="f.value"
+                />
+              </el-select>
+              <el-select
+                v-model="cond.operator"
+                placeholder="运算符"
+                style="width: 100px"
+              >
+                <el-option
+                  v-for="op in THRESHOLD_OPERATOR_OPTIONS"
+                  :key="op.value"
+                  :label="op.value"
+                  :value="op.value"
+                />
+              </el-select>
+              <el-checkbox
+                v-if="cond.field === '功率'"
+                v-model="cond.useRated"
+                style="margin-left: 4px"
+              >额定值</el-checkbox>
+              <template v-if="cond.useRated">
+                <span style="color: #909399; font-size: 13px">额定值</span>
+                <span style="color: #909399; font-size: 13px">*</span>
+                <el-input-number
+                  v-model="cond.multiplier"
+                  :min="0.1"
+                  :step="0.1"
+                  :precision="1"
+                  size="small"
+                  style="width: 90px"
+                />
+              </template>
+              <template v-else>
+                <el-input-number
+                  v-model="cond.value"
+                  :step="1"
+                  size="small"
+                  style="width: 120px"
+                />
+              </template>
+              <span class="cond-unit">{{ cond.unit }}</span>
+              <el-button
+                v-if="conditions.length > 1"
+                link
+                type="danger"
+                :icon="Delete"
+                @click="removeCondition(idx)"
+              />
+            </div>
+            <el-button link type="primary" :icon="Plus" @click="addCondition">
+              添加"或"条件
+            </el-button>
+
+            <div class="time-constraint-row">
+              <span class="tc-label">时间约束：</span>
+              <el-select v-model="timeConstraint" style="width: 220px">
+                <el-option
+                  v-for="opt in TIME_CONSTRAINT_OPTIONS"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </div>
+
+            <div class="threshold-preview">
+              <span class="preview-label">表达式预览：</span>
+              <code class="preview-code">{{ thresholdPreview || '（请填写条件）' }}</code>
+            </div>
+          </div>
         </el-form-item>
-        <el-form-item label="启用" prop="enabled">
-          <el-switch v-model="ruleForm.enabled" />
-        </el-form-item>
+
         <el-form-item label="描述">
           <el-input
             v-model="ruleForm.description"
@@ -154,6 +229,9 @@
             :rows="3"
             placeholder="规则描述"
           />
+        </el-form-item>
+        <el-form-item label="启用" prop="enabled">
+          <el-switch v-model="ruleForm.enabled" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -165,9 +243,10 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'SystemConfig' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, Delete } from '@element-plus/icons-vue'
 import {
   getSystemConfig,
   updateSystemConfig,
@@ -177,9 +256,20 @@ import {
   deleteAlertRule
 } from '@/api/config'
 import { logOperation } from '@/utils/log'
-import { ALERT_RULE_TYPE_MAP, ALERT_LEVEL_MAP } from '@/utils/constants'
+import {
+  ALERT_RULE_TYPE_MAP,
+  ALERT_LEVEL_MAP,
+  THRESHOLD_FIELD_OPTIONS,
+  THRESHOLD_OPERATOR_OPTIONS,
+  TIME_CONSTRAINT_OPTIONS
+} from '@/utils/constants'
 
 const activeTab = ref('system')
+
+// 规则类型 → 报警级别（后端自动映射）
+function ruleLevelOf(ruleType) {
+  return ALERT_RULE_TYPE_MAP[ruleType]?.level || 2
+}
 
 // ============ 系统参数 ============
 const configLoading = ref(false)
@@ -201,7 +291,6 @@ async function loadConfig() {
       Object.assign(configForm, res.data)
     }
   } catch (e) {
-    // 后端接口缺失：保留默认值，错误已由拦截器提示
   } finally {
     configLoading.value = false
   }
@@ -214,7 +303,6 @@ async function onSaveConfig() {
     ElMessage.success('保存成功')
     logOperation('config_update', '修改系统参数配置')
   } catch (e) {
-    // 拦截器已提示
   } finally {
     configSaving.value = false
   }
@@ -224,12 +312,6 @@ async function onSaveConfig() {
 const ruleLoading = ref(false)
 const ruleSubmitting = ref(false)
 const rules = ref([])
-
-const levelOptions = computed(() =>
-  Object.entries(ALERT_LEVEL_MAP)
-    .filter(([k]) => Number(k) >= 2)
-    .map(([k, v]) => ({ value: Number(k), label: v.label }))
-)
 
 async function loadRules() {
   ruleLoading.value = true
@@ -243,41 +325,152 @@ async function loadRules() {
   }
 }
 
-// 新增/编辑弹窗
+// ============ 阈值表达式编辑器 ============
+// 后端正则: (电压|温度|电流|功率|照度|湿度|亮度|关闭时间)([><]=?|=)(额定值|\d+(\.\d+)?)([*×]\d+(\.\d+)?)?(V|°C|A|W|lux|%RH|%|h)?
+const FIELD_UNIT_MAP = THRESHOLD_FIELD_OPTIONS.reduce((m, f) => {
+  m[f.value] = f.unit
+  return m
+}, {})
+
+const conditions = ref([])
+const timeConstraint = ref('')
+
+function makeEmptyCondition() {
+  return {
+    field: '电压',
+    operator: '<',
+    value: 0,
+    useRated: false,
+    multiplier: 1.2,
+    unit: 'V'
+  }
+}
+
+function onFieldChange(idx) {
+  const cond = conditions.value[idx]
+  cond.unit = FIELD_UNIT_MAP[cond.field] || ''
+  if (cond.field !== '功率') cond.useRated = false
+}
+
+function addCondition() {
+  conditions.value.push(makeEmptyCondition())
+}
+
+function removeCondition(idx) {
+  conditions.value.splice(idx, 1)
+}
+
+// 解析后端阈值字符串 → 结构化条件
+function parseThreshold(str) {
+  if (!str) return { conditions: [makeEmptyCondition()], timeConstraint: '' }
+
+  // 提取时间约束
+  let tc = ''
+  if (str.includes('(白天)')) tc = '(白天)'
+  else if (str.includes('(夜间)')) tc = '(夜间)'
+
+  // 移除时间约束后按"或"分割
+  const cleanStr = str.replace(/\(白天\)|\(夜间\)/g, '').trim()
+  const parts = cleanStr.split('或').map((s) => s.trim()).filter(Boolean)
+
+  const conds = parts.map((part) => {
+    const cond = makeEmptyCondition()
+    // 匹配: 字段名 + 运算符 + 值(额定值或数字) + 可选乘数 + 可选单位
+    const m = part.match(
+      /^(电压|温度|电流|功率|照度|湿度|亮度|关闭时间)([><]=?|=)(额定值|\d+(?:\.\d+)?)([*×]\d+(?:\.\d+)?)?(V|°C|A|W|lux|%RH|%|h)?$/
+    )
+    if (m) {
+      cond.field = m[1]
+      cond.operator = m[2]
+      cond.unit = m[5] || FIELD_UNIT_MAP[m[1]] || ''
+      if (m[3] === '额定值') {
+        cond.useRated = true
+        cond.multiplier = m[4] ? parseFloat(m[4].replace(/[*×]/, '')) : 1.0
+      } else {
+        cond.useRated = false
+        cond.value = parseFloat(m[3])
+      }
+    }
+    return cond
+  })
+
+  return {
+    conditions: conds.length > 0 ? conds : [makeEmptyCondition()],
+    timeConstraint: tc
+  }
+}
+
+// 结构化条件 → 后端阈值字符串
+function buildThreshold(conds, tc) {
+  const parts = conds.map((c) => {
+    const val = c.useRated
+      ? `额定值${c.multiplier !== 1.0 ? '*' + c.multiplier.toFixed(1) : ''}`
+      : String(c.value)
+    return `${c.field}${c.operator}${val}${c.unit || ''}`
+  })
+  return parts.join('或') + (tc || '')
+}
+
+const thresholdPreview = computed(() => {
+  const valid = conditions.value.filter((c) => c.field && c.operator)
+  if (valid.length === 0) return ''
+  return buildThreshold(valid, timeConstraint.value)
+})
+
+// ============ 新增/编辑弹窗 ============
 const ruleDialogVisible = ref(false)
 const ruleIsEdit = ref(false)
 const ruleFormRef = ref()
 const ruleForm = reactive({
   id: undefined,
   ruleType: undefined,
-  threshold: 0,
-  level: 2,
+  ruleName: '',
+  threshold: '',
   enabled: true,
   description: ''
 })
 
 const ruleRules = {
   ruleType: [{ required: true, message: '请选择规则类型', trigger: 'change' }],
-  threshold: [{ required: true, message: '请输入阈值', trigger: 'blur' }],
-  level: [{ required: true, message: '请选择报警级别', trigger: 'change' }]
+  ruleName: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
+  threshold: [{ required: true, message: '请填写阈值条件', trigger: 'change' }]
 }
 
 function resetRuleForm() {
   Object.assign(ruleForm, {
     id: undefined,
     ruleType: undefined,
-    threshold: 0,
-    level: 2,
+    ruleName: '',
+    threshold: '',
     enabled: true,
     description: ''
   })
+  conditions.value = [makeEmptyCondition()]
+  timeConstraint.value = ''
   ruleFormRef.value?.clearValidate()
+}
+
+function onRuleTypeChange(val) {
+  // 自动填充规则名称
+  if (!ruleForm.ruleName && val) {
+    ruleForm.ruleName = ALERT_RULE_TYPE_MAP[val]?.label || ''
+  }
 }
 
 function openRuleDialog(row) {
   ruleIsEdit.value = !!row
   if (row) {
-    Object.assign(ruleForm, row)
+    Object.assign(ruleForm, {
+      id: row.id,
+      ruleType: row.ruleType,
+      ruleName: row.ruleName || '',
+      threshold: row.threshold || '',
+      enabled: row.enabled,
+      description: row.description || ''
+    })
+    const parsed = parseThreshold(row.threshold)
+    conditions.value = parsed.conditions
+    timeConstraint.value = parsed.timeConstraint
   } else {
     resetRuleForm()
   }
@@ -285,6 +478,14 @@ function openRuleDialog(row) {
 }
 
 async function onRuleSubmit() {
+  // 校验阈值条件
+  const valid = conditions.value.filter((c) => c.field && c.operator)
+  if (valid.length === 0) {
+    ElMessage.warning('请至少添加一个阈值条件')
+    return
+  }
+  ruleForm.threshold = buildThreshold(valid, timeConstraint.value)
+
   try {
     await ruleFormRef.value.validate()
   } catch (e) {
@@ -292,7 +493,7 @@ async function onRuleSubmit() {
   }
   ruleSubmitting.value = true
   try {
-    const ruleLabel = ALERT_RULE_TYPE_MAP[ruleForm.ruleType] || ruleForm.ruleType
+    const ruleLabel = ruleForm.ruleName || ALERT_RULE_TYPE_MAP[ruleForm.ruleType]?.label || ruleForm.ruleType
     if (ruleIsEdit.value) {
       await updateAlertRule({ ...ruleForm })
       ElMessage.success('更新成功')
@@ -306,14 +507,13 @@ async function onRuleSubmit() {
     ruleDialogVisible.value = false
     loadRules()
   } catch (e) {
-    // 拦截器已提示
   } finally {
     ruleSubmitting.value = false
   }
 }
 
 async function onRuleDelete(row) {
-  const ruleLabel = ALERT_RULE_TYPE_MAP[row.ruleType] || row.ruleType
+  const ruleLabel = row.ruleName || ALERT_RULE_TYPE_MAP[row.ruleType]?.label || row.ruleType
   try {
     await ElMessageBox.confirm(`确定删除规则「${ruleLabel}」吗？`, '删除确认', {
       type: 'warning'
@@ -327,7 +527,6 @@ async function onRuleDelete(row) {
     logOperation('config_update', `删除告警规则：${ruleLabel}`)
     loadRules()
   } catch (e) {
-    // 拦截器已提示
   }
 }
 
@@ -335,9 +534,9 @@ async function onToggleEnabled(row) {
   try {
     await updateAlertRule({ ...row })
     ElMessage.success(row.enabled ? '已启用' : '已停用')
-    logOperation('config_update', `${row.enabled ? '启用' : '停用'}告警规则：${ALERT_RULE_TYPE_MAP[row.ruleType] || row.ruleType}`)
+    const ruleLabel = row.ruleName || ALERT_RULE_TYPE_MAP[row.ruleType]?.label || row.ruleType
+    logOperation('config_update', `${row.enabled ? '启用' : '停用'}告警规则：${ruleLabel}`)
   } catch (e) {
-    // 失败回滚开关状态
     row.enabled = !row.enabled
   }
 }
@@ -360,5 +559,73 @@ onMounted(() => {
   margin-left: 8px;
   color: #909399;
   font-size: 13px;
+}
+
+.threshold-editor {
+  width: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fafafa;
+}
+
+.condition-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.or-label {
+  color: #f56c6c;
+  font-weight: 600;
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+.cond-unit {
+  color: #909399;
+  font-size: 13px;
+  min-width: 36px;
+}
+
+.time-constraint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tc-label {
+  color: #606266;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.threshold-preview {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px dashed #409eff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-label {
+  color: #909399;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.preview-code {
+  color: #303133;
+  font-size: 14px;
+  font-weight: 600;
+  background: #ecf5ff;
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 </style>

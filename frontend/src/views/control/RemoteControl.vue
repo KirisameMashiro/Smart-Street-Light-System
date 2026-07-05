@@ -159,6 +159,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'RemoteControl' })
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {

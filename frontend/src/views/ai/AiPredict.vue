@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">AI 预测调光</h2>
@@ -101,6 +101,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'AiPredict' })
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, VideoPlay, VideoPause } from '@element-plus/icons-vue'

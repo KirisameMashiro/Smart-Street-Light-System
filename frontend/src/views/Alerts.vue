@@ -176,6 +176,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'Alerts' })
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'

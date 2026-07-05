@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">操作审计</h2>
@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'OperationAudit' })
 import { ref, reactive, onMounted } from 'vue'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
 import { getOperationLogPage } from '@/api/operation-log'

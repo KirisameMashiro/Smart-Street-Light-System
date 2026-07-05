@@ -132,6 +132,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'CarbonAnalysis' })
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'

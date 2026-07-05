@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">阈值联动控制</h2>
@@ -83,6 +83,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'ThresholdControl' })
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, InfoFilled, Connection, Setting } from '@element-plus/icons-vue'

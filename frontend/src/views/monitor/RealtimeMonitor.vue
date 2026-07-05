@@ -59,52 +59,85 @@
           :value="o.value"
         />
       </el-select>
+      <el-select
+        v-model="filter.status"
+        placeholder="状态"
+        clearable
+        style="width: 120px"
+        @change="applyFilter"
+      >
+        <el-option label="开启" :value="1" />
+        <el-option label="关闭" :value="0" />
+        <el-option label="故障" :value="2" />
+      </el-select>
       <span class="text-muted" style="margin-left: auto">
-        共 {{ filteredLights.length }} 盏
+        共 {{ page.total }} 盏
         <template v-if="mode === 'list'">
-          ｜在线 {{ onlineCount }} ｜故障 {{ faultCount }}
+          ｜在线 {{ stats.online }} ｜故障 {{ stats.fault }} ｜离线 {{ stats.offline }}
         </template>
       </span>
     </div>
 
     <!-- 列表模式 -->
     <div v-if="mode === 'list'" class="table-card">
-      <el-table :data="pagedLights" v-loading="loading" stripe>
-        <el-table-column prop="lightCode" label="编号" width="110" />
-        <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
-        <el-table-column prop="location" label="位置" min-width="150" show-overflow-tooltip />
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag
-              :type="LIGHT_STATUS_MAP[row.status]?.type"
-              size="small"
-              :effect="row.status === 2 ? 'dark' : 'light'"
-            >
-              {{ LIGHT_STATUS_MAP[row.status]?.label }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="最新光照(lux)" width="120">
-          <template #default="{ row }">
-            {{ sensorMap[row.id]?.illuminance ?? '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="最新功率(W)" width="120">
-          <template #default="{ row }">
-            {{ sensorMap[row.id]?.power ?? '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="累计耗电(kWh)" width="120">
-          <template #default="{ row }">
-            {{ sensorMap[row.id]?.totalEnergy != null ? sensorMap[row.id].totalEnergy.toFixed(2) : '-' }}
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="table-wrapper">
+        <el-table :data="page.records" v-loading="loading" stripe>
+          <el-table-column prop="lightCode" label="编号" width="110" />
+          <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
+          <el-table-column prop="location" label="位置" min-width="150" show-overflow-tooltip />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag
+                :type="LIGHT_STATUS_MAP[row.status]?.type"
+                size="small"
+                :effect="row.status === 2 ? 'dark' : 'light'"
+              >
+                {{ LIGHT_STATUS_MAP[row.status]?.label }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="最新光照(lux)" width="120">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.illuminance ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="最新功率(W)" width="120">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.power ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="电压(V)" width="90">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.voltage != null ? sensorMap[row.id].voltage.toFixed(1) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="电流(A)" width="90">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.current != null ? sensorMap[row.id].current.toFixed(3) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="温度(°C)" width="95">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.temperature != null ? sensorMap[row.id].temperature.toFixed(1) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="湿度(%RH)" width="100">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.humidity != null ? sensorMap[row.id].humidity.toFixed(1) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="累计耗电(kWh)" width="120">
+            <template #default="{ row }">
+              {{ sensorMap[row.id]?.totalEnergy != null ? sensorMap[row.id].totalEnergy.toFixed(2) : '-' }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
       <div class="pagination-bar">
         <el-pagination
           v-model:current-page="listQuery.pageNum"
           v-model:page-size="listQuery.pageSize"
-          :total="filteredLights.length"
+          :total="page.total"
           :page-sizes="[10, 20, 50]"
           layout="total, sizes, prev, pager, next, jumper"
         />
@@ -121,9 +154,9 @@
           <span class="map-info-item">比例尺: <b>{{ scaleText }}</b></span>
         </span>
         <span class="text-muted" style="margin-left: auto">
-          在线 <span class="status-dot online"></span> {{ onlineCount }}
-          故障 <span class="status-dot fault"></span> {{ faultCount }}
-          离线 <span class="status-dot offline"></span> {{ offlineCount }}
+          在线 <span class="status-dot online"></span> {{ stats.online }}
+          故障 <span class="status-dot fault"></span> {{ stats.fault }}
+          离线 <span class="status-dot offline"></span> {{ stats.offline }}
         </span>
       </div>
       <div ref="mapContainer" class="map-wrapper"></div>
@@ -166,25 +199,57 @@
             <span class="detail-value">{{ selectedLight.road || '-' }}</span>
           </div>
           <div class="detail-row">
+            <span class="detail-label">设备类型</span>
+            <span class="detail-value">{{ selectedLight.deviceType || '-' }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">额定功率</span>
+            <span class="detail-value">{{ selectedLight.ratedPower || '-' }} W</span>
+          </div>
+          <div class="detail-row">
             <span class="detail-label">当前亮度</span>
             <span class="detail-value">{{ selectedLight.brightness || 0 }}%</span>
           </div>
-          <div class="detail-row" v-if="sensorMap[selectedLight.id]">
-            <span class="detail-label">光照强度</span>
-            <span class="detail-value">{{ sensorMap[selectedLight.id].illuminance }} lux</span>
-          </div>
-          <div class="detail-row" v-if="sensorMap[selectedLight.id]">
-            <span class="detail-label">功率消耗</span>
-            <span class="detail-value">{{ sensorMap[selectedLight.id].power }} W</span>
-          </div>
-          <div class="detail-row" v-if="sensorMap[selectedLight.id] && sensorMap[selectedLight.id].totalEnergy != null">
-            <span class="detail-label">累计耗电</span>
-            <span class="detail-value">{{ sensorMap[selectedLight.id].totalEnergy.toFixed(2) }} kWh</span>
+          <div v-if="sensorMap[selectedLight.id]" class="sensor-section">
+            <h4 class="sensor-title">传感器数据</h4>
+            <div class="detail-row">
+              <span class="detail-label">光照强度</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].illuminance }} lux</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">功率消耗</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].power }} W</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">电压</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].voltage != null ? sensorMap[selectedLight.id].voltage.toFixed(1) : '-' }} V</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">电流</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].current != null ? sensorMap[selectedLight.id].current.toFixed(3) : '-' }} A</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">温度</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].temperature != null ? sensorMap[selectedLight.id].temperature.toFixed(1) : '-' }} °C</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">湿度</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].humidity != null ? sensorMap[selectedLight.id].humidity.toFixed(1) : '-' }} %RH</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">累计耗电</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].totalEnergy != null ? sensorMap[selectedLight.id].totalEnergy.toFixed(2) : '-' }} kWh</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">采集时间</span>
+              <span class="detail-value">{{ sensorMap[selectedLight.id].collectTime || '-' }}</span>
+            </div>
           </div>
         </div>
       </div>
       <template #footer>
         <el-button @click="detailDialog = false">关闭</el-button>
+        <el-button type="primary" @click="$router.push(`/devices/${selectedLight?.id}`)">查看详情</el-button>
       </template>
     </el-dialog>
 
@@ -198,7 +263,7 @@
     >
       <div v-if="pendingRoad" style="padding: 8px 0">
         <p style="margin: 0 0 16px 0; color: #606266; font-size: 14px">
-          路段“<b>{{ pendingRoad }}</b>”存在于多个行政区：
+          路段"<b>{{ pendingRoad }}</b>"存在于多个行政区：
         </p>
         <p style="margin: 0 0 16px 0; color: #f56c6c; font-size: 13px">
           {{ pendingDistricts.join('、') }}
@@ -223,29 +288,26 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'RealtimeMonitor' })
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getAllLights } from '@/api/light'
+import { getLightPage, getAllLights } from '@/api/light'
 import { getLatestSensorData } from '@/api/sensor'
-import {
-  LIGHT_STATUS_MAP,
-  DISTRICT_OPTIONS,
-  ROAD_OPTIONS,
-  STATUS_COLORS
-} from '@/utils/constants'
+import { LIGHT_STATUS_MAP } from '@/utils/constants'
 
 const loading = ref(false)
 const mode = ref('list')
 const autoRefresh = ref(false)
 const interval = ref(5)
 
+const page = ref({ records: [], total: 0 })
 const allLights = ref([])
 const sensorMap = reactive({})
 const sensorApiAvailable = ref(null)
 
-const filter = reactive({ district: undefined, road: undefined })
+const filter = reactive({ district: undefined, road: undefined, status: undefined })
 const listQuery = reactive({ pageNum: 1, pageSize: 10 })
 
 const roadDistrictsMap = computed(() => {
@@ -267,7 +329,7 @@ const availableDistricts = computed(() => {
   })
   const arr = Array.from(districts)
   if (arr.length === 0) {
-    return DISTRICT_OPTIONS.map((o) => ({ ...o, hasRoad: false }))
+    return []
   }
   return arr.map((d) => ({
     value: d,
@@ -285,36 +347,20 @@ const availableRoads = computed(() => {
   })
   const arr = Array.from(roads)
   if (arr.length === 0) {
-    return ROAD_OPTIONS
+    return []
   }
   return arr.map((r) => ({ value: r, label: r }))
 })
 
-const filteredLights = computed(() =>
-  allLights.value.filter((l) => {
-    if (filter.district && l.district !== filter.district) return false
-    if (filter.road && l.road !== filter.road) return false
-    return true
-  })
-)
-
-const pagedLights = computed(() => {
-  const start = (listQuery.pageNum - 1) * listQuery.pageSize
-  return filteredLights.value.slice(start, start + listQuery.pageSize)
+const stats = computed(() => {
+  const online = allLights.value.filter((l) => l.status === 1).length
+  const fault = allLights.value.filter((l) => l.status === 2).length
+  const offline = allLights.value.filter((l) => l.status === 0).length
+  return { online, fault, offline }
 })
 
-const onlineCount = computed(
-  () => filteredLights.value.filter((l) => l.status === 1).length
-)
-const faultCount = computed(
-  () => filteredLights.value.filter((l) => l.status === 2).length
-)
-const offlineCount = computed(
-  () => filteredLights.value.filter((l) => l.status === 0).length
-)
-
 const lightsWithLocation = computed(() =>
-  filteredLights.value.filter(
+  allLights.value.filter(
     (l) => l.longitude != null && l.latitude != null && l.longitude !== 0 && l.latitude !== 0
   )
 )
@@ -327,6 +373,10 @@ function applySensor(id, d) {
   sensorMap[id] = {
     illuminance: d.illuminance,
     power: d.power,
+    voltage: d.voltage,
+    current: d.current,
+    temperature: d.temperature,
+    humidity: d.humidity,
     totalEnergy: d.totalEnergy,
     collectTime: d.collectTime
   }
@@ -354,7 +404,6 @@ async function loadSensorData(lights) {
   if (!lights || lights.length === 0) return
   if (sensorApiAvailable.value === false) return
 
-  // 首次探测：用第一盏灯测试 API 是否可用
   if (sensorApiAvailable.value === null) {
     try {
       const res = await getLatestSensorData(lights[0].id)
@@ -364,7 +413,6 @@ async function loadSensorData(lights) {
       sensorApiAvailable.value = false
       return
     }
-    // 首次调用：加载剩余路灯
     await runConcurrent(lights.slice(1), 8, async (l) => {
       try {
         const res = await getLatestSensorData(l.id)
@@ -372,7 +420,6 @@ async function loadSensorData(lights) {
       } catch (e) {}
     })
   } else {
-    // 后续调用：加载全部路灯（修复之前跳过 lights[0] 的 bug）
     await runConcurrent(lights, 8, async (l) => {
       try {
         const res = await getLatestSensorData(l.id)
@@ -382,7 +429,6 @@ async function loadSensorData(lights) {
   }
 }
 
-// 地图相关
 const mapContainer = ref(null)
 let mapInstance = null
 let tileLayer = null
@@ -390,25 +436,13 @@ let markersLayer = null
 let scaleControl = null
 const markerMap = reactive({})
 
-const mapLayer = ref('gaode')
 const mapZoom = ref(13)
 const mapCenter = ref([31.2304, 121.4737])
-// 地图当前缩放级别（实时变化，用于显示）
 const currentZoom = ref(13)
-// 地图比例尺文字（实时变化）
 const scaleText = ref('0 m')
 
 const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
 const gaodeSubdomains = ['1', '2', '3', '4']
-
-// 行政区中心坐标（用于根据区域自动跳转）
-const DISTRICT_CENTERS = {
-  '城东区': { center: [31.25, 121.55], zoom: 14 },
-  '城西区': { center: [31.25, 121.40], zoom: 14 },
-  '城南区': { center: [31.18, 121.48], zoom: 14 },
-  '城北区': { center: [31.32, 121.48], zoom: 14 },
-  '中心区': { center: [31.235, 121.4737], zoom: 15 }
-}
 
 function getMarkerColor(status) {
   if (status === 1) return '#67c23a'
@@ -430,7 +464,6 @@ function getMarkerClass(status) {
 
 function createMarkerIcon(light) {
   const color = getMarkerColor(light.status)
-  // 大圈套小圈：外层银色大环 + 状态色发光光晕 + 内层状态色小球
   const iconHtml = `<div class="light-marker ${getMarkerClass(light.status)}">
     ${light.status === 1 ? `<div class="marker-glow" style="background-color: ${color}"></div>` : ''}
     <div class="marker-outer">
@@ -456,7 +489,6 @@ function initMap() {
     mapInstance = null
   }
 
-  // 清空 marker 映射表，因为旧 marker 已随旧地图销毁
   Object.keys(markerMap).forEach((key) => delete markerMap[key])
 
   mapInstance = L.map(mapContainer.value, {
@@ -469,7 +501,6 @@ function initMap() {
   markersLayer = L.featureGroup().addTo(mapInstance)
   addTileLayer()
 
-  // 添加比例尺控件
   if (scaleControl) {
     mapInstance.removeControl(scaleControl)
   }
@@ -480,23 +511,19 @@ function initMap() {
     maxWidth: 120
   }).addTo(mapInstance)
 
-  // 监听缩放事件，实时更新比例尺和缩放级别显示
   mapInstance.on('zoomend', () => {
     if (!mapInstance) return
     const z = mapInstance.getZoom()
     currentZoom.value = z
     scaleText.value = computeScaleText(z)
   })
-  // 初始化比例尺文字
   currentZoom.value = mapInstance.getZoom()
   scaleText.value = computeScaleText(mapInstance.getZoom())
 }
 
-// 根据缩放级别估算比例尺文字（米）
 function computeScaleText(zoom) {
-  // 简化估算：每像素对应的米数（Web 墨卡托近似）
   const metersPerPixel = 156543.03392 * Math.cos((31.23 * Math.PI) / 180) / Math.pow(2, zoom)
-  const meters = Math.round(metersPerPixel * 100) // 取 100 像素宽度
+  const meters = Math.round(metersPerPixel * 100)
   if (meters >= 1000) {
     return (meters / 1000).toFixed(meters >= 5000 ? 0 : 1) + ' km'
   }
@@ -592,16 +619,25 @@ async function refreshAll(reprobe = false) {
   if (reprobe) sensorApiAvailable.value = null
   loading.value = true
   try {
-    const res = await getAllLights()
-    allLights.value = res.data || []
-    if (mode.value === 'list') {
-      await loadSensorData(pagedLights.value)
-    } else {
-      await loadSensorData(lightsWithLocation.value)
+    const [pageRes, listRes] = await Promise.all([
+      getLightPage({
+        pageNum: listQuery.pageNum,
+        pageSize: listQuery.pageSize,
+        district: filter.district,
+        road: filter.road,
+        status: filter.status
+      }),
+      getAllLights()
+    ])
+    page.value = pageRes.data || { records: [], total: 0 }
+    allLights.value = listRes.data || []
+    await loadSensorData(allLights.value)
+    if (mode.value === 'map') {
       await nextTick()
       renderMarkers()
     }
   } catch (e) {
+    page.value = { records: [], total: 0 }
     allLights.value = []
   } finally {
     loading.value = false
@@ -614,16 +650,10 @@ function onManualRefresh() {
 
 function applyFilter() {
   listQuery.pageNum = 1
-  if (mode.value === 'list') {
-    loadSensorData(pagedLights.value)
-  } else {
-    renderMarkers()
-    loadSensorData(lightsWithLocation.value)
-  }
+  refreshAll(false)
 }
 
 function onFilterChange(changedField) {
-  // 如果行政区改变，且当前路段不在该行政区内，清空路段
   if (changedField === 'district' && filter.road && filter.district) {
     const districts = roadDistrictsMap.value.get(filter.road)
     if (districts && !districts.has(filter.district)) {
@@ -671,20 +701,17 @@ function onRoadChange(road) {
 
   const districts = roadDistrictsMap.value.get(road)
 
-  // 如果当前行政区已选择且包含该路段，则保持
   if (filter.district && districts?.has(filter.district)) {
     applyFilter()
     return
   }
 
-  // 只有一个行政区包含该路段，自动填入
   if (districts && districts.size === 1) {
     filter.district = Array.from(districts)[0]
     applyFilter()
     return
   }
 
-  // 多个行政区包含该路段，要求用户选择
   if (districts && districts.size > 1) {
     filter.district = undefined
     applyFilter()
@@ -702,8 +729,6 @@ function startPolling() {
   scheduleNext()
 }
 function scheduleNext() {
-  // 用递归 setTimeout 替代 setInterval，确保上一次 refreshAll 完成后再调度下一次，
-  // 避免请求慢于间隔时多次重叠导致旧响应覆盖新数据
   timer = setTimeout(async () => {
     if (!autoRefresh.value) return
     try {
@@ -730,9 +755,7 @@ watch(interval, () => {
 watch(
   [() => listQuery.pageNum, () => listQuery.pageSize],
   () => {
-    if (mode.value === 'list') {
-      loadSensorData(pagedLights.value)
-    }
+    refreshAll(false)
   }
 )
 
@@ -741,16 +764,12 @@ watch(mode, async (m) => {
     await nextTick()
     initMap()
     renderMarkers()
-    loadSensorData(lightsWithLocation.value)
-    // 确保地图容器尺寸正确后再居中
     setTimeout(() => {
       if (mapInstance) {
         mapInstance.invalidateSize()
         updateMapBounds()
       }
     }, 100)
-  } else {
-    await loadSensorData(pagedLights.value)
   }
 })
 
@@ -846,6 +865,14 @@ onUnmounted(() => {
   background-color: #909399;
 }
 
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.table-wrapper :deep(.el-table) {
+  min-width: 1200px;
+}
+
 .light-detail {
   padding: 8px 0;
 }
@@ -914,6 +941,20 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
+.sensor-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #ebeef5;
+}
+
+.sensor-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 768px) {
   .map-card {
     height: 400px;
@@ -939,11 +980,25 @@ onUnmounted(() => {
   .detail-body {
     grid-template-columns: 80px 1fr;
   }
+
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filter-bar .el-select {
+    width: calc(50% - 4px) !important;
+  }
+
+  .filter-bar .text-muted {
+    margin-left: 0 !important;
+    width: 100%;
+    text-align: center;
+  }
 }
 </style>
 
 <style>
-/* Leaflet marker 全局样式 - Leaflet 动态插入的 DOM 不在 Vue scoped 作用域内 */
 .light-marker {
   position: relative;
   width: 40px;
@@ -1037,7 +1092,6 @@ onUnmounted(() => {
   }
 }
 
-/* 修复 Leaflet divIcon 默认的白色背景 */
 .leaflet-div-icon {
   background: transparent;
   border: none;

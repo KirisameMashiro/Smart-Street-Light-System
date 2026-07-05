@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h2 class="page-title">台账统计</h2>
@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'DeviceLedger' })
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'

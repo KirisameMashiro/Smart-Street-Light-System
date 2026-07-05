@@ -143,9 +143,11 @@
       </el-header>
 
       <el-main class="main">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <keep-alive :include="cachedViews">
+              <component :is="Component" :key="route.fullPath" />
+            </keep-alive>
           </transition>
         </router-view>
       </el-main>
@@ -171,6 +173,26 @@ const unhandledCount = ref(0)
 const mobileMenuOpen = ref(false)
 const isMobile = ref(false)
 let pollTimer = null
+
+const cachedViews = [
+  'Dashboard',
+  'DeviceArchive',
+  'DeviceLedger',
+  'RealtimeMonitor',
+  'SensorData',
+  'RemoteControl',
+  'TimedStrategy',
+  'ThresholdControl',
+  'OperationLog',
+  'Alerts',
+  'CarbonAnalysis',
+  'AiPredict',
+  'AiAssistant',
+  'AiKnowledge',
+  'Users',
+  'OperationAudit',
+  'SystemConfig'
+]
 
 const isAdmin = computed(() => userStore.isAdmin)
 const role = computed(() => userStore.user?.role || 'operator')

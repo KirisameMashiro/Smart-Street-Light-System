@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container assistant-container">
     <div class="page-header">
       <h2 class="page-title">AI 智能运维助手</h2>
@@ -84,6 +84,7 @@
 </template>
 
 <script setup>
+defineOptions({ name: 'AiAssistant' })
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Refresh, Promotion, ChatDotRound, User, Loading } from '@element-plus/icons-vue'
 import { sendChatMessage, getChatHistory } from '@/api/assistant'
