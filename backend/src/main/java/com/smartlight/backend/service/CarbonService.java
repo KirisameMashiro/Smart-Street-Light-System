@@ -5,6 +5,7 @@ import java.util.Map;
 
 /**
  * 碳减排核算服务
+ * 数据来源于 carbon_stats 预统计表
  */
 public interface CarbonService {
 
@@ -24,12 +25,19 @@ public interface CarbonService {
     List<Map<String, Object>> getRoadCompare();
 
     /**
-     * 获取能耗基准配置
+     * 获取能耗基准配置（前端需要的扁平对象：{basePower, dailyHours, emissionFactor}）
      */
-    List<Map<String, Object>> getBaseline();
+    Map<String, Object> getBaseline();
 
     /**
      * 更新能耗基准配置
      */
     boolean updateBaseline(String key, String value);
+
+    /**
+     * 计算并写入指定日期的碳减排统计数据
+     * @param date 统计日期，null 则计算所有有数据的天
+     * @return 写入的记录数
+     */
+    int computeDailyStats(String date);
 }

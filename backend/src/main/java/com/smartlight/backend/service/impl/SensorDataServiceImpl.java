@@ -65,9 +65,9 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
         avg.setCurrent(list.stream().mapToDouble(SensorData::getCurrent).average().orElse(0));
         avg.setTemperature(list.stream().mapToDouble(SensorData::getTemperature).average().orElse(0));
         avg.setHumidity(list.stream().mapToDouble(SensorData::getHumidity).average().orElse(0));
-        avg.setTotalEnergy(list.stream()
-                .filter(d -> d.getTotalEnergy() != null)
-                .mapToDouble(SensorData::getTotalEnergy).average().orElse(0));
+        avg.setSamplingEnergy(list.stream()
+                .filter(d -> d.getSamplingEnergy() != null)
+                .mapToDouble(SensorData::getSamplingEnergy).average().orElse(0));
         return avg;
     }
 }

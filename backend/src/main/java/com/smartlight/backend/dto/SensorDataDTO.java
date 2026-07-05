@@ -33,6 +33,9 @@ public class SensorDataDTO {
     /** 湿度 (%RH) */
     private Double humidity;
 
+    /** 采样间隔耗电 (Wh) */
+    private Double samplingEnergy;
+
     /** 数据采集时间 */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime collectTime;

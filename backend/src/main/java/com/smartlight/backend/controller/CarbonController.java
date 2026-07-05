@@ -46,7 +46,7 @@ public class CarbonController {
      * 获取能耗基准配置
      */
     @GetMapping("/baseline")
-    public Result<List<Map<String, Object>>> getBaseline() {
+    public Result<Map<String, Object>> getBaseline() {
         return Result.success(carbonService.getBaseline());
     }
 
@@ -54,17 +54,34 @@ public class CarbonController {
      * 更新能耗基准配置
      */
     @PutMapping("/baseline")
-    public Result<Boolean> updateBaseline(@RequestBody List<Map<String, String>> configs) {
-        if (configs != null) {
-            for (Map<String, String> config : configs) {
-                String key = config.get("configKey");
-                String value = config.get("configValue");
-                if (key != null && value != null) {
-                    carbonService.updateBaseline(key, value);
-                }
+    public Result<Boolean> updateBaseline(@RequestBody Map<String, Object> data) {
+        if (data != null) {
+            Object basePower = data.get("basePower");
+            Object dailyHours = data.get("dailyHours");
+            Object emissionFactor = data.get("emissionFactor");
+            if (basePower != null) {
+                carbonService.updateBaseline("energy_baseline_power", String.valueOf(basePower));
+            }
+            if (dailyHours != null) {
+                carbonService.updateBaseline("energy_baseline_hours", String.valueOf(dailyHours));
+            }
+            if (emissionFactor != null) {
+                carbonService.updateBaseline("co2_factor", String.valueOf(emissionFactor));
             }
         }
         return Result.success(true);
+    }
+
+    /**
+     * 手动触发碳减排日统计计算
+     * @param date 统计日期（yyyy-MM-dd），为空则计算昨天
+     * @return 写入的记录数
+     */
+    @PostMapping("/compute")
+    public Result<Integer> computeDailyStats(@RequestParam(required = false) String date) {
+        int count = carbonService.computeDailyStats(date);
+        String msg = date != null ? date : "昨天";
+        return Result.success(msg + " 碳减排统计完成，共写入 " + count + " 条记录", count);
     }
 
     /**
@@ -79,20 +96,20 @@ public class CarbonController {
         // 构建纯文本报表摘要
         StringBuilder report = new StringBuilder();
         report.append("=== 碳减排分析报表 ===\n\n");
-        report.append(String.format("总节电量: %.1f kWh\n", summary.get("totalSavedPower")));
-        report.append(String.format("总减排量: %.1f kg CO₂\n", summary.get("totalReducedCO2")));
+        report.append(String.format("总节电量: %.1f kWh\n", summary.get("savedEnergy")));
+        report.append(String.format("总减排量: %.1f kg CO₂\n", summary.get("reducedCo2")));
         report.append(String.format("节能率: %.1f%%\n\n", summary.get("energySavingRate")));
 
         report.append("月度趋势:\n");
         for (Map<String, Object> t : trend) {
             report.append(String.format("  %s: 节电 %.1f kWh, 减排 %.1f kg\n",
-                    t.get("month"), t.get("savedEnergy"), t.get("reducedCO2")));
+                    t.get("month"), t.get("savedEnergy"), t.get("reducedCo2")));
         }
 
         report.append("\n路段对比:\n");
         for (Map<String, Object> r : roadCompare) {
-            report.append(String.format("  %s: 改造前 %.1f kWh → 改造后 %.1f kWh\n",
-                    r.get("road"), r.get("before"), r.get("after")));
+            report.append(String.format("  %s: 节电 %.1f kWh\n",
+                    r.get("road"), r.get("savedEnergy")));
         }
 
         return Result.success(report.toString());

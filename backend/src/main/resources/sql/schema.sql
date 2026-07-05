@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS `sensor_data` (
     `current` DECIMAL(10, 3) DEFAULT NULL COMMENT '电流 (A)',
     `temperature` DECIMAL(5, 2) DEFAULT NULL COMMENT '温度 (°C)',
     `humidity` DECIMAL(5, 2) DEFAULT NULL COMMENT '湿度 (%RH)',
-    `total_energy` DECIMAL(12, 2) DEFAULT NULL COMMENT '累计耗电量(kWh)',
+    `sampling_energy` DECIMAL(10, 3) DEFAULT NULL COMMENT '采样间隔耗电(Wh)，梯形积分法计算',
     `collect_time` DATETIME NOT NULL COMMENT '数据采集时间',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
@@ -156,6 +156,24 @@ INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
 ('energy_baseline_hours', '12', '日均照明时长(h)'),
 ('co2_factor', '0.997', '碳排放因子(kg CO₂/kWh)')
 ON DUPLICATE KEY UPDATE `config_value`=VALUES(`config_value`);
+
+-- 碳减排日统计数据表
+CREATE TABLE IF NOT EXISTS `carbon_stats` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `stat_date` DATE NOT NULL COMMENT '统计日期',
+    `road` VARCHAR(100) DEFAULT NULL COMMENT '路段（null=全路段汇总）',
+    `light_count` INT DEFAULT 0 COMMENT '路灯数量',
+    `baseline_energy` DECIMAL(12, 2) DEFAULT 0 COMMENT '基准能耗(kWh)',
+    `actual_energy` DECIMAL(12, 2) DEFAULT 0 COMMENT '实际能耗(kWh)',
+    `saved_energy` DECIMAL(12, 2) DEFAULT 0 COMMENT '节电量(kWh)',
+    `co2_reduction` DECIMAL(12, 2) DEFAULT 0 COMMENT 'CO₂减排量(kg)',
+    `saving_rate` DECIMAL(5, 2) DEFAULT 0 COMMENT '节能率(%)',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_date` (`stat_date`),
+    KEY `idx_road` (`road`),
+    KEY `idx_date_road` (`stat_date`, `road`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='碳减排日统计数据表';
 
 -- 更新示例路灯的行政区/路段
 UPDATE `light` SET `district`='中心区', `road`='人民路' WHERE `light_code` IN ('SL-001','SL-002');

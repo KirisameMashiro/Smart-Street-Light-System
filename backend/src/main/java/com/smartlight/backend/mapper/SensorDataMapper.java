@@ -18,46 +18,25 @@ public interface SensorDataMapper extends BaseMapper<SensorData> {
     SensorData selectLatestByLightId(Long lightId);
 
     /**
-     * 获取每个路灯的最新总能耗
+     * 按日期统计每个路灯的日耗电总量 (Wh → kWh)
+     * 用于 carbon_stats 表的数据聚合
      */
-    @Select("SELECT light_id AS lightId, MAX(total_energy) AS totalEnergy FROM sensor_data WHERE total_energy IS NOT NULL GROUP BY light_id")
-    List<Map<String, Object>> selectLatestEnergyPerLight();
+    @Select("SELECT light_id AS lightId, DATE(collect_time) AS statDate, SUM(sampling_energy) / 1000 AS dailyEnergyKwh " +
+            "FROM sensor_data WHERE sampling_energy IS NOT NULL AND sampling_energy > 0 " +
+            "GROUP BY light_id, DATE(collect_time) ORDER BY statDate")
+    List<Map<String, Object>> selectDailyEnergyPerLight();
 
     /**
-     * 按路灯分组取第一条和最后一条 totalEnergy 计算每月净耗电
+     * 获取有采样数据的所有不重复日期
      */
-    @Select("SELECT t.month, SUM(t.energyDelta) AS totalEnergy FROM (" +
-            "SELECT light_id, DATE_FORMAT(collect_time, '%Y-%m') AS month, " +
-            "(MAX(total_energy) - MIN(total_energy)) AS energyDelta " +
-            "FROM sensor_data WHERE total_energy IS NOT NULL " +
-            "GROUP BY light_id, DATE_FORMAT(collect_time, '%Y-%m')" +
-            ") t GROUP BY t.month ORDER BY t.month")
-    List<Map<String, Object>> selectMonthlyEnergy();
-
-    /**
-     * 按路段统计净耗电（每路灯最新totalEnergy - 最初totalEnergy）
-     */
-    @Select("SELECT l.road, SUM(e.energyDelta) AS totalEnergy FROM (" +
-            "SELECT light_id, MAX(total_energy) - MIN(total_energy) AS energyDelta " +
-            "FROM sensor_data WHERE total_energy IS NOT NULL GROUP BY light_id" +
-            ") e JOIN light l ON e.light_id = l.id " +
-            "WHERE l.road IS NOT NULL GROUP BY l.road")
-    List<Map<String, Object>> selectEnergyByRoad();
+    @Select("SELECT DISTINCT DATE(collect_time) AS statDate FROM sensor_data WHERE sampling_energy IS NOT NULL ORDER BY statDate")
+    List<Map<String, Object>> selectDistinctDates();
 
     /**
      * 获取各路段的路灯数量
      */
     @Select("SELECT road, COUNT(*) AS lightCount FROM light WHERE road IS NOT NULL GROUP BY road")
     List<Map<String, Object>> selectLightCountByRoad();
-
-    /**
-     * 计算总耗电量（每个路灯 max - min 之差的和 = 实际消耗量）
-     */
-    @Select("SELECT COALESCE(SUM(energyDelta), 0) AS totalEnergy FROM (" +
-            "SELECT MAX(total_energy) - MIN(total_energy) AS energyDelta " +
-            "FROM sensor_data WHERE total_energy IS NOT NULL GROUP BY light_id" +
-            ") t")
-    Map<String, Object> selectTotalEnergy();
 
     /**
      * 获取传感器数据的时间跨度（天数）
