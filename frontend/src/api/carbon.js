@@ -7,7 +7,8 @@ export function getCarbonSummary(params) {
   return request.get('/carbon/summary', { params })
 }
 
-// 月度/年度趋势折线图
+// 能耗趋势折线图（日度/月度/年度）
+// type: daily-日度 / monthly-月度 / yearly-年度
 export function getCarbonTrend(params) {
   return request.get('/carbon/trend', { params })
 }

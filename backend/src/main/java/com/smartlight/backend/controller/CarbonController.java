@@ -27,11 +27,12 @@ public class CarbonController {
     }
 
     /**
-     * 月度/年度能耗趋势
+     * 能耗趋势（日度/月度/年度）
+     * @param type 时间粒度：daily-日度 / monthly-月度 / yearly-年度
      */
     @GetMapping("/trend")
-    public Result<List<Map<String, Object>>> getTrend(@RequestParam(defaultValue = "monthly") String period) {
-        return Result.success(carbonService.getTrend(period));
+    public Result<List<Map<String, Object>>> getTrend(@RequestParam(defaultValue = "monthly") String type) {
+        return Result.success(carbonService.getTrend(type));
     }
 
     /**

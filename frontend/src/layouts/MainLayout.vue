@@ -491,6 +491,8 @@ onUnmounted(() => {
   background-color: var(--bg);
   padding: 0;
   overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 /* 移动端抽屉菜单 */

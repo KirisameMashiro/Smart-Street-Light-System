@@ -13,24 +13,24 @@
     <!-- 时间范围选择 -->
     <div class="filter-bar">
       <el-radio-group v-model="rangeType" @change="onRangeTypeChange">
-        <el-radio-button value="month">月度</el-radio-button>
-        <el-radio-button value="year">年度</el-radio-button>
+        <el-radio-button value="daily">日度</el-radio-button>
+        <el-radio-button value="monthly">月度</el-radio-button>
       </el-radio-group>
       <el-date-picker
-        v-if="rangeType === 'month'"
+        v-if="rangeType === 'daily'"
         v-model="dateValue"
-        type="month"
-        placeholder="选择月份"
-        value-format="YYYY-MM"
+        type="date"
+        placeholder="选择日期"
+        value-format="YYYY-MM-DD"
         style="width: 180px"
         @change="loadAll"
       />
       <el-date-picker
         v-else
         v-model="dateValue"
-        type="year"
-        placeholder="选择年份"
-        value-format="YYYY"
+        type="month"
+        placeholder="选择月份"
+        value-format="YYYY-MM"
         style="width: 180px"
         @change="loadAll"
       />
@@ -66,22 +66,18 @@
     </div>
 
     <!-- 图表区 -->
-    <el-row :gutter="16">
-      <el-col :xs="24" :md="12">
-        <div class="chart-card">
-          <div class="chart-title">{{ rangeType === 'month' ? '月度' : '年度' }}趋势</div>
-          <el-empty v-if="trendError" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
-          <div v-else ref="trendRef" class="chart-box" v-loading="loading"></div>
-        </div>
-      </el-col>
-      <el-col :xs="24" :md="12">
-        <div class="chart-card">
-          <div class="chart-title">路段节电量对比</div>
-          <el-empty v-if="roadError" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
-          <div v-else ref="roadRef" class="chart-box" v-loading="loading"></div>
-        </div>
-      </el-col>
-    </el-row>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div class="chart-title">{{ trendLabel }}趋势</div>
+        <el-empty v-if="trendError" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
+        <div v-else ref="trendRef" class="chart-box" v-loading="loading"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">路段节电量对比</div>
+        <el-empty v-if="roadError" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
+        <div v-else ref="roadRef" class="chart-box" v-loading="loading"></div>
+      </div>
+    </div>
 
     <!-- 能耗基准配置 -->
     <div class="chart-card" style="margin-top: 16px">
@@ -133,7 +129,7 @@
 
 <script setup>
 defineOptions({ name: 'CarbonAnalysis' })
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Download } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
@@ -150,8 +146,13 @@ import {
 
 const loading = ref(false)
 const exporting = ref(false)
-const rangeType = ref('month')
+const rangeType = ref('monthly')
 const dateValue = ref('')
+
+const trendLabel = computed(() => {
+  const map = { daily: '日度', monthly: '月度' }
+  return map[rangeType.value] || '月度'
+})
 
 const summary = reactive({
   savedEnergy: 0,
@@ -182,9 +183,11 @@ const baseline = reactive({
 function defaultPeriod() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
-  return rangeType.value === 'month'
-    ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
-    : `${d.getFullYear()}`
+  if (rangeType.value === 'daily') {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  } else {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
+  }
 }
 
 function onRangeTypeChange() {
@@ -196,8 +199,8 @@ async function loadSummary() {
   try {
     const res = await getCarbonSummary({ type: rangeType.value, period: dateValue.value })
     const d = res.data || {}
-    summary.savedEnergy = Number(d.savedEnergy ?? 0)
-    summary.reducedCo2 = Number(d.reducedCo2 ?? 0)
+    summary.savedEnergy = Number(d.totalSavedPower ?? d.savedEnergy ?? 0)
+    summary.reducedCo2 = Number(d.totalReducedCO2 ?? d.reducedCo2 ?? 0)
     summary.energySavingRate = Number(d.energySavingRate ?? 0)
     summaryError.value = false
   } catch (e) {
@@ -211,7 +214,7 @@ async function loadSummary() {
 async function loadTrend() {
   trendError.value = false
   try {
-    const res = await getCarbonTrend({ type: rangeType.value, period: dateValue.value })
+    const res = await getCarbonTrend({ type: rangeType.value })
     trendData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
   } catch (e) {
     trendData.value = []
@@ -251,11 +254,11 @@ function renderTrend() {
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { data: ['节电量(kWh)', '减排量(kgCO₂)'], bottom: 0 },
-    grid: { left: 55, right: 60, top: 30, bottom: 40 },
-    xAxis: { type: 'category', boundaryGap: false, data: x },
+    grid: { left: 55, right: 65, top: 45, bottom: 60, containLabel: true },
+    xAxis: { type: 'category', boundaryGap: false, data: x, axisLabel: { fontSize: 11 } },
     yAxis: [
-      { type: 'value', name: '节电量' },
-      { type: 'value', name: '减排量' }
+      { type: 'value', name: '节电量', nameGap: 15 },
+      { type: 'value', name: '减排量', nameGap: 15 }
     ],
     series: [
       {
@@ -282,16 +285,20 @@ function renderRoad() {
   if (!roadRef.value || roadError.value) return
   roadChart = roadChart || echarts.init(roadRef.value)
   const names = roadData.value.map((it) => it.road || it.name || '')
-  const values = roadData.value.map((it) => Number(it.savedEnergy ?? 0))
+  const values = roadData.value.map((it) => {
+    if (it.savedEnergy !== undefined) return Number(it.savedEnergy)
+    if (it.before !== undefined && it.after !== undefined) return Number(it.before) - Number(it.after)
+    return 0
+  })
   roadChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 55, right: 20, top: 20, bottom: 40 },
+    grid: { left: 55, right: 25, top: 45, bottom: 60, containLabel: true },
     xAxis: {
       type: 'category',
       data: names,
-      axisLabel: { interval: 0, rotate: names.length > 4 ? 20 : 0 }
+      axisLabel: { interval: 0, rotate: names.length > 4 ? 20 : 0, fontSize: 11 }
     },
-    yAxis: { type: 'value', name: '节电量(kWh)' },
+    yAxis: { type: 'value', name: '节电量(kWh)', nameGap: 15 },
     series: [
       {
         type: 'bar',
@@ -439,11 +446,66 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.page-container {
+  min-height: 100vh;
+  padding-bottom: 20px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: var(--card-shadow);
+}
+
+.text-muted {
+  color: #909399;
+  font-size: 12px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
 .chart-card {
   background: #fff;
   border-radius: 8px;
   padding: 16px;
   box-shadow: var(--card-shadow);
+  min-width: 0;
+  min-height: 380px;
 }
 
 .chart-title {
@@ -462,5 +524,34 @@ onUnmounted(() => {
   margin-left: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    min-height: auto;
+  }
+
+  .chart-box {
+    height: 250px;
+  }
+
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 </style>

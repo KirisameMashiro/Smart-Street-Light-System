@@ -15,9 +15,10 @@ public interface CarbonService {
     Map<String, Object> getSummary();
 
     /**
-     * 获取月度/年度能耗趋势
+     * 获取能耗趋势
+     * @param type 时间粒度：daily-日度 / monthly-月度 / yearly-年度
      */
-    List<Map<String, Object>> getTrend(String period);
+    List<Map<String, Object>> getTrend(String type);
 
     /**
      * 获取路段能耗对比
