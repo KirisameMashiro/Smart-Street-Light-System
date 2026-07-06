@@ -18,7 +18,11 @@
 
         <Transition name="panel-slide">
           <div v-if="expanded" class="ball-panel">
-            <div class="panel-header">
+            <div
+              class="panel-header"
+              @mousedown.stop="onPanelMouseDown"
+              @touchstart.prevent.stop="onPanelTouchStart"
+            >
               <span class="panel-title">AI 助手</span>
               <el-icon class="panel-close" @click="expanded = false"><Close /></el-icon>
             </div>
@@ -232,9 +236,9 @@ function onMouseUp() {
   document.removeEventListener('mouseup', onMouseUp)
   document.removeEventListener('mouseleave', onMouseUp)
 
-  if (!isDragging && !expanded.value) {
-    expanded.value = true
-    if (messages.value.length === 0) {
+  if (!isDragging) {
+    expanded.value = !expanded.value
+    if (expanded.value && messages.value.length === 0) {
       loadHistory()
     }
   }
@@ -272,12 +276,54 @@ function onTouchEnd() {
   document.removeEventListener('touchmove', onTouchMove)
   document.removeEventListener('touchend', onTouchEnd)
 
-  if (!isDragging && !expanded.value) {
-    expanded.value = true
-    if (messages.value.length === 0) {
+  if (!isDragging) {
+    expanded.value = !expanded.value
+    if (expanded.value && messages.value.length === 0) {
       loadHistory()
     }
   }
+  isDragging = false
+}
+
+// ====== 对话框 header 拖动 ======
+function onPanelMouseDown(e) {
+  isDragging = false
+  dragStartX = e.clientX
+  dragStartY = e.clientY
+  startX = position.x
+  startY = position.y
+  ballWidth = 56
+  ballHeight = 56
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onPanelMouseUp)
+  document.addEventListener('mouseleave', onPanelMouseUp)
+}
+
+function onPanelMouseUp() {
+  document.removeEventListener('mousemove', onMouseMove)
+  document.removeEventListener('mouseup', onPanelMouseUp)
+  document.removeEventListener('mouseleave', onPanelMouseUp)
+  // 拖动 header 不触发展开/收起，仅结束拖动
+  isDragging = false
+}
+
+function onPanelTouchStart(e) {
+  const touch = e.touches[0]
+  isDragging = false
+  dragStartX = touch.clientX
+  dragStartY = touch.clientY
+  startX = position.x
+  startY = position.y
+
+  document.addEventListener('touchmove', onTouchMove, { passive: false })
+  document.addEventListener('touchend', onPanelTouchEnd)
+}
+
+function onPanelTouchEnd() {
+  document.removeEventListener('touchmove', onTouchMove)
+  document.removeEventListener('touchend', onPanelTouchEnd)
+  // 拖动 header 不触发展开/收起，仅结束拖动
   isDragging = false
 }
 
@@ -375,6 +421,12 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #409eff, #67c23a);
   color: #fff;
   flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.panel-header:active {
+  cursor: grabbing;
 }
 
 .panel-title {

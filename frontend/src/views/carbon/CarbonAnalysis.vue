@@ -217,49 +217,17 @@ async function loadSummary() {
 async function loadTrend() {
   trendError.value = false
   try {
-    const res = await getCarbonTrend({ type: rangeType.value, period: dateValue.value })
+    // 后端期望 type=month/year，前端使用 monthly/yearly
+    const backendType = rangeType.value === 'monthly' ? 'month' : 'year'
+    const res = await getCarbonTrend({ type: backendType, period: dateValue.value })
     trendData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
+    if (!trendData.value.length) {
+      trendError.value = true
+    }
   } catch (e) {
     trendData.value = []
-    trendError.value = false
+    trendError.value = true
   }
-  
-  if (trendData.value.length < 2) {
-    trendData.value = generateMockTrendData()
-  }
-}
-
-function generateMockTrendData() {
-  const data = []
-  const now = new Date()
-  
-  if (rangeType.value === 'monthly') {
-    const year = parseInt(dateValue.value.slice(0, 4))
-    const month = parseInt(dateValue.value.slice(5)) - 1
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-    
-    for (let i = 1; i <= daysInMonth; i++) {
-      const savedEnergy = 80 + Math.random() * 120 + Math.sin(i * 0.5) * 30
-      data.push({
-        period: `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`,
-        savedEnergy: Math.round(savedEnergy * 10) / 10,
-        reducedCo2: Math.round(savedEnergy * 0.98 * 10) / 10
-      })
-    }
-  } else {
-    const year = parseInt(dateValue.value)
-    
-    for (let month = 1; month <= 12; month++) {
-      const savedEnergy = 1800 + Math.random() * 1500 + Math.sin(month * 0.8) * 500
-      data.push({
-        period: `${year}-${String(month).padStart(2, '0')}`,
-        savedEnergy: Math.round(savedEnergy * 10) / 10,
-        reducedCo2: Math.round(savedEnergy * 0.98 * 10) / 10
-      })
-    }
-  }
-  
-  return data
 }
 
 async function loadRoad() {
