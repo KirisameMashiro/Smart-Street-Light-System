@@ -7,7 +7,7 @@ const service = axios.create({
   timeout: 15000
 })
 
-// 请求拦截器：附带当前登录用户标识
+// 请求拦截器：附带当前登录用户标识，添加时间戳绕过浏览器缓存
 service.interceptors.request.use(
   (config) => {
     const userStr = localStorage.getItem('smartlight_user')
@@ -20,6 +20,10 @@ service.interceptors.request.use(
       } catch (e) {
         // ignore
       }
+    }
+    if (config.method?.toLowerCase() === 'get') {
+      config.params = config.params || {}
+      config.params._t = Date.now()
     }
     return config
   },

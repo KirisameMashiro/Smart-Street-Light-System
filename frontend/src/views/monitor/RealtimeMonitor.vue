@@ -301,7 +301,7 @@ import { LIGHT_STATUS_MAP } from '@/utils/constants'
 const loading = ref(false)
 const mode = ref('list')
 const autoRefresh = ref(false)
-const interval = ref(5)
+const interval = ref(1)
 const router = useRouter()
 
 const page = ref({ records: [], total: 0 })
@@ -764,25 +764,37 @@ function onRoadChange(road) {
 }
 
 let timer = null
+let isRefreshing = false
+
 function startPolling() {
   stopPolling()
   if (!autoRefresh.value) return
   scheduleNext()
 }
+
 function scheduleNext() {
   timer = setTimeout(async () => {
     if (!autoRefresh.value) return
+    if (isRefreshing) {
+      scheduleNext()
+      return
+    }
     try {
+      isRefreshing = true
       await refreshAll(false)
-    } catch (e) {}
+    } catch (e) {} finally {
+      isRefreshing = false
+    }
     if (autoRefresh.value) scheduleNext()
   }, interval.value * 1000)
 }
+
 function stopPolling() {
   if (timer) {
     clearTimeout(timer)
     timer = null
   }
+  isRefreshing = false
 }
 
 watch(autoRefresh, (v) => {
