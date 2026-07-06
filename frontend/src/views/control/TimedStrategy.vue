@@ -193,18 +193,17 @@ import {
   deleteStrategy,
   toggleStrategy
 } from '@/api/control'
-import {
-  STRATEGY_TYPE_MAP,
-  WEEKDAY_OPTIONS,
-  DISTRICT_OPTIONS,
-  ROAD_OPTIONS
-} from '@/utils/constants'
+import { getDistricts, getRoads } from '@/api/light'
+import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
 const loading = ref(false)
 const submitting = ref(false)
 const tableData = ref([])
 const total = ref(0)
+
+const DISTRICT_OPTIONS = ref([])
+const ROAD_OPTIONS = ref([])
 
 const query = reactive({
   pageNum: 1,
@@ -403,7 +402,22 @@ async function onSubmit() {
   }
 }
 
-onMounted(loadData)
+async function loadOptions() {
+  try {
+    const districtsRes = await getDistricts()
+    DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
+    
+    const roadsRes = await getRoads()
+    ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
+  } catch (e) {
+    console.error('加载选项数据失败:', e)
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadOptions()
+})
 </script>
 
 <style scoped>

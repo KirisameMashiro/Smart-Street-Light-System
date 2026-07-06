@@ -194,6 +194,27 @@ CREATE TABLE IF NOT EXISTS `threshold_control` (
 INSERT INTO `threshold_control` (`enabled`, `light_on_threshold`, `light_off_threshold`, `low_brightness`, `mid_brightness`, `high_brightness`, `detection_period`)
 VALUES (0, 30.00, 100.00, 100, 60, 30, 60);
 
+-- 定时策略表
+CREATE TABLE IF NOT EXISTS `timed_strategy` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '策略名称',
+    `type` VARCHAR(20) NOT NULL COMMENT '策略类型：default/timed',
+    `weekdays` JSON DEFAULT NULL COMMENT '适用星期 [1,2,3,4,5,6,7]，默认类型必填',
+    `start_date` DATE DEFAULT NULL COMMENT '开始日期，时间段类型必填',
+    `end_date` DATE DEFAULT NULL COMMENT '结束日期，时间段类型必填',
+    `start_time` TIME NOT NULL COMMENT '开始时间',
+    `end_time` TIME NOT NULL COMMENT '结束时间',
+    `brightness` INT NOT NULL DEFAULT 80 COMMENT '目标亮度 0-100',
+    `district` VARCHAR(50) DEFAULT NULL COMMENT '行政区',
+    `road` VARCHAR(100) DEFAULT NULL COMMENT '路段',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用 0-禁用 1-启用',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_type` (`type`),
+    KEY `idx_enabled` (`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='定时策略表';
+
 -- 更新示例路灯的行政区/路段
 UPDATE `light` SET `district`='中心区', `road`='人民路' WHERE `light_code` IN ('SL-001','SL-002');
 UPDATE `light` SET `district`='城北区', `road`='建设路' WHERE `light_code` IN ('SL-003','SL-004');
