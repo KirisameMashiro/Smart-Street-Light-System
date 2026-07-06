@@ -175,6 +175,25 @@ CREATE TABLE IF NOT EXISTS `carbon_stats` (
     KEY `idx_date_road` (`stat_date`, `road`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='碳减排日统计数据表';
 
+-- 阈值联动配置表
+CREATE TABLE IF NOT EXISTS `threshold_control` (
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `enabled` TINYINT DEFAULT 0 COMMENT '是否启用: 0-禁用, 1-启用',
+    `light_on_threshold` DECIMAL(10, 2) DEFAULT 30.00 COMMENT '开灯光照阈值(lux)',
+    `light_off_threshold` DECIMAL(10, 2) DEFAULT 100.00 COMMENT '关灯光照阈值(lux)',
+    `low_brightness` INT DEFAULT 100 COMMENT '低光照档亮度(%)',
+    `mid_brightness` INT DEFAULT 60 COMMENT '中光照档亮度(%)',
+    `high_brightness` INT DEFAULT 30 COMMENT '高光照档亮度(%)',
+    `detection_period` INT DEFAULT 60 COMMENT '检测周期(秒)',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='阈值联动配置表';
+
+-- 插入默认阈值联动配置
+INSERT INTO `threshold_control` (`enabled`, `light_on_threshold`, `light_off_threshold`, `low_brightness`, `mid_brightness`, `high_brightness`, `detection_period`)
+VALUES (0, 30.00, 100.00, 100, 60, 30, 60);
+
 -- 更新示例路灯的行政区/路段
 UPDATE `light` SET `district`='中心区', `road`='人民路' WHERE `light_code` IN ('SL-001','SL-002');
 UPDATE `light` SET `district`='城北区', `road`='建设路' WHERE `light_code` IN ('SL-003','SL-004');
