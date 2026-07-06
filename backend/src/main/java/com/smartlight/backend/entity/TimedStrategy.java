@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Data
-@TableName("timed_strategy")
+@TableName(value = "timed_strategy", autoResultMap = true)
 public class TimedStrategy {
 
     @TableId(type = IdType.AUTO)
