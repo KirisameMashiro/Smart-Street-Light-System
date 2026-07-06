@@ -91,7 +91,7 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="适用星期" prop="weekdays">
+        <el-form-item v-if="form.type !== 'timed'" label="适用星期" prop="weekdays">
           <el-checkbox-group v-model="form.weekdays">
             <el-checkbox
               v-for="w in WEEKDAY_OPTIONS"
@@ -99,6 +99,24 @@
               :value="w.value"
             >{{ w.label }}</el-checkbox>
           </el-checkbox-group>
+        </el-form-item>
+        <el-form-item v-if="form.type === 'timed'" label="开始日期" prop="startDate">
+          <el-date-picker
+            v-model="form.startDate"
+            type="date"
+            placeholder="选择开始日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item v-if="form.type === 'timed'" label="结束日期" prop="endDate">
+          <el-date-picker
+            v-model="form.endDate"
+            type="date"
+            placeholder="选择结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
         </el-form-item>
         <el-form-item label="开始时间" prop="startTime">
           <el-time-picker
@@ -121,14 +139,14 @@
         <el-form-item label="目标亮度" prop="brightness">
           <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" />
         </el-form-item>
-        <el-form-item label="适用分组" prop="targetGroup">
-          <el-select v-model="form.targetGroup" clearable placeholder="选择行政区/路段" style="width: 100%">
-            <el-option-group label="行政区">
-              <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
-            </el-option-group>
-            <el-option-group label="路段">
-              <el-option v-for="o in ROAD_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
-            </el-option-group>
+        <el-form-item label="行政区" prop="district">
+          <el-select v-model="form.district" clearable filterable placeholder="选择行政区" style="width: 100%">
+            <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="路段" prop="road">
+          <el-select v-model="form.road" clearable filterable placeholder="选择路段" style="width: 100%">
+            <el-option v-for="o in ROAD_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用" prop="enabled">
@@ -231,12 +249,15 @@ const formRef = ref()
 const form = reactive({
   id: undefined,
   name: '',
-  type: 'everyday',
+  type: 'default',
   weekdays: [],
+  startDate: '',
+  endDate: '',
   startTime: '18:00:00',
   endTime: '06:00:00',
   brightness: 80,
-  targetGroup: '',
+  district: '',
+  road: '',
   enabled: true
 })
 
@@ -251,12 +272,15 @@ function openDialog(row) {
     Object.assign(form, {
       id: row.id,
       name: row.name || '',
-      type: row.type || 'everyday',
+      type: row.type || 'default',
       weekdays: Array.isArray(row.weekdays) ? [...row.weekdays] : [],
+      startDate: row.startDate || '',
+      endDate: row.endDate || '',
       startTime: row.startTime || '18:00:00',
       endTime: row.endTime || '06:00:00',
       brightness: row.brightness ?? 80,
-      targetGroup: row.targetGroup || '',
+      district: row.district || '',
+      road: row.road || '',
       enabled: !!row.enabled
     })
   } else {
@@ -269,15 +293,44 @@ function resetForm() {
   Object.assign(form, {
     id: undefined,
     name: '',
-    type: 'everyday',
+    type: 'default',
     weekdays: [],
+    startDate: '',
+    endDate: '',
     startTime: '18:00:00',
     endTime: '06:00:00',
     brightness: 80,
-    targetGroup: '',
+    district: '',
+    road: '',
     enabled: true
   })
   formRef.value?.clearValidate()
+}
+
+// 校验默认策略星期冲突
+function checkWeekdayConflict() {
+  if (form.type !== 'default' || !form.weekdays || form.weekdays.length === 0) {
+    return { valid: true }
+  }
+  // 查找其他默认策略中是否有相同的星期
+  const otherStrategies = tableData.value.filter(s => 
+    s.id !== form.id && 
+    s.type === 'default' && 
+    s.enabled !== false &&
+    s.weekdays && s.weekdays.length > 0
+  )
+  
+  for (const other of otherStrategies) {
+    const conflictDays = form.weekdays.filter(day => other.weekdays.includes(day))
+    if (conflictDays.length > 0) {
+      const dayNames = conflictDays.map(d => weekdayLabel(d)).join('、')
+      return {
+        valid: false,
+        message: `该星期已被默认策略「${other.name}」占用：${dayNames}\n\n提示：时间段策略优先级最高，如需覆盖请使用时间段策略。`
+      }
+    }
+  }
+  return { valid: true }
 }
 
 async function onSubmit() {
@@ -286,6 +339,21 @@ async function onSubmit() {
   } catch (e) {
     return
   }
+  
+  // 校验默认策略星期冲突
+  const conflictCheck = checkWeekdayConflict()
+  if (!conflictCheck.valid) {
+    try {
+      await ElMessageBox.confirm(conflictCheck.message, '星期冲突提醒', {
+        confirmButtonText: '仍要保存',
+        cancelButtonText: '取消',
+        type: 'warning'
+      })
+    } catch (e) {
+      return
+    }
+  }
+  
   submitting.value = true
   try {
     if (isEdit.value) {

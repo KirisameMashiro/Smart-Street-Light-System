@@ -5,11 +5,13 @@
         v-if="visible"
         class="ai-float-ball"
         :class="{ 'is-expanded': expanded }"
-        :style="{ bottom: position.bottom + 'px', right: position.right + 'px' }"
-        @mousedown.stop="onDragStart"
-        @touchstart.stop.passive="onTouchStart"
+        :style="{ left: position.x + 'px', top: position.y + 'px' }"
       >
-        <div v-if="!expanded" class="ball-main" @click="toggleExpand">
+        <div
+          class="ball-main"
+          @mousedown="onMouseDown"
+          @touchstart.prevent="onTouchStart"
+        >
           <el-icon class="ball-icon"><MagicStick /></el-icon>
           <span class="ball-label">AI</span>
         </div>
@@ -18,7 +20,7 @@
           <div v-if="expanded" class="ball-panel">
             <div class="panel-header">
               <span class="panel-title">AI 助手</span>
-              <el-icon class="panel-close" @click.stop="toggleExpand"><Close /></el-icon>
+              <el-icon class="panel-close" @click="expanded = false"><Close /></el-icon>
             </div>
 
             <div ref="messageRef" class="panel-messages">
@@ -101,17 +103,19 @@ const SESSION_KEY = 'smartlight_ai_float_session'
 const HISTORY_KEY = 'smartlight_ai_float_history'
 
 const position = reactive({
-  bottom: 80,
-  right: 20
+  x: 0,
+  y: 0
 })
 
 const quickQuestions = ['故障排查', '操作指引', '设备参数']
 
+let isDragging = false
 let dragStartX = 0
 let dragStartY = 0
-let startBottom = 0
-let startRight = 0
-let isDragging = false
+let startX = 0
+let startY = 0
+let ballWidth = 56
+let ballHeight = 56
 
 function getSessionId() {
   let sid = localStorage.getItem(SESSION_KEY)
@@ -120,15 +124,6 @@ function getSessionId() {
     localStorage.setItem(SESSION_KEY, sid)
   }
   return sid
-}
-
-function toggleExpand() {
-  if (!isDragging) {
-    expanded.value = !expanded.value
-    if (expanded.value && messages.value.length === 0) {
-      loadHistory()
-    }
-  }
 }
 
 function loadHistory() {
@@ -198,41 +193,62 @@ function onQuick(text) {
   onSend()
 }
 
-function onDragStart(e) {
+function clampPosition() {
+  const maxX = window.innerWidth - ballWidth - 10
+  const maxY = window.innerHeight - ballHeight - 10
+  position.x = Math.max(10, Math.min(maxX, position.x))
+  position.y = Math.max(10, Math.min(maxY, position.y))
+}
+
+function onMouseDown(e) {
   isDragging = false
   dragStartX = e.clientX
   dragStartY = e.clientY
-  startBottom = position.bottom
-  startRight = position.right
-  document.addEventListener('mousemove', onDragMove)
-  document.addEventListener('mouseup', onDragEnd)
+  startX = position.x
+  startY = position.y
+  ballWidth = e.currentTarget.offsetWidth
+  ballHeight = e.currentTarget.offsetHeight
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener('mouseleave', onMouseUp)
 }
 
-function onDragMove(e) {
+function onMouseMove(e) {
   const dx = e.clientX - dragStartX
   const dy = e.clientY - dragStartY
+
   if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
     isDragging = true
   }
-  position.right = Math.max(10, startRight - dx)
-  position.bottom = Math.max(10, startBottom + dy)
+
+  position.x = startX + dx
+  position.y = startY + dy
+  clampPosition()
 }
 
-function onDragEnd() {
-  document.removeEventListener('mousemove', onDragMove)
-  document.removeEventListener('mouseup', onDragEnd)
-  setTimeout(() => {
-    isDragging = false
-  }, 50)
+function onMouseUp() {
+  document.removeEventListener('mousemove', onMouseMove)
+  document.removeEventListener('mouseup', onMouseUp)
+  document.removeEventListener('mouseleave', onMouseUp)
+
+  if (!isDragging && !expanded.value) {
+    expanded.value = true
+    if (messages.value.length === 0) {
+      loadHistory()
+    }
+  }
+  isDragging = false
 }
 
 function onTouchStart(e) {
   const touch = e.touches[0]
+  isDragging = false
   dragStartX = touch.clientX
   dragStartY = touch.clientY
-  startBottom = position.bottom
-  startRight = position.right
-  isDragging = false
+  startX = position.x
+  startY = position.y
+
   document.addEventListener('touchmove', onTouchMove, { passive: false })
   document.addEventListener('touchend', onTouchEnd)
 }
@@ -242,22 +258,27 @@ function onTouchMove(e) {
   const touch = e.touches[0]
   const dx = touch.clientX - dragStartX
   const dy = touch.clientY - dragStartY
-  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+
+  if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
     isDragging = true
   }
-  position.right = Math.max(10, startRight - dx)
-  position.bottom = Math.max(10, startBottom + dy)
+
+  position.x = startX + dx
+  position.y = startY + dy
+  clampPosition()
 }
 
 function onTouchEnd() {
   document.removeEventListener('touchmove', onTouchMove)
   document.removeEventListener('touchend', onTouchEnd)
-  setTimeout(() => {
-    if (!isDragging) {
-      toggleExpand()
+
+  if (!isDragging && !expanded.value) {
+    expanded.value = true
+    if (messages.value.length === 0) {
+      loadHistory()
     }
-    isDragging = false
-  }, 50)
+  }
+  isDragging = false
 }
 
 watch(
@@ -272,9 +293,15 @@ onMounted(() => {
   if (savedPos) {
     try {
       const pos = JSON.parse(savedPos)
-      position.bottom = pos.bottom || 80
-      position.right = pos.right || 20
-    } catch (e) {}
+      position.x = pos.x || window.innerWidth - 76
+      position.y = pos.y || window.innerHeight - 140
+    } catch (e) {
+      position.x = window.innerWidth - 76
+      position.y = window.innerHeight - 140
+    }
+  } else {
+    position.x = window.innerWidth - 76
+    position.y = window.innerHeight - 140
   }
 })
 
@@ -300,7 +327,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
   box-shadow: 0 4px 16px rgba(64, 158, 255, 0.4);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -308,6 +335,11 @@ onUnmounted(() => {
 .ball-main:hover {
   transform: scale(1.05);
   box-shadow: 0 6px 20px rgba(64, 158, 255, 0.5);
+}
+
+.ball-main:active {
+  cursor: grabbing;
+  transform: scale(0.98);
 }
 
 .ball-icon {
@@ -329,6 +361,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .panel-header {
@@ -459,7 +495,7 @@ onUnmounted(() => {
 .panel-slide-enter-from,
 .panel-slide-leave-to {
   opacity: 0;
-  transform: translateY(10px);
+  transform: translateX(-50%) translateY(10px);
 }
 
 @media (max-width: 768px) {
@@ -467,6 +503,15 @@ onUnmounted(() => {
     width: calc(100vw - 40px);
     height: 60vh;
     max-height: 500px;
+    left: 20px;
+    right: 20px;
+    transform: none;
+  }
+
+  .panel-slide-enter-from,
+  .panel-slide-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
   }
 }
 </style>

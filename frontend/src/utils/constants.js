@@ -121,9 +121,8 @@ export const WEEKDAY_OPTIONS = [
 ]
 
 export const STRATEGY_TYPE_MAP = {
-  weekday: { label: '工作日', type: 'primary' },
-  holiday: { label: '节假日', type: 'warning' },
-  everyday: { label: '每日', type: 'success' }
+  default: { label: '默认', type: 'primary' },
+  timed: { label: '时间段', type: 'info' }
 }
 
 // ============ 告警规则类型 [后端] ============
