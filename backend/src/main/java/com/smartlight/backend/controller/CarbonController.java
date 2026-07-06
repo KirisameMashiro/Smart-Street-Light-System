@@ -31,8 +31,10 @@ public class CarbonController {
      * @param type 时间粒度：daily-日度 / monthly-月度 / yearly-年度
      */
     @GetMapping("/trend")
-    public Result<List<Map<String, Object>>> getTrend(@RequestParam(defaultValue = "monthly") String type) {
-        return Result.success(carbonService.getTrend(type));
+    public Result<List<Map<String, Object>>> getTrend(
+            @RequestParam(required = false, defaultValue = "month") String type,
+            @RequestParam(required = false) String period) {
+        return Result.success(carbonService.getTrend(type, period));
     }
 
     /**
@@ -91,7 +93,7 @@ public class CarbonController {
     @GetMapping("/export")
     public Result<String> exportReport(@RequestParam(required = false) String period) {
         Map<String, Object> summary = carbonService.getSummary();
-        List<Map<String, Object>> trend = carbonService.getTrend("monthly");
+        List<Map<String, Object>> trend = carbonService.getTrend("month", null);
         List<Map<String, Object>> roadCompare = carbonService.getRoadCompare();
 
         // 构建纯文本报表摘要

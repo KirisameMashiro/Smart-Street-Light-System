@@ -16,9 +16,10 @@ public interface CarbonService {
 
     /**
      * 获取能耗趋势
-     * @param type 时间粒度：daily-日度 / monthly-月度 / yearly-年度
+     * @param type month-月度每日, year-年度每月
+     * @param period 月份(2026-07)或年份(2026)
      */
-    List<Map<String, Object>> getTrend(String type);
+    List<Map<String, Object>> getTrend(String type, String period);
 
     /**
      * 获取路段能耗对比

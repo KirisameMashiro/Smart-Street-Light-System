@@ -3,6 +3,7 @@ package com.smartlight.backend.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.smartlight.backend.entity.CarbonStats;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.time.LocalDate;
@@ -22,7 +23,36 @@ public interface CarbonStatsMapper extends BaseMapper<CarbonStats> {
     Map<String, Object> selectSummary();
 
     /**
-     * 按月统计汇总数据
+     * 获取指定日期范围内每日的统计数据（用于月度每日趋势）
+     * @param startDate 开始日期
+     * @param endDate 结束日期
+     */
+    @Select("SELECT stat_date AS statDate, " +
+            "SUM(saved_energy) AS savedEnergy, " +
+            "SUM(co2_reduction) AS co2Reduction, " +
+            "SUM(actual_energy) AS actualEnergy, " +
+            "AVG(saving_rate) AS savingRate " +
+            "FROM carbon_stats WHERE road IS NULL " +
+            "AND stat_date BETWEEN #{startDate} AND #{endDate} " +
+            "GROUP BY stat_date ORDER BY stat_date")
+    List<Map<String, Object>> selectDailyStats(@Param("startDate") LocalDate startDate,
+                                                @Param("endDate") LocalDate endDate);
+
+    /**
+     * 获取指定年份每月汇总数据（用于年度每月趋势）
+     */
+    @Select("SELECT DATE_FORMAT(stat_date, '%Y-%m') AS month, " +
+            "SUM(saved_energy) AS savedEnergy, " +
+            "SUM(co2_reduction) AS co2Reduction, " +
+            "SUM(actual_energy) AS actualEnergy, " +
+            "AVG(saving_rate) AS savingRate " +
+            "FROM carbon_stats WHERE road IS NULL " +
+            "AND YEAR(stat_date) = #{year} " +
+            "GROUP BY DATE_FORMAT(stat_date, '%Y-%m') ORDER BY month")
+    List<Map<String, Object>> selectYearlyMonthlyStats(@Param("year") int year);
+
+    /**
+     * 按月统计全部汇总数据（用于兼容旧参数）
      */
     @Select("SELECT DATE_FORMAT(stat_date, '%Y-%m') AS month, " +
             "SUM(saved_energy) AS savedEnergy, " +

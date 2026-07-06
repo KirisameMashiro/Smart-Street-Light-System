@@ -92,18 +92,63 @@ public class CarbonServiceImpl implements CarbonService {
     }
 
     @Override
-    public List<Map<String, Object>> getTrend(String period) {
-        List<Map<String, Object>> monthlyStats = carbonStatsMapper.selectMonthlyStats();
-        if (monthlyStats == null) return new ArrayList<>();
-
+    public List<Map<String, Object>> getTrend(String type, String period) {
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map<String, Object> row : monthlyStats) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("month", row.get("month"));
-            item.put("savedEnergy", ((Number) row.getOrDefault("savedEnergy", 0)).doubleValue());
-            item.put("reducedCo2", ((Number) row.getOrDefault("co2Reduction", 0)).doubleValue());
-            result.add(item);
+
+        if ("month".equals(type) && period != null && !period.isEmpty()) {
+            // 月度每日趋势
+            String[] parts = period.split("-");
+            if (parts.length == 2) {
+                int year = Integer.parseInt(parts[0]);
+                int month = Integer.parseInt(parts[1]);
+                LocalDate startDate = LocalDate.of(year, month, 1);
+                LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+
+                List<Map<String, Object>> dailyStats = carbonStatsMapper.selectDailyStats(startDate, endDate);
+                if (dailyStats != null) {
+                    for (Map<String, Object> row : dailyStats) {
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        Object dateObj = row.get("statDate");
+                        String dateStr;
+                        if (dateObj instanceof java.sql.Date) {
+                            dateStr = ((java.sql.Date) dateObj).toLocalDate().toString();
+                        } else {
+                            dateStr = dateObj != null ? dateObj.toString() : "";
+                        }
+                        item.put("period", dateStr);
+                        item.put("savedEnergy", ((Number) row.getOrDefault("savedEnergy", 0)).doubleValue());
+                        item.put("reducedCo2", ((Number) row.getOrDefault("co2Reduction", 0)).doubleValue());
+                        result.add(item);
+                    }
+                }
+            }
+        } else if ("year".equals(type) && period != null && !period.isEmpty()) {
+            // 年度每月趋势
+            int year = Integer.parseInt(period);
+            List<Map<String, Object>> monthlyStats = carbonStatsMapper.selectYearlyMonthlyStats(year);
+            if (monthlyStats != null) {
+                for (Map<String, Object> row : monthlyStats) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("month", row.get("month"));
+                    item.put("savedEnergy", ((Number) row.getOrDefault("savedEnergy", 0)).doubleValue());
+                    item.put("reducedCo2", ((Number) row.getOrDefault("co2Reduction", 0)).doubleValue());
+                    result.add(item);
+                }
+            }
+        } else {
+            // 兼容旧参数: 返回全部月度汇总
+            List<Map<String, Object>> monthlyStats = carbonStatsMapper.selectYearlyMonthlyStats(LocalDate.now().getYear());
+            if (monthlyStats != null) {
+                for (Map<String, Object> row : monthlyStats) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("month", row.get("month"));
+                    item.put("savedEnergy", ((Number) row.getOrDefault("savedEnergy", 0)).doubleValue());
+                    item.put("reducedCo2", ((Number) row.getOrDefault("co2Reduction", 0)).doubleValue());
+                    result.add(item);
+                }
+            }
         }
+
         return result;
     }
 
