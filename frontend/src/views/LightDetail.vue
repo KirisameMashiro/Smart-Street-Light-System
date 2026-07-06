@@ -73,8 +73,8 @@
               <div class="m-value">{{ latest.humidity ?? '-' }}<span>%RH</span></div>
             </div>
             <div class="metric" style="--c:#9c27b0">
-              <div class="m-label">累计耗电</div>
-              <div class="m-value">{{ latest.totalEnergy != null ? latest.totalEnergy.toFixed(2) : '-' }}<span>kWh</span></div>
+              <div class="m-label">采样间隔耗电</div>
+              <div class="m-value">{{ latest.samplingEnergy != null ? (latest.samplingEnergy / 1000).toFixed(4) : '-' }}<span>kWh</span></div>
             </div>
             <div class="metric full" style="--c:#0c2461">
               <div class="m-label">采集时间</div>
@@ -87,7 +87,12 @@
       <el-col :xs="24" :lg="14">
         <div class="detail-card">
           <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-            <span>近 1 小时平均值</span>
+            <div>
+              <span>近 1 小时平均值</span>
+              <el-tooltip content="统计当前时间往前推1小时内所有传感器采样数据的算术平均值，用于反映设备近期运行状态" placement="top">
+                <el-icon class="info-icon" style="margin-left:6px;color:#909399"><InfoFilled /></el-icon>
+              </el-tooltip>
+            </div>
             <el-button link type="primary" :icon="Refresh" @click="loadAverage">刷新</el-button>
           </div>
           <div v-if="average">
@@ -98,7 +103,7 @@
               <el-descriptions-item label="平均电流(A)">{{ average.current?.toFixed(3) ?? '-' }}</el-descriptions-item>
               <el-descriptions-item label="平均温度(°C)">{{ average.temperature?.toFixed(2) ?? '-' }}</el-descriptions-item>
               <el-descriptions-item label="平均湿度(%RH)">{{ average.humidity?.toFixed(2) ?? '-' }}</el-descriptions-item>
-              <el-descriptions-item label="平均累计耗电(kWh)">{{ average.totalEnergy != null ? average.totalEnergy.toFixed(2) : '-' }}</el-descriptions-item>
+              <el-descriptions-item label="平均采样间隔耗电(kWh)">{{ average.samplingEnergy != null ? (average.samplingEnergy / 1000).toFixed(4) : '-' }}</el-descriptions-item>
             </el-descriptions>
           </div>
           <el-empty v-else description="暂无统计数据" :image-size="80" />
@@ -118,9 +123,9 @@
           <el-table-column prop="current" label="电流(A)" />
           <el-table-column prop="temperature" label="温度(°C)" />
           <el-table-column prop="humidity" label="湿度(%RH)" />
-          <el-table-column label="累计耗电(kWh)" width="130">
+          <el-table-column label="采样间隔耗电(kWh)" width="160">
             <template #default="{ row }">
-              {{ row.totalEnergy != null ? row.totalEnergy.toFixed(2) : '-' }}
+              {{ row.samplingEnergy != null ? (row.samplingEnergy / 1000).toFixed(4) : '-' }}
             </template>
           </el-table-column>
           <el-table-column label="采集时间" width="180">
@@ -147,7 +152,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Refresh, InfoFilled } from '@element-plus/icons-vue'
 import { getLightById, setLightBrightness } from '@/api/light'
 import {
   getLatestSensorData,

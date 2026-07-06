@@ -46,7 +46,6 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
 
     @Override
     public SensorData getAverageData(Long lightId, LocalDateTime startTime, LocalDateTime endTime) {
-        // 获取时间范围内的所有数据用于计算平均值
         LambdaQueryWrapper<SensorData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SensorData::getLightId, lightId)
                .ge(SensorData::getCollectTime, startTime)
@@ -59,12 +58,25 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
 
         SensorData avg = new SensorData();
         avg.setLightId(lightId);
-        avg.setIlluminance(list.stream().mapToDouble(SensorData::getIlluminance).average().orElse(0));
-        avg.setPower(list.stream().mapToDouble(SensorData::getPower).average().orElse(0));
-        avg.setVoltage(list.stream().mapToDouble(SensorData::getVoltage).average().orElse(0));
-        avg.setCurrent(list.stream().mapToDouble(SensorData::getCurrent).average().orElse(0));
-        avg.setTemperature(list.stream().mapToDouble(SensorData::getTemperature).average().orElse(0));
-        avg.setHumidity(list.stream().mapToDouble(SensorData::getHumidity).average().orElse(0));
+        
+        avg.setIlluminance(list.stream()
+                .filter(d -> d.getIlluminance() != null)
+                .mapToDouble(SensorData::getIlluminance).average().orElse(0));
+        avg.setPower(list.stream()
+                .filter(d -> d.getPower() != null)
+                .mapToDouble(SensorData::getPower).average().orElse(0));
+        avg.setVoltage(list.stream()
+                .filter(d -> d.getVoltage() != null)
+                .mapToDouble(SensorData::getVoltage).average().orElse(0));
+        avg.setCurrent(list.stream()
+                .filter(d -> d.getCurrent() != null)
+                .mapToDouble(SensorData::getCurrent).average().orElse(0));
+        avg.setTemperature(list.stream()
+                .filter(d -> d.getTemperature() != null)
+                .mapToDouble(SensorData::getTemperature).average().orElse(0));
+        avg.setHumidity(list.stream()
+                .filter(d -> d.getHumidity() != null)
+                .mapToDouble(SensorData::getHumidity).average().orElse(0));
         avg.setSamplingEnergy(list.stream()
                 .filter(d -> d.getSamplingEnergy() != null)
                 .mapToDouble(SensorData::getSamplingEnergy).average().orElse(0));
