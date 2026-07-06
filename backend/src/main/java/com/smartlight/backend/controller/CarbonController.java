@@ -20,10 +20,14 @@ public class CarbonController {
 
     /**
      * 核心指标：总节电量、总减排量、节能率
+     * @param type month-月度每日, year-年度每月
+     * @param period 月份(2026-07)或年份(2026)
      */
     @GetMapping("/summary")
-    public Result<Map<String, Object>> getSummary() {
-        return Result.success(carbonService.getSummary());
+    public Result<Map<String, Object>> getSummary(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String period) {
+        return Result.success(carbonService.getSummary(type, period));
     }
 
     /**
@@ -39,10 +43,14 @@ public class CarbonController {
 
     /**
      * 路段能耗对比
+     * @param type month-月度每日, year-年度每月
+     * @param period 月份(2026-07)或年份(2026)
      */
     @GetMapping("/road-compare")
-    public Result<List<Map<String, Object>>> getRoadCompare() {
-        return Result.success(carbonService.getRoadCompare());
+    public Result<List<Map<String, Object>>> getRoadCompare(
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String period) {
+        return Result.success(carbonService.getRoadCompare(type, period));
     }
 
     /**
@@ -92,9 +100,9 @@ public class CarbonController {
      */
     @GetMapping("/export")
     public Result<String> exportReport(@RequestParam(required = false) String period) {
-        Map<String, Object> summary = carbonService.getSummary();
+        Map<String, Object> summary = carbonService.getSummary(null, null);
         List<Map<String, Object>> trend = carbonService.getTrend("month", null);
-        List<Map<String, Object>> roadCompare = carbonService.getRoadCompare();
+        List<Map<String, Object>> roadCompare = carbonService.getRoadCompare(null, null);
 
         // 构建纯文本报表摘要
         StringBuilder report = new StringBuilder();

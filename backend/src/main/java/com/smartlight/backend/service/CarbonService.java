@@ -11,8 +11,10 @@ public interface CarbonService {
 
     /**
      * 获取碳减排汇总数据（总节电量、总减排量、节能率）
+     * @param type month-月度每日, year-年度每月
+     * @param period 月份(2026-07)或年份(2026)
      */
-    Map<String, Object> getSummary();
+    Map<String, Object> getSummary(String type, String period);
 
     /**
      * 获取能耗趋势
@@ -23,8 +25,10 @@ public interface CarbonService {
 
     /**
      * 获取路段能耗对比
+     * @param type month-月度每日, year-年度每月
+     * @param period 月份(2026-07)或年份(2026)
      */
-    List<Map<String, Object>> getRoadCompare();
+    List<Map<String, Object>> getRoadCompare(String type, String period);
 
     /**
      * 获取能耗基准配置（前端需要的扁平对象：{basePower, dailyHours, emissionFactor}）

@@ -78,6 +78,31 @@ public interface CarbonStatsMapper extends BaseMapper<CarbonStats> {
     List<Map<String, Object>> selectStatsByRoad();
 
     /**
+     * 按日期范围查询汇总指标（用于 summary 接口筛选）
+     */
+    @Select("SELECT COALESCE(SUM(saved_energy), 0) AS totalSaved, " +
+            "COALESCE(SUM(co2_reduction), 0) AS totalCO2, " +
+            "COALESCE(AVG(saving_rate), 0) AS avgRate " +
+            "FROM carbon_stats WHERE road IS NULL " +
+            "AND stat_date BETWEEN #{startDate} AND #{endDate}")
+    Map<String, Object> selectSummaryByDateRange(@Param("startDate") LocalDate startDate,
+                                                  @Param("endDate") LocalDate endDate);
+
+    /**
+     * 按日期范围查询路段对比数据
+     */
+    @Select("SELECT road, " +
+            "SUM(saved_energy) AS savedEnergy, " +
+            "SUM(co2_reduction) AS co2Reduction, " +
+            "SUM(actual_energy) AS actualEnergy, " +
+            "MAX(light_count) AS lightCount " +
+            "FROM carbon_stats WHERE road IS NOT NULL " +
+            "AND stat_date BETWEEN #{startDate} AND #{endDate} " +
+            "GROUP BY road")
+    List<Map<String, Object>> selectStatsByRoadDateRange(@Param("startDate") LocalDate startDate,
+                                                         @Param("endDate") LocalDate endDate);
+
+    /**
      * 检查某天某路段是否已有统计数据
      */
     @Select("SELECT COUNT(*) FROM carbon_stats WHERE stat_date = #{date} AND ((road IS NULL AND #{road} IS NULL) OR road = #{road})")

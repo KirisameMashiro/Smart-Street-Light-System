@@ -76,8 +76,31 @@ public class CarbonServiceImpl implements CarbonService {
     private final SystemConfigMapper systemConfigMapper;
 
     @Override
-    public Map<String, Object> getSummary() {
-        Map<String, Object> stats = carbonStatsMapper.selectSummary();
+    public Map<String, Object> getSummary(String type, String period) {
+        Map<String, Object> stats;
+        if ("month".equals(type) && period != null && !period.isEmpty()) {
+            // 月度汇总：查询该月数据
+            String[] parts = period.split("-");
+            if (parts.length == 2) {
+                int year = Integer.parseInt(parts[0]);
+                int month = Integer.parseInt(parts[1]);
+                LocalDate start = LocalDate.of(year, month, 1);
+                LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+                stats = carbonStatsMapper.selectSummaryByDateRange(start, end);
+            } else {
+                stats = carbonStatsMapper.selectSummary();
+            }
+        } else if ("year".equals(type) && period != null && !period.isEmpty()) {
+            // 年度汇总：查询该年数据
+            int year = Integer.parseInt(period);
+            LocalDate start = LocalDate.of(year, 1, 1);
+            LocalDate end = LocalDate.of(year, 12, 31);
+            stats = carbonStatsMapper.selectSummaryByDateRange(start, end);
+        } else {
+            // 无筛选：返回全部汇总
+            stats = carbonStatsMapper.selectSummary();
+        }
+
         if (stats == null) stats = new HashMap<>();
 
         double saved = ((Number) stats.getOrDefault("totalSaved", 0.0)).doubleValue();
@@ -153,8 +176,28 @@ public class CarbonServiceImpl implements CarbonService {
     }
 
     @Override
-    public List<Map<String, Object>> getRoadCompare() {
-        List<Map<String, Object>> roadStats = carbonStatsMapper.selectStatsByRoad();
+    public List<Map<String, Object>> getRoadCompare(String type, String period) {
+        List<Map<String, Object>> roadStats;
+        if ("month".equals(type) && period != null && !period.isEmpty()) {
+            String[] parts = period.split("-");
+            if (parts.length == 2) {
+                int year = Integer.parseInt(parts[0]);
+                int month = Integer.parseInt(parts[1]);
+                LocalDate start = LocalDate.of(year, month, 1);
+                LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
+                roadStats = carbonStatsMapper.selectStatsByRoadDateRange(start, end);
+            } else {
+                roadStats = carbonStatsMapper.selectStatsByRoad();
+            }
+        } else if ("year".equals(type) && period != null && !period.isEmpty()) {
+            int year = Integer.parseInt(period);
+            LocalDate start = LocalDate.of(year, 1, 1);
+            LocalDate end = LocalDate.of(year, 12, 31);
+            roadStats = carbonStatsMapper.selectStatsByRoadDateRange(start, end);
+        } else {
+            roadStats = carbonStatsMapper.selectStatsByRoad();
+        }
+
         if (roadStats == null) return new ArrayList<>();
 
         List<Map<String, Object>> result = new ArrayList<>();
@@ -162,6 +205,8 @@ public class CarbonServiceImpl implements CarbonService {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("road", row.get("road"));
             item.put("savedEnergy", ((Number) row.getOrDefault("savedEnergy", 0)).doubleValue());
+            item.put("reducedCo2", ((Number) row.getOrDefault("co2Reduction", 0)).doubleValue());
+            item.put("lightCount", ((Number) row.getOrDefault("lightCount", 0)).intValue());
             result.add(item);
         }
         return result;
