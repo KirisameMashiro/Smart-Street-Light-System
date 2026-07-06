@@ -294,7 +294,7 @@ import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getLightPage, getAllLights } from '@/api/light'
+import { getLightPage, getAllLights, getLightById } from '@/api/light'
 import { getLatestSensorData } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 
@@ -611,10 +611,17 @@ function updateMapBounds() {
 const detailDialog = ref(false)
 const selectedLight = ref(null)
 
-function onMarkerClick(light) {
+async function onMarkerClick(light) {
   selectedLight.value = light
-  loadSensorData([light])
   detailDialog.value = true
+  // 弹窗打开时立即获取最新详情（含 brightness 等字段）
+  try {
+    const res = await getLightById(light.id)
+    if (res.data) {
+      selectedLight.value = { ...light, ...res.data }
+    }
+  } catch (e) {}
+  loadSensorData([selectedLight.value || light])
 }
 
 function goToDetail() {
@@ -669,12 +676,19 @@ async function refreshAll(reprobe = false) {
         broadcastLightUpdate(l.id)
       }
     })
-    // 若弹窗打开，同步更新弹窗内选中的路灯数据
+    // 若弹窗打开，同步更新弹窗内选中的路灯数据（并获取最新详情含 brightness）
     if (detailDialog.value && selectedLight.value) {
       const updated = allLights.value.find((l) => l.id === selectedLight.value.id)
       if (updated) {
         selectedLight.value = updated
         loadSensorData([updated])
+        // 额外获取最新详情确保 brightness 等字段同步
+        try {
+          const detailRes = await getLightById(updated.id)
+          if (detailRes.data) {
+            selectedLight.value = { ...updated, ...detailRes.data }
+          }
+        } catch (e) {}
       }
     }
   } catch (e) {
