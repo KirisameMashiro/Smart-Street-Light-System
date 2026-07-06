@@ -59,8 +59,15 @@
         <el-table-column label="目标亮度" width="100">
           <template #default="{ row }">{{ row.brightness ?? 0 }}%</template>
         </el-table-column>
-        <el-table-column prop="targetGroup" label="适用分组" width="110">
-          <template #default="{ row }">{{ row.targetGroup || '-' }}</template>
+        <el-table-column label="适用分组" width="140">
+          <template #default="{ row }">
+            <template v-if="row.district || row.road">
+              <span v-if="row.district">{{ row.district }}</span>
+              <span v-if="row.district && row.road" class="text-muted">·</span>
+              <span v-if="row.road">{{ row.road }}</span>
+            </template>
+            <span v-else class="text-muted">-</span>
+          </template>
         </el-table-column>
         <el-table-column label="启用" width="90">
           <template #default="{ row }">
