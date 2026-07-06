@@ -11,11 +11,10 @@ import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
-/**
- * MQTT 连接配置
- * 连接 EMQX Broker，订阅传感器数据 topic，将消息转发到 SensorDataIngestService
- */
+import java.util.concurrent.TimeUnit;
+
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
@@ -40,6 +39,10 @@ public class MqttConfig {
     private int qos;
 
     private MqttClient mqttClient;
+    private final ThreadPoolTaskScheduler taskScheduler;
+    private volatile boolean connecting = false;
+
+    private static final int MAX_RETRY_DELAY_SECONDS = 60;
 
     @PostConstruct
     public void init() {
@@ -47,8 +50,25 @@ public class MqttConfig {
             log.info("MQTT 未启用 (mqtt.enabled=false)，跳过连接");
             return;
         }
+        // 异步启动连接，不阻塞应用启动
+        taskScheduler.submit(this::connectWithRetry);
+    }
+
+    /**
+     * 连接 MQTT Broker，失败时自动重试
+     */
+    private synchronized void connectWithRetry() {
+        if (connecting) return;
+        connecting = true;
 
         try {
+            if (mqttClient != null) {
+                try {
+                    mqttClient.disconnect();
+                    mqttClient.close();
+                } catch (MqttException ignored) {}
+            }
+
             mqttClient = new MqttClient(brokerUrl, clientId, new MemoryPersistence());
 
             MqttConnectOptions options = new MqttConnectOptions();
@@ -60,7 +80,10 @@ public class MqttConfig {
             mqttClient.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
-                    log.warn("MQTT 连接断开: {}", cause.getMessage());
+                    log.warn("MQTT 连接断开: {}, 将自动重连...", cause.getMessage());
+                    // Paho 的 setAutomaticReconnect(true) 会处理重连，
+                    // 但如果重连也失败，我们兜底重试
+                    scheduleRetry(MAX_RETRY_DELAY_SECONDS);
                 }
 
                 @Override
@@ -69,28 +92,29 @@ public class MqttConfig {
                 }
 
                 @Override
-                public void deliveryComplete(IMqttDeliveryToken token) {
-                    // 发布完成回调，本项目仅订阅，无需处理
-                }
+                public void deliveryComplete(IMqttDeliveryToken token) {}
             });
 
             mqttClient.connect(options);
-
-            // 订阅传感器数据 topic（通配符 + 匹配所有路灯ID）
             String sensorTopic = topicPrefix + "sensor/+";
             mqttClient.subscribe(sensorTopic, qos);
 
             log.info("MQTT 连接成功: broker={}, topic={}", brokerUrl, sensorTopic);
+            connecting = false;
+
         } catch (MqttException e) {
-            log.error("MQTT 连接失败: broker={}, error={}", brokerUrl, e.getMessage());
-            // 连接失败不阻塞应用启动
-            mqttClient = null;
+            log.warn("MQTT 连接失败: broker={}, error={}, 将在 {} 秒后重试...",
+                    brokerUrl, e.getMessage(), MAX_RETRY_DELAY_SECONDS);
+            connecting = false;
+            scheduleRetry(MAX_RETRY_DELAY_SECONDS);
         }
     }
 
-    /**
-     * 处理收到的 MQTT 消息
-     */
+    private void scheduleRetry(int delaySeconds) {
+        taskScheduler.schedule(() -> connectWithRetry(),
+                java.time.Instant.now().plusSeconds(delaySeconds));
+    }
+
     private void handleMessage(String topic, MqttMessage message) {
         try {
             String payload = new String(message.getPayload());

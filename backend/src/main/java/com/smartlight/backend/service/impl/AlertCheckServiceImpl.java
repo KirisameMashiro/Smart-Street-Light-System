@@ -7,6 +7,7 @@ import com.smartlight.backend.mapper.AlertRuleMapper;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.SensorDataMapper;
 import com.smartlight.backend.service.AlertCheckService;
+import com.smartlight.backend.service.AlertEmailService;
 import com.smartlight.backend.service.AlertRuleEvaluator;
 import com.smartlight.backend.service.AlertRuleEvaluator.EvaluateResult;
 import com.smartlight.backend.websocket.AlertWebSocketHandler;
@@ -40,6 +41,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     private final LightMapper lightMapper;
     private final AlertRuleEvaluator alertRuleEvaluator;
     private final AlertWebSocketHandler alertWebSocketHandler;
+    private final AlertEmailService alertEmailService;
 
     @Value("${alert.dedup.minutes:30}")
     private int dedupWindowMinutes;
@@ -91,12 +93,12 @@ public class AlertCheckServiceImpl implements AlertCheckService {
             return;
         }
 
+        List<Alert> batchAlerts = new java.util.ArrayList<>();
         int alertCount = 0;
         for (Light light : lights) {
-            // 获取该路灯最新传感器数据
             SensorData latest = sensorDataMapper.selectLatestByLightId(light.getId());
             if (latest == null) {
-                continue; // 无传感器数据，跳过
+                continue;
             }
 
             for (AlertRule rule : enabledRules) {
@@ -106,14 +108,29 @@ public class AlertCheckServiceImpl implements AlertCheckService {
                         log.debug("告警去重: lightId={}, alertType={}, 跳过", light.getId(), result.alertType);
                         continue;
                     }
-                    saveAndPush(light.getId(), result, rule);
-                    alertCount++;
+                    Alert alert = saveAlert(light.getId(), result, rule);
+                    if (alert != null) {
+                        batchAlerts.add(alert);
+                        alertCount++;
+                        // WebSocket 推送（每条单独推送）
+                        try {
+                            alertWebSocketHandler.pushAlert(alert);
+                        } catch (Exception e) {
+                            log.error("WebSocket 推送告警失败: id={}, error={}", alert.getId(), e.getMessage());
+                        }
+                    }
                 }
             }
         }
 
         if (alertCount > 0) {
             log.info("定时告警检查完成: 生成 {} 条新告警", alertCount);
+            // 定时检测：批量合并发送邮件
+            try {
+                alertEmailService.sendBatchAlertEmail(batchAlerts);
+            } catch (Exception e) {
+                log.error("批量发送告警邮件失败: count={}, error={}", batchAlerts.size(), e.getMessage());
+            }
         }
     }
 
@@ -131,25 +148,40 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     }
 
     /**
-     * 保存告警并推送 WebSocket
+     * 保存告警并推送 WebSocket（不含邮件，用于定时检测批量聚合）
      */
-    private void saveAndPush(Long lightId, EvaluateResult result, AlertRule rule) {
+    private Alert saveAlert(Long lightId, EvaluateResult result, AlertRule rule) {
         Alert alert = new Alert();
         alert.setLightId(lightId);
         alert.setAlertType(result.alertType);
         alert.setAlertLevel(result.alertLevel);
         alert.setMessage(result.message);
-        alert.setStatus(0); // 未处理
+        alert.setStatus(0);
 
         alertMapper.insert(alert);
         log.info("告警已生成: id={}, lightId={}, type={}, level={}, message={}",
                 alert.getId(), lightId, result.alertType, result.alertLevel, result.message);
+        return alert;
+    }
 
-        // WebSocket 推送新告警
+    /**
+     * 保存告警、推送 WebSocket 并发送邮件（用于实时检测）
+     */
+    private void saveAndPush(Long lightId, EvaluateResult result, AlertRule rule) {
+        Alert alert = saveAlert(lightId, result, rule);
+
+        // WebSocket 推送
         try {
             alertWebSocketHandler.pushAlert(alert);
         } catch (Exception e) {
             log.error("WebSocket 推送告警失败: id={}, error={}", alert.getId(), e.getMessage());
+        }
+
+        // 邮件发送
+        try {
+            alertEmailService.sendAlertEmail(alert);
+        } catch (Exception e) {
+            log.error("邮件发送告警失败: id={}, error={}", alert.getId(), e.getMessage());
         }
     }
 }
