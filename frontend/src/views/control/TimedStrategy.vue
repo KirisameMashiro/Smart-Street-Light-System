@@ -20,21 +20,41 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="适用星期" min-width="180">
+        <el-table-column label="适用时间" min-width="220">
           <template #default="{ row }">
-            <template v-if="row.weekdays && row.weekdays.length">
-              <el-tag
-                v-for="w in row.weekdays"
-                :key="w"
-                size="small"
-                style="margin-right: 4px"
-              >{{ weekdayLabel(w) }}</el-tag>
+            <!-- 时间段类型：显示完整时间段（日期 + 时段） -->
+            <template v-if="row.type === 'timed'">
+              <div class="time-slot">
+                <span class="time-range">
+                  <template v-if="row.startDate || row.endDate">
+                    {{ row.startDate || '...' }} ~ {{ row.endDate || '...' }}
+                  </template>
+                </span>
+                <span class="time-range time-daily" v-if="row.startTime && row.endTime">
+                  <el-icon><Clock /></el-icon>
+                  {{ row.startTime }} ~ {{ row.endTime }}
+                </span>
+              </div>
             </template>
-            <span v-else class="text-muted">-</span>
+            <!-- 默认类型：显示适用星期 + 每日时段 -->
+            <template v-else>
+              <div class="weekday-list">
+                <template v-if="row.weekdays && row.weekdays.length">
+                  <el-tag
+                    v-for="w in row.weekdays"
+                    :key="w"
+                    size="small"
+                    style="margin-right: 4px"
+                  >{{ weekdayFullLabel(w) }}</el-tag>
+                </template>
+                <span v-else class="text-muted">每天</span>
+              </div>
+              <div class="time-daily" v-if="row.startTime && row.endTime">
+                <el-icon><Clock /></el-icon>
+                {{ row.startTime }} ~ {{ row.endTime }}
+              </div>
+            </template>
           </template>
-        </el-table-column>
-        <el-table-column label="时段" width="160">
-          <template #default="{ row }">{{ row.startTime || '--' }} ~ {{ row.endTime || '--' }}</template>
         </el-table-column>
         <el-table-column label="目标亮度" width="100">
           <template #default="{ row }">{{ row.brightness ?? 0 }}%</template>
@@ -165,7 +185,7 @@
 defineOptions({ name: 'TimedStrategy' })
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh, Clock } from '@element-plus/icons-vue'
 import {
   getStrategyPage,
   addStrategy,
@@ -193,6 +213,10 @@ const query = reactive({
 
 function weekdayLabel(val) {
   return WEEKDAY_OPTIONS.find((o) => o.value === val)?.label || val
+}
+
+function weekdayFullLabel(val) {
+  return '每周' + weekdayLabel(val)
 }
 
 async function loadData() {
@@ -381,3 +405,37 @@ async function onSubmit() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.time-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-range {
+  font-size: 13px;
+  color: #303133;
+  font-weight: 500;
+}
+
+.time-daily {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #606266;
+}
+
+.time-daily .el-icon {
+  font-size: 12px;
+  color: #909399;
+}
+
+.weekday-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+</style>

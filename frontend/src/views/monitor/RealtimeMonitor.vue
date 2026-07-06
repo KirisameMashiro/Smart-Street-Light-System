@@ -249,7 +249,7 @@
       </div>
       <template #footer>
         <el-button @click="detailDialog = false">关闭</el-button>
-        <el-button type="primary" @click="$router.push(`/devices/${selectedLight?.id}`)">查看详情</el-button>
+        <el-button type="primary" @click="goToDetail">查看详情</el-button>
       </template>
     </el-dialog>
 
@@ -290,6 +290,7 @@
 <script setup>
 defineOptions({ name: 'RealtimeMonitor' })
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -301,6 +302,7 @@ const loading = ref(false)
 const mode = ref('list')
 const autoRefresh = ref(false)
 const interval = ref(5)
+const router = useRouter()
 
 const page = ref({ records: [], total: 0 })
 const allLights = ref([])
@@ -615,6 +617,26 @@ function onMarkerClick(light) {
   detailDialog.value = true
 }
 
+function goToDetail() {
+  if (!selectedLight.value) return
+  const id = selectedLight.value.id
+  detailDialog.value = false
+  router.push({ path: `/devices/${id}`, query: { from: 'monitor' } })
+}
+
+// ====== 跨页面同步：通过 BroadcastChannel 通知其他页面/标签页刷新 ======
+const syncChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('smartlight_light_detail')
+  : null
+
+function broadcastLightUpdate(lightId) {
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'light:updated', lightId, ts: Date.now() })
+    } catch (e) {}
+  }
+}
+
 async function refreshAll(reprobe = false) {
   if (reprobe) sensorApiAvailable.value = null
   loading.value = true
@@ -629,12 +651,31 @@ async function refreshAll(reprobe = false) {
       }),
       getAllLights()
     ])
-    page.value = pageRes.data || { records: [], total: 0 }
-    allLights.value = listRes.data || []
+    const newPage = pageRes.data || { records: [], total: 0 }
+    const newAll = listRes.data || []
+    // 检测列表中状态是否有变化（用于跨标签/页面同步通知）
+    const prevStatusMap = new Map(allLights.value.map((l) => [l.id, l.status]))
+    page.value = newPage
+    allLights.value = newAll
     await loadSensorData(allLights.value)
     if (mode.value === 'map') {
       await nextTick()
       renderMarkers()
+    }
+    // 状态有变化的设备广播更新
+    allLights.value.forEach((l) => {
+      const prev = prevStatusMap.get(l.id)
+      if (prev !== undefined && prev !== l.status) {
+        broadcastLightUpdate(l.id)
+      }
+    })
+    // 若弹窗打开，同步更新弹窗内选中的路灯数据
+    if (detailDialog.value && selectedLight.value) {
+      const updated = allLights.value.find((l) => l.id === selectedLight.value.id)
+      if (updated) {
+        selectedLight.value = updated
+        loadSensorData([updated])
+      }
     }
   } catch (e) {
     page.value = { records: [], total: 0 }
@@ -783,6 +824,15 @@ onMounted(async () => {
   await refreshAll(false)
   startPolling()
   window.addEventListener('resize', onResize)
+  // 监听其他标签/页面发来的更新广播，触发本页面同步刷新
+  if (syncChannel) {
+    syncChannel.addEventListener('message', (e) => {
+      const msg = e.data
+      if (msg && msg.type === 'light:updated') {
+        refreshAll(false)
+      }
+    })
+  }
 })
 
 onUnmounted(() => {
@@ -791,6 +841,9 @@ onUnmounted(() => {
   if (mapInstance) {
     mapInstance.remove()
     mapInstance = null
+  }
+  if (syncChannel) {
+    syncChannel.close()
   }
 })
 </script>

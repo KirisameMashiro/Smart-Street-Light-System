@@ -2,7 +2,7 @@
   <div class="page-container">
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:12px">
-        <el-button :icon="ArrowLeft" @click="$router.push('/devices/archive')">返回</el-button>
+        <el-button :icon="ArrowLeft" @click="onBack">返回</el-button>
         <h2 class="page-title">路灯详情</h2>
       </div>
       <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
@@ -149,8 +149,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Refresh, InfoFilled } from '@element-plus/icons-vue'
 import { getLightById, setLightBrightness } from '@/api/light'
@@ -163,7 +163,34 @@ import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
 
 const route = useRoute()
+const router = useRouter()
 const lightId = Number(route.params.id)
+
+// 根据打开来源决定返回目标
+const fromPath = ref(route.query.from || '')
+
+function resolveBackTarget() {
+  const from = String(fromPath.value || '')
+  if (from === 'monitor') return '/monitor/realtime'
+  if (from === 'ledger') return '/devices/ledger'
+  if (from === 'archive') return '/devices/archive'
+  if (from === 'remote') return '/control/remote'
+  if (from === 'predict') return '/ai/predict'
+  if (from === 'assistant') return '/ai/assistant'
+  // 默认回设备档案
+  return '/devices/archive'
+}
+
+const backTarget = ref(resolveBackTarget())
+
+function onBack() {
+  // 优先使用浏览器历史回到上一页
+  if (window.history.length > 1 && document.referrer && document.referrer.includes(window.location.host)) {
+    router.back()
+    return
+  }
+  router.push(backTarget.value)
+}
 
 const loading = ref(false)
 const light = ref({})
@@ -221,13 +248,79 @@ async function onBrightnessChange(val) {
   try {
     await setLightBrightness(lightId, val)
     ElMessage.success('亮度已更新')
+    broadcastLightUpdate(lightId)
   } catch (e) {
     light.value.brightness = oldVal
     ElMessage.error('亮度更新失败')
   }
 }
 
-onMounted(loadAll)
+// ====== 跨页面数据同步（与监控弹窗、远程控制等联动） ======
+const syncChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('smartlight_light_detail')
+  : null
+
+function broadcastLightUpdate(id) {
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'light:updated', lightId: id, ts: Date.now() })
+    } catch (e) {}
+  }
+}
+
+function handleSyncMessage(e) {
+  const msg = e.data
+  if (!msg || msg.type !== 'light:updated') return
+  if (Number(msg.lightId) !== lightId) return
+  // 立即重新拉取数据，实现两页面同步刷新
+  loadAll()
+}
+
+if (syncChannel) {
+  syncChannel.addEventListener('message', handleSyncMessage)
+}
+
+// ====== 定时轮询：每 10 秒自动刷新，页面不可见时暂停 ======
+const POLL_INTERVAL = 10000
+let pollTimer = null
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => {
+    loadAll()
+  }, POLL_INTERVAL)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+function onVisibilityChange() {
+  if (document.hidden) {
+    stopPolling()
+  } else {
+    loadAll()
+    startPolling()
+  }
+}
+
+onMounted(() => {
+  loadAll()
+  startPolling()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+onUnmounted(() => {
+  stopPolling()
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (syncChannel) {
+    syncChannel.removeEventListener('message', handleSyncMessage)
+    syncChannel.close()
+  }
+})
 </script>
 
 <style scoped>
