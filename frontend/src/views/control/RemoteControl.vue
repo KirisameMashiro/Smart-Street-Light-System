@@ -179,6 +179,18 @@ import {
 } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
+const syncChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('smartlight_light_detail')
+  : null
+
+function broadcastLightUpdate() {
+  if (syncChannel) {
+    try {
+      syncChannel.postMessage({ type: 'light:updated', ts: Date.now() })
+    } catch (e) {}
+  }
+}
+
 const loading = ref(false)
 const dimming = ref(false)
 const allData = ref([])
@@ -284,6 +296,7 @@ async function onBatchSwitch(status) {
     ElMessage.success(message)
     await logOperation('batch_switch', `批量${text} ${validIds.length} 盏路灯`, '成功')
     loadData()
+    broadcastLightUpdate()
   } catch (e) {
     await logOperation('batch_switch', `批量${text} ${validIds.length} 盏路灯`, '失败')
   }
@@ -317,6 +330,7 @@ async function onGroupSwitch(group, status) {
     ElMessage.success(message)
     await logOperation('batch_switch', `分组${text}「${group.label}」${validIds.length} 盏路灯`, '成功')
     loadData()
+    broadcastLightUpdate()
   } catch (e) {
     await logOperation('batch_switch', `分组${text}「${group.label}」${validIds.length} 盏路灯`, '失败')
   }
@@ -331,6 +345,7 @@ async function onSingleSwitch(row, status) {
     ElMessage.success(`已${text}「${name}」`)
     await logOperation(status === 1 ? 'switch_on' : 'switch_off', `${text}「${name}」`, '成功')
     loadData()
+    broadcastLightUpdate()
   } catch (e) {
     await logOperation(status === 1 ? 'switch_on' : 'switch_off', `${text}「${name}」`, '失败')
   }
@@ -347,6 +362,7 @@ async function onApplyDimming() {
     ElMessage.success(`已设置「${name}」亮度为 ${dimBrightness.value}%`)
     await logOperation('dimming', `设置「${name}」亮度为 ${dimBrightness.value}%`, '成功')
     loadData()
+    broadcastLightUpdate()
   } catch (e) {
     await logOperation('dimming', `设置「${name}」亮度为 ${dimBrightness.value}%`, '失败')
   } finally {

@@ -91,6 +91,9 @@ public class TimedStrategyScheduler {
         
         int count = 0;
         for (Light light : lights) {
+            if (light.getStatus() == 2) {
+                continue;
+            }
             if (light.getStatus() != 1 || !strategy.getBrightness().equals(light.getBrightness())) {
                 light.setStatus(1);
                 light.setBrightness(strategy.getBrightness());
@@ -112,6 +115,9 @@ public class TimedStrategyScheduler {
         
         int count = 0;
         for (Light light : lights) {
+            if (light.getStatus() == 2) {
+                continue;
+            }
             if (light.getStatus() != 0) {
                 light.setStatus(0);
                 light.setBrightness(0);

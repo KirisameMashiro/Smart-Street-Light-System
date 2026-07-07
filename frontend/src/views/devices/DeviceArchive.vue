@@ -285,7 +285,7 @@
 
 <script setup>
 defineOptions({ name: 'DeviceArchive' })
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus,
@@ -308,6 +308,10 @@ import {
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
+
+const syncChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('smartlight_light_detail')
+  : null
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -553,5 +557,19 @@ async function onSubmit() {
 onMounted(async () => {
   await loadOptions()
   loadData()
+  if (syncChannel) {
+    syncChannel.addEventListener('message', (e) => {
+      const msg = e.data
+      if (msg && msg.type === 'light:updated') {
+        loadData()
+      }
+    })
+  }
+})
+
+onUnmounted(() => {
+  if (syncChannel) {
+    syncChannel.close()
+  }
 })
 </script>
