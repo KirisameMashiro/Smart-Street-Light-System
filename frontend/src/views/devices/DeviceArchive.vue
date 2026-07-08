@@ -39,7 +39,7 @@
         placeholder="行政区"
         clearable
         style="width: 140px"
-        @change="onSearch"
+        @change="onDistrictChange"
       >
         <el-option
           v-for="o in districtOptions"
@@ -56,7 +56,7 @@
         @change="onSearch"
       >
         <el-option
-          v-for="o in roadOptions"
+          v-for="o in filteredRoadOptions"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -175,7 +175,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="行政区" prop="district">
-              <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%">
+              <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%" @change="onFormDistrictChange">
                 <el-option
                   v-for="o in districtOptions"
                   :key="o.value"
@@ -189,7 +189,7 @@
             <el-form-item label="路段" prop="road">
               <el-select v-model="form.road" placeholder="请选择" clearable style="width:100%">
                 <el-option
-                  v-for="o in roadOptions"
+                  v-for="o in formFilteredRoadOptions"
                   :key="o.value"
                   :label="o.label"
                   :value="o.value"
@@ -285,7 +285,7 @@
 
 <script setup>
 defineOptions({ name: 'DeviceArchive' })
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus,
@@ -303,7 +303,8 @@ import {
   batchSwitchLight,
   getDistricts,
   getRoads,
-  getDeviceTypes
+  getDeviceTypes,
+  getAllLights
 } from '@/api/light'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
@@ -332,17 +333,46 @@ const query = reactive({
 const districtOptions = ref([])
 const roadOptions = ref([])
 const deviceTypeOptions = ref([])
+const districtRoadMap = ref({})
+
+const filteredRoadOptions = computed(() => {
+  if (!query.district) return roadOptions.value
+  return (districtRoadMap.value[query.district] || []).map(r => ({ value: r, label: r }))
+})
+
+const formDistrictRoadMap = ref({})
+
+const formFilteredRoadOptions = computed(() => {
+  if (!form.district) return roadOptions.value
+  return (formDistrictRoadMap.value[form.district] || []).map(r => ({ value: r, label: r }))
+})
 
 async function loadOptions() {
   try {
-    const [dRes, rRes, tRes] = await Promise.all([
+    const [dRes, rRes, tRes, lightsRes] = await Promise.all([
       getDistricts(),
       getRoads(),
-      getDeviceTypes()
+      getDeviceTypes(),
+      getAllLights()
     ])
     districtOptions.value = (dRes.data || []).map((v) => ({ value: v, label: v }))
     roadOptions.value = (rRes.data || []).map((v) => ({ value: v, label: v }))
     deviceTypeOptions.value = (tRes.data || []).map((v) => ({ value: v, label: v }))
+    
+    const map = {}
+    const lights = lightsRes.data || []
+    lights.forEach(light => {
+      if (light.district && light.road) {
+        if (!map[light.district]) {
+          map[light.district] = []
+        }
+        if (!map[light.district].includes(light.road)) {
+          map[light.district].push(light.road)
+        }
+      }
+    })
+    districtRoadMap.value = map
+    formDistrictRoadMap.value = map
   } catch (e) {}
 }
 
@@ -359,6 +389,16 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function onDistrictChange() {
+  query.road = undefined
+  query.pageNum = 1
+  loadData()
+}
+
+function onFormDistrictChange() {
+  form.road = undefined
 }
 
 function onSearch() {

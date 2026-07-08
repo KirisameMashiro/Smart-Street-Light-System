@@ -31,21 +31,23 @@
           <input 
             v-model="searchText" 
             class="search-input" 
-            placeholder="搜索路灯编号"
+            placeholder="搜索路灯编号/名称"
+            @input="onSearch"
           />
+          <text v-if="searchText" class="clear-icon" @click="clearSearch">✕</text>
         </view>
       </view>
 
       <view class="filter-row">
-        <picker :value="districtIndex" :range="districts" @change="onDistrictChange">
+        <picker :value="districtIndex" :range="districtOptions" @change="onDistrictChange">
           <view class="filter-picker">
-            {{ districts[districtIndex] || '选择行政区' }}
+            {{ districtOptions[districtIndex] || '选择行政区' }}
             <text class="arrow">▼</text>
           </view>
         </picker>
-        <picker :value="roadIndex" :range="roads" @change="onRoadChange">
+        <picker :value="roadIndex" :range="filteredRoads" @change="onRoadChange">
           <view class="filter-picker">
-            {{ roads[roadIndex] || '选择路段' }}
+            {{ filteredRoads[roadIndex] || '选择路段' }}
             <text class="arrow">▼</text>
           </view>
         </picker>
@@ -55,16 +57,20 @@
         <button class="batch-btn" @click="selectAll">
           {{ selectAllChecked ? '取消全选' : '全选' }}
         </button>
-        <button class="batch-btn primary" @click="batchSwitch(1)">
+        <button class="batch-btn primary" @click="handleBatchSwitch(1)">
           批量开灯
         </button>
-        <button class="batch-btn danger" @click="batchSwitch(2)">
+        <button class="batch-btn danger" @click="handleBatchSwitch(0)">
           批量关灯
         </button>
       </view>
 
       <view class="light-list">
-        <view v-for="light in lights" :key="light.id" class="light-item">
+        <view v-if="filteredLights.length === 0" class="empty-tip">
+          <text class="empty-icon">💡</text>
+          <text class="empty-text">暂无路灯数据</text>
+        </view>
+        <view v-for="light in filteredLights" :key="light.id" class="light-item">
           <view class="checkbox" :class="{ checked: selectedIds.includes(light.id) }" @click="toggleSelect(light.id)">
             <text v-if="selectedIds.includes(light.id)">✓</text>
           </view>
@@ -139,22 +145,53 @@
           </view>
           <view class="form-item">
             <text class="form-label">适用时间</text>
-            <input v-model="strategyForm.timeRange" class="form-input" placeholder="如：19:00-06:00" />
+            <view class="time-input-row">
+              <input v-model="strategyForm.startHour" class="time-input" type="number" placeholder="hh" maxlength="2" />
+              <text class="time-separator">:</text>
+              <input v-model="strategyForm.startMinute" class="time-input" type="number" placeholder="mm" maxlength="2" />
+              <text class="time-dash">—</text>
+              <input v-model="strategyForm.endHour" class="time-input" type="number" placeholder="hh" maxlength="2" />
+              <text class="time-separator">:</text>
+              <input v-model="strategyForm.endMinute" class="time-input" type="number" placeholder="mm" maxlength="2" />
+            </view>
+            <text class="time-tip">小时: 0-23，分钟: 0-59</text>
           </view>
-          <view class="form-item">
-            <text class="form-label">适用星期</text>
-            <view class="week-select">
-              <view 
-                v-for="day in weekdays" 
-                :key="day.value" 
-                class="week-item"
-                :class="{ selected: strategyForm.weekdays.includes(day.value) }"
-                @click="toggleWeekday(day.value)"
-              >
-                {{ day.label }}
+          <template v-if="strategyForm.type !== 'timed'">
+            <view class="form-item">
+              <text class="form-label">适用星期</text>
+              <view class="week-select">
+                <view 
+                  v-for="day in weekdays" 
+                  :key="day.value" 
+                  class="week-item"
+                  :class="{ selected: strategyForm.weekdays.includes(day.value) }"
+                  @click="toggleWeekday(day.value)"
+                >
+                  {{ day.label }}
+                </view>
               </view>
             </view>
-          </view>
+          </template>
+          <template v-else>
+            <view class="form-item">
+              <text class="form-label">起始日期</text>
+              <picker mode="date" :value="strategyForm.startDate" :min-date="minStartDate" @change="onStartDateChange">
+                <view class="picker-value">
+                  {{ strategyForm.startDate || '请选择' }}
+                  <text class="arrow">▼</text>
+                </view>
+              </picker>
+            </view>
+            <view class="form-item">
+              <text class="form-label">结束日期</text>
+              <picker mode="date" :value="strategyForm.endDate" :min-date="strategyForm.startDate" @change="onEndDateChange">
+                <view class="picker-value">
+                  {{ strategyForm.endDate || '请选择' }}
+                  <text class="arrow">▼</text>
+                </view>
+              </picker>
+            </view>
+          </template>
           <view class="form-item">
             <text class="form-label">目标亮度</text>
             <input v-model="strategyForm.brightness" class="form-input" type="number" placeholder="0-100" />
@@ -170,15 +207,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getAllLights, getDistricts, getRoads, type Light } from '@/api/light'
+import { ref, computed, onMounted } from 'vue'
+import { getAllLights, batchSwitch as batchSwitchApi, type Light } from '@/api/light'
 
 const currentTab = ref('remote')
 const searchText = ref('')
-const loading = ref(false)
 
-const districts = ref<string[]>([])
-const roads = ref<string[]>([])
+const districtOptions = ref<string[]>([])
+const roadOptions = ref<string[]>([])
 const districtIndex = ref(0)
 const roadIndex = ref(0)
 
@@ -203,7 +239,12 @@ const showAddRule = ref(false)
 const strategyForm = ref({
   name: '',
   type: 'default',
-  timeRange: '',
+  startHour: '',
+  startMinute: '',
+  endHour: '',
+  endMinute: '',
+  startDate: '',
+  endDate: '',
   weekdays: [] as number[],
   brightness: 50
 })
@@ -218,43 +259,126 @@ const thresholdRules = ref([
   { id: 2, name: '温度保护', condition: '温度 > 60°C', enabled: false }
 ])
 
+const districtRoadMap: Record<string, string[]> = {}
+const roadDistrictMap: Record<string, string> = {}
+
+const selectedDistrict = computed(() => districtOptions.value[districtIndex.value] || '')
+const selectedRoad = computed(() => filteredRoads.value[roadIndex.value] || '')
+
+const filteredRoads = computed(() => {
+  if (!selectedDistrict.value) return roadOptions.value
+  return districtRoadMap[selectedDistrict.value] || []
+})
+
+const filteredLights = computed(() => {
+  let result = lights.value
+  
+  if (searchText.value) {
+    const keyword = searchText.value.toLowerCase()
+    result = result.filter(l => 
+      (l.lightCode && l.lightCode.toLowerCase().includes(keyword)) ||
+      (l.lightName && l.lightName.toLowerCase().includes(keyword))
+    )
+  }
+  
+  if (selectedDistrict.value) {
+    result = result.filter(l => l.district === selectedDistrict.value)
+  }
+  
+  if (selectedRoad.value) {
+    result = result.filter(l => l.road === selectedRoad.value)
+  }
+  
+  return result
+})
+
+const minStartDate = computed(() => {
+  const today = new Date()
+  today.setDate(today.getDate() + 1)
+  return today.toISOString().slice(0, 10)
+})
+
 onMounted(() => {
   fetchLights()
-  fetchOptions()
 })
 
 async function fetchLights() {
   try {
     const res = await getAllLights()
     lights.value = res.data
+    buildDistrictRoadMap()
   } catch (e) {
     console.error('获取路灯数据失败', e)
   }
 }
 
-async function fetchOptions() {
-  try {
-    const [districtRes, roadRes] = await Promise.all([getDistricts(), getRoads()])
-    districts.value = districtRes.data || []
-    roads.value = roadRes.data || []
-  } catch (e) {
-    console.error('获取选项数据失败', e)
-  }
+function buildDistrictRoadMap() {
+  Object.keys(districtRoadMap).forEach(key => delete districtRoadMap[key])
+  Object.keys(roadDistrictMap).forEach(key => delete roadDistrictMap[key])
+  
+  districtOptions.value = []
+  roadOptions.value = []
+  
+  const districtSet = new Set<string>()
+  const roadSet = new Set<string>()
+  
+  lights.value.forEach(light => {
+    const district = light.district
+    const road = light.road
+    
+    if (district) {
+      districtSet.add(district)
+      if (!districtRoadMap[district]) {
+        districtRoadMap[district] = []
+      }
+      if (!districtRoadMap[district].includes(road)) {
+        districtRoadMap[district].push(road)
+      }
+    }
+    
+    if (road) {
+      roadSet.add(road)
+      if (!roadDistrictMap[road]) {
+        roadDistrictMap[road] = district
+      }
+    }
+  })
+  
+  districtOptions.value = [''].concat(Array.from(districtSet).sort())
+  roadOptions.value = [''].concat(Array.from(roadSet).sort())
+  
+  districtIndex.value = 0
+  roadIndex.value = 0
 }
 
 function onDistrictChange(e: { detail: { value: number } }) {
   districtIndex.value = e.detail.value
+  roadIndex.value = 0
 }
 
 function onRoadChange(e: { detail: { value: number } }) {
   roadIndex.value = e.detail.value
+  const road = filteredRoads.value[e.detail.value]
+  if (road && road !== '') {
+    const district = roadDistrictMap[road]
+    const idx = districtOptions.value.indexOf(district)
+    if (idx >= 0) {
+      districtIndex.value = idx
+    }
+  }
+}
+
+function onSearch() {}
+
+function clearSearch() {
+  searchText.value = ''
 }
 
 function getStatusClass(status: number) {
   const map: Record<number, string> = {
     1: 'online',
-    2: 'offline',
-    3: 'fault'
+    0: 'offline',
+    2: 'fault'
   }
   return map[status] || 'offline'
 }
@@ -262,8 +386,8 @@ function getStatusClass(status: number) {
 function getStatusText(status: number) {
   const map: Record<number, string> = {
     1: '在线',
-    2: '离线',
-    3: '故障'
+    0: '离线',
+    2: '故障'
   }
   return map[status] || '未知'
 }
@@ -282,25 +406,37 @@ const selectAllChecked = ref(false)
 function selectAll() {
   selectAllChecked.value = !selectAllChecked.value
   if (selectAllChecked.value) {
-    selectedIds.value = lights.value.map(l => l.id)
+    selectedIds.value = filteredLights.value.map(l => l.id)
   } else {
     selectedIds.value = []
   }
 }
 
-function batchSwitch(status: number) {
+async function handleBatchSwitch(status: number) {
   if (selectedIds.value.length === 0) {
     uni.showToast({ title: '请选择路灯', icon: 'none' })
     return
   }
-  uni.showToast({ title: `已${status === 1 ? '开灯' : '关灯'} ${selectedIds.value.length} 盏路灯`, icon: 'success' })
-  selectedIds.value = []
-  selectAllChecked.value = false
+  uni.showLoading({ title: '操作中...' })
+  try {
+    await batchSwitchApi(selectedIds.value, status)
+    uni.showToast({ title: `已${status === 1 ? '开灯' : '关灯'} ${selectedIds.value.length} 盏路灯`, icon: 'success' })
+    await fetchLights()
+  } catch (e: any) {
+    uni.showToast({ title: e.message || '批量操作失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+    selectedIds.value = []
+    selectAllChecked.value = false
+  }
 }
 
 function onStrategyTypeChange(e: { detail: { value: number } }) {
   strategyTypeIndex.value = e.detail.value
   strategyForm.value.type = strategyTypes[e.detail.value] === '时间段' ? 'timed' : 'default'
+  if (strategyForm.value.type === 'default') {
+    strategyForm.value.weekdays = [1, 2, 3, 4, 5]
+  }
 }
 
 function toggleWeekday(value: number) {
@@ -312,8 +448,16 @@ function toggleWeekday(value: number) {
   }
 }
 
+function onStartDateChange(e: { detail: { value: string } }) {
+  strategyForm.value.startDate = e.detail.value
+}
+
+function onEndDateChange(e: { detail: { value: string } }) {
+  strategyForm.value.endDate = e.detail.value
+}
+
 function editStrategy(strategy: any) {
-  uni.showToast({ title: '编辑功能开发中', icon: 'none' })
+  uni.navigateTo({ url: `/pages/strategy/edit?id=${strategy.id}` })
 }
 
 function deleteStrategy(id: number) {
@@ -330,17 +474,62 @@ function deleteStrategy(id: number) {
 }
 
 function saveStrategy() {
-  if (!strategyForm.value.name || !strategyForm.value.timeRange) {
-    uni.showToast({ title: '请填写完整信息', icon: 'none' })
+  if (!strategyForm.value.name) {
+    uni.showToast({ title: '请输入策略名称', icon: 'none' })
     return
   }
+  
+  const startHour = parseInt(strategyForm.value.startHour)
+  const startMinute = parseInt(strategyForm.value.startMinute)
+  const endHour = parseInt(strategyForm.value.endHour)
+  const endMinute = parseInt(strategyForm.value.endMinute)
+  
+  if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
+    uni.showToast({ title: '请完整填写时间', icon: 'none' })
+    return
+  }
+  
+  if (startHour < 0 || startHour > 23 || startMinute < 0 || startMinute > 59) {
+    uni.showToast({ title: '开始时间无效，小时0-23，分钟0-59', icon: 'none' })
+    return
+  }
+  
+  if (endHour < 0 || endHour > 23 || endMinute < 0 || endMinute > 59) {
+    uni.showToast({ title: '结束时间无效，小时0-23，分钟0-59', icon: 'none' })
+    return
+  }
+  
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const timeRange = `${pad(startHour)}:${pad(startMinute)}-${pad(endHour)}:${pad(endMinute)}`
+  
+  if (strategyForm.value.type === 'timed') {
+    if (!strategyForm.value.startDate || !strategyForm.value.endDate) {
+      uni.showToast({ title: '请选择日期范围', icon: 'none' })
+      return
+    }
+    if (strategyForm.value.startDate > strategyForm.value.endDate) {
+      uni.showToast({ title: '结束日期不能早于起始日期', icon: 'none' })
+      return
+    }
+  } else {
+    if (strategyForm.value.weekdays.length === 0) {
+      uni.showToast({ title: '请选择适用星期', icon: 'none' })
+      return
+    }
+  }
+  
   uni.showToast({ title: '保存成功', icon: 'success' })
   showAddStrategy.value = false
   strategyForm.value = {
     name: '',
     type: 'default',
-    timeRange: '',
-    weekdays: [],
+    startHour: '',
+    startMinute: '',
+    endHour: '',
+    endMinute: '',
+    startDate: '',
+    endDate: '',
+    weekdays: [1, 2, 3, 4, 5],
     brightness: 50
   }
 }
@@ -413,6 +602,12 @@ function saveStrategy() {
   font-size: 28rpx;
 }
 
+.clear-icon {
+  font-size: 24rpx;
+  color: #909399;
+  padding: 8rpx;
+}
+
 .filter-row {
   display: flex;
   gap: 16rpx;
@@ -472,6 +667,24 @@ function saveStrategy() {
   background: #fff;
   border-radius: 16rpx;
   overflow: hidden;
+}
+
+.empty-tip {
+  padding: 80rpx 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.empty-icon {
+  font-size: 80rpx;
+  opacity: 0.4;
+  margin-bottom: 16rpx;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: #909399;
 }
 
 .light-item {
@@ -694,6 +907,41 @@ function saveStrategy() {
   background: #f5f7fa;
   border-radius: 12rpx;
   font-size: 28rpx;
+}
+
+.time-input-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.time-input {
+  width: 100rpx;
+  height: 80rpx;
+  padding: 0 16rpx;
+  background: #f5f7fa;
+  border-radius: 12rpx;
+  font-size: 32rpx;
+  text-align: center;
+}
+
+.time-separator {
+  font-size: 32rpx;
+  color: #409eff;
+  font-weight: bold;
+}
+
+.time-dash {
+  font-size: 32rpx;
+  color: #909399;
+  padding: 0 8rpx;
+}
+
+.time-tip {
+  display: block;
+  font-size: 22rpx;
+  color: #909399;
+  margin-top: 8rpx;
 }
 
 .week-select {

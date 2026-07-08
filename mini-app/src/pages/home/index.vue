@@ -102,7 +102,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
-import { getLightStats } from '@/api/light'
+import { getLightStats, getRecentAlerts, type Alert } from '@/api/light'
 
 const userStore = useUserStore()
 const userInfo = ref(userStore.user)
@@ -114,14 +114,11 @@ const stats = ref({
   fault: 0
 })
 
-const recentAlerts = ref([
-  { id: 1, type: 'fault', message: '人民路-001 路灯故障', time: '5分钟前' },
-  { id: 2, type: 'warning', message: '中山路-005 亮度异常', time: '15分钟前' },
-  { id: 3, type: 'fault', message: '和平路-003 通讯中断', time: '30分钟前' }
-])
+const recentAlerts = ref<any[]>([])
 
 onMounted(() => {
   fetchStats()
+  fetchAlerts()
 })
 
 async function fetchStats() {
@@ -130,6 +127,41 @@ async function fetchStats() {
     stats.value = res.data
   } catch (e) {
     console.error('获取统计数据失败', e)
+  }
+}
+
+async function fetchAlerts() {
+  try {
+    const res = await getRecentAlerts()
+    const records = res.data?.records || []
+    recentAlerts.value = records.map((alert: Alert) => ({
+      id: alert.id,
+      type: alert.alertType === 'FAULT' ? 'fault' : 'warning',
+      message: alert.alertMessage,
+      time: formatTime(alert.createTime)
+    }))
+  } catch (e) {
+    console.error('获取告警数据失败', e)
+    recentAlerts.value = [
+      { id: 1, type: 'fault', message: '暂无告警数据', time: '' }
+    ]
+  }
+}
+
+function formatTime(timeStr: string): string {
+  if (!timeStr) return ''
+  try {
+    const date = new Date(timeStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    if (minutes < 1) return '刚刚'
+    if (minutes < 60) return `${minutes}分钟前`
+    if (hours < 24) return `${hours}小时前`
+    return `${Math.floor(hours / 24)}天前`
+  } catch (e) {
+    return timeStr
   }
 }
 

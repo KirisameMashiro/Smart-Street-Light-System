@@ -345,7 +345,9 @@ const availableDistricts = computed(() => {
 const availableRoads = computed(() => {
   const roads = new Set()
   allLights.value.forEach((l) => {
-    if (l.road) roads.add(l.road)
+    if (!l.road) return
+    if (filter.district && l.district !== filter.district) return
+    roads.add(l.road)
   })
   const arr = Array.from(roads)
   if (arr.length === 0) {
@@ -719,6 +721,12 @@ function onFilterChange(changedField) {
 }
 
 function onDistrictChange(v) {
+  if (filter.road) {
+    const districts = roadDistrictsMap.value.get(filter.road)
+    if (!districts || !districts.has(v)) {
+      filter.road = undefined
+    }
+  }
   onFilterChange('district', v)
 }
 

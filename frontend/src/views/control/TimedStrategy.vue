@@ -167,13 +167,13 @@
           <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" />
         </el-form-item>
         <el-form-item label="行政区" prop="district">
-          <el-select v-model="form.district" clearable filterable placeholder="选择行政区" style="width: 100%">
+          <el-select v-model="form.district" clearable filterable placeholder="选择行政区" style="width: 100%" @change="onDistrictChange">
             <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="路段" prop="road">
           <el-select v-model="form.road" clearable filterable placeholder="选择路段" style="width: 100%">
-            <el-option v-for="o in ROAD_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+            <el-option v-for="o in filteredRoadOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="启用" prop="enabled">
@@ -190,7 +190,7 @@
 
 <script setup>
 defineOptions({ name: 'TimedStrategy' })
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Clock } from '@element-plus/icons-vue'
 import {
@@ -200,7 +200,7 @@ import {
   deleteStrategy,
   toggleStrategy
 } from '@/api/control'
-import { getDistricts, getRoads } from '@/api/light'
+import { getDistricts, getRoads, getAllLights } from '@/api/light'
 import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
@@ -211,6 +211,12 @@ const total = ref(0)
 
 const DISTRICT_OPTIONS = ref([])
 const ROAD_OPTIONS = ref([])
+const districtRoadMap = ref({})
+
+const filteredRoadOptions = computed(() => {
+  if (!form.district) return ROAD_OPTIONS.value
+  return (districtRoadMap.value[form.district] || []).map(r => ({ value: r, label: r }))
+})
 
 const query = reactive({
   pageNum: 1,
@@ -337,6 +343,10 @@ function resetForm() {
   formRef.value?.clearValidate()
 }
 
+function onDistrictChange() {
+  form.road = ''
+}
+
 // 校验默认策略星期冲突
 function checkWeekdayConflict() {
   if (form.type !== 'default' || !form.weekdays || form.weekdays.length === 0) {
@@ -411,11 +421,28 @@ async function onSubmit() {
 
 async function loadOptions() {
   try {
-    const districtsRes = await getDistricts()
-    DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
+    const [districtsRes, roadsRes, lightsRes] = await Promise.all([
+      getDistricts(),
+      getRoads(),
+      getAllLights()
+    ])
     
-    const roadsRes = await getRoads()
+    DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
     ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
+    
+    const map = {}
+    const lights = lightsRes.data || []
+    lights.forEach(light => {
+      if (light.district && light.road) {
+        if (!map[light.district]) {
+          map[light.district] = []
+        }
+        if (!map[light.district].includes(light.road)) {
+          map[light.district].push(light.road)
+        }
+      }
+    })
+    districtRoadMap.value = map
   } catch (e) {
     console.error('加载选项数据失败:', e)
   }
