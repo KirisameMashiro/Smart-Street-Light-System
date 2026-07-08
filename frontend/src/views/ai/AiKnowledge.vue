@@ -25,13 +25,13 @@
         />
       </el-select>
       <el-input
-        v-model="query.keyword"
-        placeholder="问题 / 关键词"
-        clearable
-        style="width: 240px"
-        @keyup.enter="onSearch"
-        @clear="onSearch"
-      />
+          v-model="query.keyword"
+          placeholder="搜索关键词"
+          clearable
+          style="width: 240px"
+          @keyup.enter="onSearch"
+          @clear="onSearch"
+        />
       <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
       <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
     </div>
@@ -40,8 +40,8 @@
     <div class="table-card">
       <el-table :data="tableData" stripe>
         <el-table-column type="index" label="#" width="60" />
-        <el-table-column prop="question" label="问题" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="answer" label="答案" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
         <el-table-column prop="keywords" label="关键词" min-width="160" show-overflow-tooltip />
         <el-table-column label="分类" width="120">
           <template #default="{ row }">
@@ -78,15 +78,15 @@
       @closed="resetForm"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
-        <el-form-item label="问题" prop="question">
-          <el-input v-model="form.question" placeholder="请输入问题" />
+        <el-form-item label="标题" prop="title">
+          <el-input v-model="form.title" placeholder="请输入标题" />
         </el-form-item>
-        <el-form-item label="答案" prop="answer">
+        <el-form-item label="内容" prop="content">
           <el-input
-            v-model="form.answer"
+            v-model="form.content"
             type="textarea"
             :rows="4"
-            placeholder="请输入答案"
+            placeholder="请输入内容"
           />
         </el-form-item>
         <el-form-item label="关键词" prop="keywords">
@@ -177,7 +177,7 @@ function onReset() {
 async function onDelete(row) {
   try {
     await ElMessageBox.confirm(
-      `确定要删除知识条目「${row.question || ''}」吗？`,
+      `确定要删除知识条目「${row.title || ''}」吗？`,
       '删除确认',
       { type: 'warning' }
     )
@@ -195,15 +195,15 @@ const isEdit = ref(false)
 const formRef = ref()
 const form = reactive({
   id: undefined,
-  question: '',
-  answer: '',
+  title: '',
+  content: '',
   keywords: '',
   category: ''
 })
 
 const rules = {
-  question: [{ required: true, message: '请输入问题', trigger: 'blur' }],
-  answer: [{ required: true, message: '请输入答案', trigger: 'blur' }],
+  title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+  content: [{ required: true, message: '请输入内容', trigger: 'blur' }],
   category: [{ required: true, message: '请选择分类', trigger: 'change' }]
 }
 
@@ -220,8 +220,8 @@ function openDialog(row) {
 function resetForm() {
   Object.assign(form, {
     id: undefined,
-    question: '',
-    answer: '',
+    title: '',
+    content: '',
     keywords: '',
     category: ''
   })

@@ -11,6 +11,7 @@ public class Knowledge {
     private Long id;
     private String title;
     private String content;
+    private String keywords;
     private String category;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

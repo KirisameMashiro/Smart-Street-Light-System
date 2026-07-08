@@ -1,6 +1,7 @@
 package com.smartlight.backend.controller;
 
 import com.smartlight.backend.common.Result;
+import com.smartlight.backend.service.AgentService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -9,20 +10,36 @@ import java.util.*;
 @RequestMapping("/api/ai/assistant")
 public class AssistantController {
 
+    private final AgentService agentService;
+
+    public AssistantController(AgentService agentService) {
+        this.agentService = agentService;
+    }
+
+    /**
+     * AI Agent 对话
+     */
     @PostMapping("/chat")
     public Result<Map<String, Object>> chat(@RequestBody Map<String, Object> data) {
         String message = (String) data.getOrDefault("message", "");
+        if (message == null || message.isBlank()) {
+            return Result.error("消息不能为空");
+        }
+
+        // 调用 AI Agent
+        String reply = agentService.chat(message);
+
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("reply", "您好！我是智慧路灯AI运维助手。\n\n我可以帮您：\n1. 查询路灯设备状态\n2. 分析能耗数据\n3. 诊断设备故障\n\n请问有什么可以帮您的？");
+        result.put("reply", reply);
         result.put("timestamp", new Date().toString());
         return Result.success(result);
     }
 
+    /**
+     * 对话历史（暂无持久化，返回空列表）
+     */
     @GetMapping("/history")
     public Result<List<Map<String, Object>>> getHistory(@RequestParam(required = false) String sessionId) {
-        return Result.success(Arrays.asList(
-                new LinkedHashMap<String, Object>() {{ put("sessionId", "s1"); put("title", "能耗分析咨询"); put("lastTime", "2026-07-01 10:30"); }},
-                new LinkedHashMap<String, Object>() {{ put("sessionId", "s2"); put("title", "设备故障排查"); put("lastTime", "2026-06-30 14:20"); }}
-        ));
+        return Result.success(Collections.emptyList());
     }
 }

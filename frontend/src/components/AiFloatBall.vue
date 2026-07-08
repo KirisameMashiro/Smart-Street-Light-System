@@ -44,7 +44,7 @@
                     <el-icon class="loading-icon"><Loading /></el-icon>
                     <span>思考中...</span>
                   </div>
-                  <div v-else class="msg-text">{{ msg.content }}</div>
+                  <div v-else class="msg-text" v-html="renderMarkdown(msg.content)"></div>
                 </div>
               </div>
             </div>
@@ -88,6 +88,9 @@ import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { MagicStick, Close, Loading } from '@element-plus/icons-vue'
 import { sendChatMessage } from '@/api/assistant'
+import { marked } from 'marked'
+
+marked.setOptions({ breaks: true, gfm: true })
 
 const props = defineProps({
   visible: {
@@ -152,6 +155,11 @@ function scrollToBottom() {
   if (messageRef.value) {
     messageRef.value.scrollTop = messageRef.value.scrollHeight
   }
+}
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  return marked.parse(text)
 }
 
 async function onSend() {
@@ -565,5 +573,46 @@ onUnmounted(() => {
     opacity: 0;
     transform: translateY(10px);
   }
+}
+
+/* Markdown 样式 */
+.msg-text :deep(table) {
+  border-collapse: collapse;
+  margin: 6px 0;
+  width: 100%;
+  font-size: 12px;
+}
+.msg-text :deep(th),
+.msg-text :deep(td) {
+  border: 1px solid #dcdfe6;
+  padding: 4px 8px;
+  text-align: left;
+}
+.msg-text :deep(th) {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+.msg-text :deep(h1),
+.msg-text :deep(h2),
+.msg-text :deep(h3) {
+  margin: 8px 0 4px;
+  font-size: 14px;
+}
+.msg-text :deep(ul),
+.msg-text :deep(ol) {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.msg-text :deep(code) {
+  background: #f0f2f5;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.msg-text :deep(blockquote) {
+  border-left: 3px solid #409eff;
+  padding-left: 8px;
+  margin: 6px 0;
+  color: #606266;
 }
 </style>

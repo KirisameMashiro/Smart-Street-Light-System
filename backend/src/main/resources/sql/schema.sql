@@ -144,10 +144,12 @@ CREATE TABLE IF NOT EXISTS `knowledge` (
     `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `title` VARCHAR(200) DEFAULT NULL COMMENT '知识标题',
     `content` TEXT DEFAULT NULL COMMENT '知识内容',
+    `keywords` VARCHAR(500) DEFAULT NULL COMMENT '关键词（逗号分隔）',
     `category` VARCHAR(50) DEFAULT NULL COMMENT '知识分类',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`)
+    PRIMARY KEY (`id`),
+    INDEX `idx_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
 
 -- 插入默认系统配置

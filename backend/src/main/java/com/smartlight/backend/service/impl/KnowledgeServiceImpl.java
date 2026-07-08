@@ -14,10 +14,19 @@ import org.springframework.util.StringUtils;
 public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge> implements KnowledgeService {
 
     @Override
-    public IPage<Knowledge> getPage(int pageNum, int pageSize, String category) {
+    public IPage<Knowledge> getPage(int pageNum, int pageSize, String category, String keyword) {
         Page<Knowledge> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Knowledge> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(category)) wrapper.eq(Knowledge::getCategory, category);
+        if (StringUtils.hasText(keyword)) {
+            wrapper.and(w -> w
+                .like(Knowledge::getTitle, keyword)
+                .or()
+                .like(Knowledge::getKeywords, keyword)
+                .or()
+                .like(Knowledge::getContent, keyword)
+            );
+        }
         wrapper.orderByDesc(Knowledge::getCreateTime);
         return this.page(page, wrapper);
     }

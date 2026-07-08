@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page-container assistant-container">
     <div class="page-header">
       <h2 class="page-title">AI 智能运维助手</h2>
@@ -55,7 +55,7 @@
                 <el-icon class="loading-icon"><Loading /></el-icon>
                 <span>思考中...</span>
               </div>
-              <div v-else class="msg-text">{{ msg.content }}</div>
+              <div v-else class="msg-text" v-html="renderMarkdown(msg.content)"></div>
             </div>
           </div>
         </div>
@@ -88,6 +88,13 @@ defineOptions({ name: 'AiAssistant' })
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { Refresh, Promotion, ChatDotRound, User, Loading } from '@element-plus/icons-vue'
 import { sendChatMessage, getChatHistory } from '@/api/assistant'
+import { marked } from 'marked'
+
+// 配置marked
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 
 const SESSION_KEY = 'smartlight_ai_session'
 const HISTORY_KEY = 'smartlight_ai_history'
@@ -215,6 +222,11 @@ function scrollToBottom() {
   if (messageRef.value) {
     messageRef.value.scrollTop = messageRef.value.scrollHeight
   }
+}
+
+function renderMarkdown(text) {
+  if (!text) return ''
+  return marked.parse(text)
 }
 
 onMounted(loadHistory)
@@ -385,5 +397,59 @@ onMounted(loadHistory)
 
 .input-area .el-input {
   flex: 1;
+}
+
+/* Markdown 样式 */
+.msg-text :deep(table) {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.msg-text :deep(th),
+.msg-text :deep(td) {
+  border: 1px solid #dcdfe6;
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 13px;
+}
+
+.msg-text :deep(th) {
+  background: #f5f7fa;
+  font-weight: 600;
+}
+
+.msg-text :deep(h1),
+.msg-text :deep(h2),
+.msg-text :deep(h3) {
+  margin: 10px 0 6px;
+  font-size: 15px;
+}
+
+.msg-text :deep(ul),
+.msg-text :deep(ol) {
+  padding-left: 20px;
+  margin: 6px 0;
+}
+
+.msg-text :deep(code) {
+  background: #f0f2f5;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.msg-text :deep(pre) {
+  background: #f5f7fa;
+  padding: 8px 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.msg-text :deep(blockquote) {
+  border-left: 3px solid #409eff;
+  padding-left: 10px;
+  margin: 8px 0;
+  color: #606266;
 }
 </style>

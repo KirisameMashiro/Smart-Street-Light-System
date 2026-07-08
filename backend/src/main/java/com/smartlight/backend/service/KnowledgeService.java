@@ -5,5 +5,5 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.smartlight.backend.entity.Knowledge;
 
 public interface KnowledgeService extends IService<Knowledge> {
-    IPage<Knowledge> getPage(int pageNum, int pageSize, String category);
+    IPage<Knowledge> getPage(int pageNum, int pageSize, String category, String keyword);
 }

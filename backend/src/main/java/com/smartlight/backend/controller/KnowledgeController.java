@@ -18,8 +18,9 @@ public class KnowledgeController {
     public Result<IPage<Knowledge>> getPage(
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String category) {
-        return Result.success(knowledgeService.getPage(pageNum, pageSize, category));
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String keyword) {
+        return Result.success(knowledgeService.getPage(pageNum, pageSize, category, keyword));
     }
 
     @PostMapping
