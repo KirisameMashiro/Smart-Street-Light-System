@@ -60,7 +60,7 @@ defineOptions({ name: 'Account' })
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getUserList, updateUser } from '@/api/user'
+import { getUserList, updateUser, changePassword } from '@/api/user'
 import { USER_ROLE_MAP } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
 
@@ -166,14 +166,9 @@ async function onChangePassword() {
   }
   pwdSubmitting.value = true
   try {
-    await updateUser({
-      id: infoForm.id,
-      username: infoForm.username,
-      realName: infoForm.realName,
-      role: infoForm.role,
-      phone: infoForm.phone,
-      email: infoForm.email,
-      password: pwdForm.newPassword
+    await changePassword({
+      oldPassword: pwdForm.oldPassword,
+      newPassword: pwdForm.newPassword
     })
     ElMessage.success('密码修改成功，请重新登录')
     pwdForm.oldPassword = ''
@@ -181,7 +176,7 @@ async function onChangePassword() {
     pwdForm.confirmPassword = ''
     userStore.logout()
   } catch (e) {
-    ElMessage.error('密码修改失败，请检查旧密码是否正确')
+    ElMessage.error(e?.response?.data?.message || '密码修改失败')
   } finally {
     pwdSubmitting.value = false
   }

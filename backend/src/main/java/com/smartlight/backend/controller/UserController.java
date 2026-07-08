@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 系统用户管理 API
@@ -98,5 +99,30 @@ public class UserController {
         if (update.getEmail() != null) user.setEmail(update.getEmail());
         if (update.getRealName() != null) user.setRealName(update.getRealName());
         return Result.success(userService.updateById(user));
+    }
+
+    /**
+     * 修改密码（校验旧密码）
+     */
+    @PostMapping("/change-password")
+    public Result<Boolean> changePassword(@RequestHeader("X-Username") String username,
+                                          @RequestBody Map<String, String> params) {
+        if (username == null || username.isEmpty()) {
+            return Result.unauthorized("未登录");
+        }
+        User user = userService.getByUsername(username);
+        if (user == null) {
+            return Result.unauthorized("用户不存在");
+        }
+        String oldPassword = params.get("oldPassword");
+        String newPassword = params.get("newPassword");
+        if (oldPassword == null || newPassword == null) {
+            return Result.error("参数不能为空");
+        }
+        boolean success = userService.changePassword(user.getId(), oldPassword, newPassword);
+        if (!success) {
+            return Result.error("旧密码错误");
+        }
+        return Result.success("密码修改成功", true);
     }
 }

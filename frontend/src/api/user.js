@@ -24,3 +24,8 @@ export function updateUser(data) {
 export function deleteUser(id) {
   return request.delete(`/users/${id}`)
 }
+
+// 修改密码
+export function changePassword(data) {
+  return request.post('/users/change-password', data)
+}
