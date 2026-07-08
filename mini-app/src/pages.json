@@ -1,0 +1,70 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/home/index",
+      "style": {
+        "navigationBarTitleText": "智慧路灯",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/monitor/index",
+      "style": {
+        "navigationBarTitleText": "实时监控",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/detail/index",
+      "style": {
+        "navigationBarTitleText": "设备详情",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/control/index",
+      "style": {
+        "navigationBarTitleText": "远程控制",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "智慧路灯",
+    "navigationBarBackgroundColor": "#0a1628",
+    "backgroundColor": "#f5f7fa",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#409eff",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/monitor/index",
+        "text": "监控"
+      },
+      {
+        "pagePath": "pages/control/index",
+        "text": "控制"
+      }
+    ]
+  }
+}

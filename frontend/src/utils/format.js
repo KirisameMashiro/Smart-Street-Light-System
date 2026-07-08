@@ -1,8 +1,13 @@
-// 格式化日期时间，支持后端 LocalDateTime 序列化字符串（如 2024-01-01T12:00:00）
 export function formatDateTime(value) {
   if (!value) return '-'
+  
+  if (Array.isArray(value)) {
+    const [year, month, day, hour, minute, second] = value
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second || 0)}`
+  }
+  
   const str = String(value).replace('T', ' ')
-  // 截取到秒
   return str.length > 19 ? str.substring(0, 19) : str
 }
 
