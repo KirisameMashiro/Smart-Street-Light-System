@@ -5,6 +5,7 @@ import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.entity.SensorData;
 import com.smartlight.backend.service.LightService;
 import com.smartlight.backend.service.SensorDataService;
+import com.smartlight.backend.service.WeatherService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -17,13 +18,16 @@ public class PredictController {
 
     private final LightService lightService;
     private final SensorDataService sensorDataService;
+    private final WeatherService weatherService;
 
     /** 预测模式启用的路灯ID集合 */
     private final Set<Long> predictionActiveLights = ConcurrentHashMap.newKeySet();
 
-    public PredictController(LightService lightService, SensorDataService sensorDataService) {
+    public PredictController(LightService lightService, SensorDataService sensorDataService,
+                             WeatherService weatherService) {
         this.lightService = lightService;
         this.sensorDataService = sensorDataService;
+        this.weatherService = weatherService;
     }
 
     /**
@@ -137,21 +141,16 @@ public class PredictController {
     // ==================== 预测算法 ====================
 
     /**
-     * 基于时段+传感器数据计算推荐亮度
+     * 基于时段+极端天气计算推荐亮度
      *
      * 核心逻辑：
      *   - 20:00-23:59 夜间高峰 → 80-100% 全开
      *   - 0:00-5:00   深夜    → 70-85% 低流量期稍降
      *   - 6:00-7:00   清晨    → 60%→20% 随日出递减
-     *   - 8:00-16:00  白天    → 0%（晴天）/ 10-30%（阴雨天，照度低时适当补光）
+     *   - 8:00-16:00  白天    → 0%（默认关灯；仅雷暴/暴雪/浓雾等极端天气补光30%）
      *   - 17:00-19:00 傍晚    → 30%→80% 随日落递增
      */
     private int calculatePredictedBrightness(int hour, SensorData latest, Light light) {
-        double illuminance = 15000; // 默认白天正常照度
-        if (latest != null && latest.getIlluminance() != null) {
-            illuminance = latest.getIlluminance();
-        }
-
         int brightness;
         if (hour >= 20 || hour <= 5) {
             // 夜间 + 深夜（20:00 - 次日 5:00）：全开
@@ -160,15 +159,8 @@ public class PredictController {
             // 清晨日出过渡：逐渐降低
             brightness = 60 - (hour - 6) * 20 - (int) (Math.random() * 10);
         } else if (hour >= 8 && hour <= 16) {
-            // 白天：默认关闭
-            // 只有阴雨天（照度 < 5000 lux）才开启补光
-            if (illuminance < 5000) {
-                // 越暗补光越多，但不超过 40%
-                double ratio = 1.0 - (illuminance / 5000.0);
-                brightness = (int) (ratio * 40);
-            } else {
-                brightness = 0;
-            }
+            // 白天：默认关闭，仅极端恶劣天气才补光
+            brightness = computeDaytimeBrightness(light);
         } else {
             // 傍晚日落过渡（17:00-19:00）：逐渐提升
             brightness = 30 + (hour - 17) * 25 + (int) (Math.random() * 10);
@@ -182,5 +174,17 @@ public class PredictController {
         }
 
         return brightness;
+    }
+
+    /**
+     * 白天亮度：默认 0，仅极端天气（雷暴/暴雪/浓雾）补光 30%
+     */
+    private int computeDaytimeBrightness(Light light) {
+        if (light.getLatitude() != null && light.getLongitude() != null) {
+            if (weatherService.isExtremeWeather(light.getLatitude(), light.getLongitude())) {
+                return 30;
+            }
+        }
+        return 0;
     }
 }
