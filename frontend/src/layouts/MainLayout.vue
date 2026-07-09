@@ -266,11 +266,11 @@ const menuConfig = [
     roles: ['admin', 'municipal']
   },
   {
-    title: 'AI 智能中心',
+    title: '智能中心',
     icon: 'MagicStick',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: 'AI 预测调光', path: '/ai/predict', icon: 'MagicStick' },
+      { title: '预测调光', path: '/ai/predict', icon: 'MagicStick' },
       { title: 'AI 运维助手', path: '/ai/assistant', icon: 'ChatDotRound' },
       { title: '知识库管理', path: '/ai/knowledge', icon: 'Collection', roles: ['admin'] }
     ]

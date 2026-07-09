@@ -101,7 +101,7 @@ const routes = [
         path: 'ai/predict',
         name: 'AiPredict',
         component: () => import('@/views/ai/AiPredict.vue'),
-        meta: { title: 'AI 预测调光', keepAlive: true }
+        meta: { title: '预测调光', keepAlive: true }
       },
       {
         path: 'ai/assistant',

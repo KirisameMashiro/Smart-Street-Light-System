@@ -59,12 +59,13 @@
         <el-table-column label="目标亮度" width="100">
           <template #default="{ row }">{{ row.brightness ?? 0 }}%</template>
         </el-table-column>
-        <el-table-column label="适用分组" width="140">
+        <el-table-column label="适用分组" width="180">
           <template #default="{ row }">
-            <template v-if="row.district || row.road">
+            <template v-if="row.district || row.roads?.length || row.road">
               <span v-if="row.district">{{ row.district }}</span>
-              <span v-if="row.district && row.road" class="text-muted">·</span>
-              <span v-if="row.road">{{ row.road }}</span>
+              <span v-if="row.district && (row.roads?.length || row.road)" class="text-muted">·</span>
+              <span v-if="row.roads?.length">{{ row.roads.join('、') }}</span>
+              <span v-else-if="row.road">{{ row.road }}</span>
             </template>
             <span v-else class="text-muted">-</span>
           </template>
@@ -171,8 +172,8 @@
             <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="路段" prop="road">
-          <el-select v-model="form.road" clearable filterable placeholder="选择路段" style="width: 100%">
+        <el-form-item label="路段" prop="roads">
+          <el-select v-model="form.roads" multiple clearable filterable placeholder="选择路段" style="width: 100%">
             <el-option v-for="o in filteredRoadOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
@@ -228,7 +229,7 @@ function weekdayLabel(val) {
 }
 
 function weekdayFullLabel(val) {
-  return '每周' + weekdayLabel(val)
+  return weekdayLabel(val)
 }
 
 async function loadData() {
@@ -293,7 +294,7 @@ const form = reactive({
   endTime: '06:00:00',
   brightness: 80,
   district: '',
-  road: '',
+  roads: [],
   enabled: true
 })
 
@@ -316,7 +317,7 @@ function openDialog(row) {
       endTime: row.endTime || '06:00:00',
       brightness: row.brightness ?? 80,
       district: row.district || '',
-      road: row.road || '',
+      roads: Array.isArray(row.roads) ? [...row.roads] : (row.road ? [row.road] : []),
       enabled: !!row.enabled
     })
   } else {
@@ -337,14 +338,14 @@ function resetForm() {
     endTime: '06:00:00',
     brightness: 80,
     district: '',
-    road: '',
+    roads: [],
     enabled: true
   })
   formRef.value?.clearValidate()
 }
 
 function onDistrictChange() {
-  form.road = ''
+  form.roads = []
 }
 
 // 校验默认策略星期冲突
@@ -352,7 +353,6 @@ function checkWeekdayConflict() {
   if (form.type !== 'default' || !form.weekdays || form.weekdays.length === 0) {
     return { valid: true }
   }
-  // 查找其他默认策略中是否有相同的星期
   const otherStrategies = tableData.value.filter(s => 
     s.id !== form.id && 
     s.type === 'default' && 
@@ -360,14 +360,23 @@ function checkWeekdayConflict() {
     s.weekdays && s.weekdays.length > 0
   )
   
+  const conflicts = []
   for (const other of otherStrategies) {
     const conflictDays = form.weekdays.filter(day => other.weekdays.includes(day))
     if (conflictDays.length > 0) {
       const dayNames = conflictDays.map(d => weekdayLabel(d)).join('、')
-      return {
-        valid: false,
-        message: `该星期已被默认策略「${other.name}」占用：${dayNames}\n\n提示：时间段策略优先级最高，如需覆盖请使用时间段策略。`
-      }
+      conflicts.push({
+        name: other.name,
+        days: dayNames
+      })
+    }
+  }
+  
+  if (conflicts.length > 0) {
+    const conflictInfo = conflicts.map(c => `策略「${c.name}」（${c.days}）`).join('\n')
+    return {
+      valid: false,
+      message: `所选星期与以下已启用的默认策略存在冲突：\n\n${conflictInfo}\n\n提示：时间段策略优先级最高，如需覆盖请使用时间段策略。`
     }
   }
   return { valid: true }
@@ -380,29 +389,22 @@ async function onSubmit() {
     return
   }
   
-  // 校验默认策略星期冲突
   const conflictCheck = checkWeekdayConflict()
   if (!conflictCheck.valid) {
-    try {
-      await ElMessageBox.confirm(conflictCheck.message, '星期冲突提醒', {
-        confirmButtonText: '仍要保存',
-        cancelButtonText: '取消',
-        type: 'warning'
-      })
-    } catch (e) {
-      return
-    }
+    ElMessage.warning(conflictCheck.message)
+    return
   }
   
   submitting.value = true
   try {
+    const payload = { ...form, road: form.roads?.[0] || '' }
     if (isEdit.value) {
-      await updateStrategy({ ...form })
+      await updateStrategy(payload)
       ElMessage.success('更新成功')
       await logOperation('strategy_update', `修改策略「${form.name}」`, '成功')
     } else {
-      const { id, ...payload } = form
-      await addStrategy(payload)
+      const { id, ...createPayload } = payload
+      await addStrategy(createPayload)
       ElMessage.success('新增成功')
       await logOperation('strategy_add', `新增策略「${form.name}」`, '成功')
     }

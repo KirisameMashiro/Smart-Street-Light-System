@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">AI 预测调光</h2>
+      <h2 class="page-title">预测调光</h2>
       <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
     </div>
 
