@@ -348,38 +348,171 @@ function onDistrictChange() {
   form.roads = []
 }
 
-// 校验默认策略星期冲突
-function checkWeekdayConflict() {
-  if (form.type !== 'default' || !form.weekdays || form.weekdays.length === 0) {
-    return { valid: true }
+function parseTimeStr(t) {
+  if (!t) return null
+  const parts = t.split(':').map(Number)
+  if (parts.length < 2 || parts.some(isNaN)) return null
+  return parts[0] * 60 + parts[1]
+}
+
+function isTimeRangeOverlap(start1, end1, start2, end2) {
+  const s1 = parseTimeStr(start1)
+  const e1 = parseTimeStr(end1)
+  const s2 = parseTimeStr(start2)
+  const e2 = parseTimeStr(end2)
+  if (s1 === null || e1 === null || s2 === null || e2 === null) return false
+
+  const wraps1 = s1 >= e1
+  const wraps2 = s2 >= e2
+
+  const toPoints = (s, e, wraps) => {
+    if (wraps) return [[s, 24 * 60], [0, e]]
+    return [[s, e]]
   }
-  const otherStrategies = tableData.value.filter(s => 
-    s.id !== form.id && 
-    s.type === 'default' && 
-    s.enabled !== false &&
-    s.weekdays && s.weekdays.length > 0
-  )
-  
-  const conflicts = []
-  for (const other of otherStrategies) {
-    const conflictDays = form.weekdays.filter(day => other.weekdays.includes(day))
-    if (conflictDays.length > 0) {
-      const dayNames = conflictDays.map(d => weekdayLabel(d)).join('、')
-      conflicts.push({
-        name: other.name,
-        days: dayNames
+
+  const segs1 = toPoints(s1, e1, wraps1)
+  const segs2 = toPoints(s2, e2, wraps2)
+
+  for (const [a1, a2] of segs1) {
+    for (const [b1, b2] of segs2) {
+      if (a1 < b2 && b1 < a2) return true
+    }
+  }
+  return false
+}
+
+function isRoadOverlap(other) {
+  const formDistrict = form.district || ''
+  const formRoads = form.roads || []
+  const otherDistrict = other.district || ''
+  const otherRoads = other.roads || (other.road ? [other.road] : [])
+
+  if (!formDistrict && !formRoads.length) {
+    return true
+  }
+  if (!otherDistrict && !otherRoads.length) {
+    return true
+  }
+
+  if (formRoads.length > 0 && otherRoads.length > 0) {
+    return formRoads.some(r => otherRoads.includes(r))
+  }
+
+  if (formDistrict && !formRoads.length) {
+    if (otherRoads.length > 0) {
+      return otherRoads.some(r => {
+        const d = districtRoadMap.value[formDistrict] || []
+        return d.includes(r)
       })
     }
+    return formDistrict === otherDistrict
   }
-  
-  if (conflicts.length > 0) {
-    const conflictInfo = conflicts.map(c => `策略「${c.name}」（${c.days}）`).join('\n')
-    return {
-      valid: false,
-      message: `所选星期与以下已启用的默认策略存在冲突：\n\n${conflictInfo}\n\n提示：时间段策略优先级最高，如需覆盖请使用时间段策略。`
+
+  if (otherDistrict && !otherRoads.length) {
+    if (formRoads.length > 0) {
+      return formRoads.some(r => {
+        const d = districtRoadMap.value[otherDistrict] || []
+        return d.includes(r)
+      })
+    }
+    return formDistrict === otherDistrict
+  }
+
+  return false
+}
+
+function isDateOverlap(other) {
+  const fType = form.type
+  const oType = other.type
+
+  if (fType === 'default' && oType === 'default') {
+    const fDays = form.weekdays || []
+    const oDays = other.weekdays || []
+    return fDays.some(d => oDays.includes(d))
+  }
+
+  if (fType === 'timed' && oType === 'timed') {
+    const fStart = form.startDate
+    const fEnd = form.endDate
+    const oStart = other.startDate
+    const oEnd = other.endDate
+    if (!fStart || !fEnd || !oStart || !oEnd) return false
+    return fStart <= oEnd && oStart <= fEnd
+  }
+
+  if (fType === 'timed' && oType === 'default') {
+    return true
+  }
+  if (fType === 'default' && oType === 'timed') {
+    return true
+  }
+
+  return false
+}
+
+function getConflictDesc(other) {
+  const parts = []
+  if (other.type === 'default' && other.weekdays?.length) {
+    parts.push(other.weekdays.map(d => weekdayLabel(d)).join('、'))
+  }
+  if (other.type === 'timed' && other.startDate && other.endDate) {
+    parts.push(`${other.startDate} ~ ${other.endDate}`)
+  }
+  if (other.startTime && other.endTime) {
+    parts.push(`${other.startTime} ~ ${other.endTime}`)
+  }
+  if (other.district || other.road || other.roads?.length) {
+    const roads = other.roads?.length ? other.roads.join('、') : (other.road || '')
+    const group = other.district ? (roads ? `${other.district}·${roads}` : other.district) : roads
+    if (group) parts.push(group)
+  }
+  return parts.join('；')
+}
+
+function checkConflict() {
+  const otherStrategies = tableData.value.filter(s =>
+    s.id !== form.id &&
+    s.enabled !== false
+  )
+
+  const sameTypeConflicts = []
+  const crossTypeConflicts = []
+
+  for (const other of otherStrategies) {
+    if (!isRoadOverlap(other)) continue
+    if (!isDateOverlap(other)) continue
+    if (!isTimeRangeOverlap(form.startTime, form.endTime, other.startTime, other.endTime)) continue
+
+    const desc = getConflictDesc(other)
+    if (other.type === form.type) {
+      sameTypeConflicts.push({ name: other.name, desc })
+    } else {
+      crossTypeConflicts.push({ name: other.name, desc, type: other.type })
     }
   }
-  return { valid: true }
+
+  if (sameTypeConflicts.length > 0) {
+    const typeLabel = form.type === 'default' ? '默认' : '时间段'
+    const conflictInfo = sameTypeConflicts.map(c => `策略「${c.name}」（${c.desc}）`).join('\n')
+    return {
+      level: 'block',
+      message: `与以下已启用的${typeLabel}策略存在冲突（同路段同时段）：\n\n${conflictInfo}\n\n同级策略不允许冲突，请调整时间或路段。`
+    }
+  }
+
+  if (crossTypeConflicts.length > 0) {
+    const higherType = form.type === 'timed' ? '时间段' : '默认'
+    const conflictInfo = crossTypeConflicts.map(c => `策略「${c.name}」（${c.desc}）`).join('\n')
+    const tip = form.type === 'timed'
+      ? '提示：时间段策略优先级高于默认策略，保存后将在重叠时段覆盖默认策略。'
+      : '提示：默认策略优先级低于时间段策略，重叠时段将由时间段策略生效。'
+    return {
+      level: 'warn',
+      message: `与以下已启用的${higherType}策略存在时段重叠：\n\n${conflictInfo}\n\n${tip}`
+    }
+  }
+
+  return { level: 'none' }
 }
 
 async function onSubmit() {
@@ -388,13 +521,25 @@ async function onSubmit() {
   } catch (e) {
     return
   }
-  
-  const conflictCheck = checkWeekdayConflict()
-  if (!conflictCheck.valid) {
+
+  const conflictCheck = checkConflict()
+  if (conflictCheck.level === 'block') {
     ElMessage.warning(conflictCheck.message)
     return
   }
-  
+  if (conflictCheck.level === 'warn') {
+    try {
+      await ElMessageBox.confirm(conflictCheck.message, '策略冲突提醒', {
+        confirmButtonText: '仍要保存',
+        cancelButtonText: '取消',
+        type: 'warning',
+        dangerouslyUseHTMLString: false
+      })
+    } catch (e) {
+      return
+    }
+  }
+
   submitting.value = true
   try {
     const payload = { ...form, road: form.roads?.[0] || '' }
