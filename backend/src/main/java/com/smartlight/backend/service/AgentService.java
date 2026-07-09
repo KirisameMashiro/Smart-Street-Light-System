@@ -375,16 +375,52 @@ public class AgentService {
         ));
     }
 
+    // ==================== 会话管理 ====================
+
+    /** 会话存储：sessionId -> 消息历史 */
+    private final Map<String, LinkedList<Map<String, Object>>> sessions = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 每会话最多保留消息条数（不含 system prompt） */
+    private static final int MAX_HISTORY_SIZE = 20;
+    /** 会话过期时间（毫秒），30分钟无活动自动清理 */
+    private static final long SESSION_TTL_MS = 30 * 60 * 1000;
+
+    /** 获取或创建会话消息列表 */
+    private LinkedList<Map<String, Object>> getOrCreateSession(String sessionId) {
+        return sessions.computeIfAbsent(sessionId, k -> new LinkedList<>());
+    }
+
+    /** 获取会话历史（供 Controller 查询） */
+    public List<Map<String, Object>> getHistory(String sessionId) {
+        LinkedList<Map<String, Object>> session = sessions.get(sessionId);
+        if (session == null) return Collections.emptyList();
+        return new ArrayList<>(session);
+    }
+
+    /** 清除指定会话 */
+    public void clearSession(String sessionId) {
+        sessions.remove(sessionId);
+    }
+
     // ==================== 核心对话流程 ====================
 
     /**
-     * 发送消息给 AI Agent，支持 Function Calling
+     * 发送消息给 AI Agent，支持 Function Calling 和会话上下文
      */
-    public String chat(String userMessage) {
-        // 构建消息列表
+    public String chat(String sessionId, String userMessage) {
+        // 获取或创建会话历史
+        LinkedList<Map<String, Object>> history = getOrCreateSession(sessionId);
+
+        // 构建完整消息列表：system + 历史 + 当前用户消息
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", aiConfig.getSystemPrompt()));
+        messages.addAll(history);
         messages.add(Map.of("role", "user", "content", userMessage));
+
+        // 用户消息加入历史
+        Map<String, Object> userMsg = Map.of("role", "user", "content", userMessage);
+        history.add(userMsg);
+        trimHistory(history);
 
         // 最多允许 5 轮工具调用
         for (int round = 0; round < 5; round++) {
@@ -427,6 +463,9 @@ public class AgentService {
                 // 纯文本回复
                 Object content = message.get("content");
                 String reply = content != null ? content.toString() : "AI 未返回有效内容。";
+                // 回复加入历史
+                history.add(Map.of("role", "assistant", "content", reply));
+                trimHistory(history);
                 return reply;
             }
 
@@ -469,5 +508,12 @@ public class AgentService {
         }
 
         return "操作已执行，但响应超时。";
+    }
+
+    /** 裁剪历史消息，保留最近 N 条，防止 Token 溢出 */
+    private void trimHistory(LinkedList<Map<String, Object>> history) {
+        while (history.size() > MAX_HISTORY_SIZE) {
+            history.pollFirst();
+        }
     }
 }

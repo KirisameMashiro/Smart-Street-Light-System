@@ -26,20 +26,40 @@ public class AssistantController {
             return Result.error("消息不能为空");
         }
 
+        // sessionId：前端传入则复用，不传则自动生成
+        String sessionId = (String) data.getOrDefault("sessionId", UUID.randomUUID().toString());
+
         // 调用 AI Agent
-        String reply = agentService.chat(message);
+        String reply = agentService.chat(sessionId, message);
 
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("sessionId", sessionId);
         result.put("reply", reply);
         result.put("timestamp", new Date().toString());
         return Result.success(result);
     }
 
     /**
-     * 对话历史（暂无持久化，返回空列表）
+     * 对话历史
      */
     @GetMapping("/history")
-    public Result<List<Map<String, Object>>> getHistory(@RequestParam(required = false) String sessionId) {
-        return Result.success(Collections.emptyList());
+    public Result<List<Map<String, Object>>> getHistory(@RequestParam String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return Result.error("sessionId 不能为空");
+        }
+        return Result.success(agentService.getHistory(sessionId));
+    }
+
+    /**
+     * 清除会话
+     */
+    @PostMapping("/clear")
+    public Result<String> clear(@RequestBody Map<String, Object> data) {
+        String sessionId = (String) data.get("sessionId");
+        if (sessionId == null || sessionId.isBlank()) {
+            return Result.error("sessionId 不能为空");
+        }
+        agentService.clearSession(sessionId);
+        return Result.success("会话已清除");
     }
 }
