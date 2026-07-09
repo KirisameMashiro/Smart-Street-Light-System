@@ -7,6 +7,9 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.service.LightService;
+import com.smartlight.backend.service.MqttPublishService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -14,8 +17,12 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
+@RequiredArgsConstructor
 public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements LightService {
+
+    private final MqttPublishService mqttPublishService;
 
     @Override
     public IPage<Light> getPage(int pageNum, int pageSize, String keyword, Integer status, String district, String road, String deviceType) {
@@ -62,7 +69,14 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
                 light.setBrightness(100);
             }
         }
-        return this.updateBatchById(lights);
+        boolean result = this.updateBatchById(lights);
+
+        // MQTT发布控制命令到每盏路灯
+        for (Light light : lights) {
+            mqttPublishService.publishSwitchControl(light.getLightCode(), light.getStatus());
+        }
+
+        return result;
     }
 
     @Override
@@ -78,7 +92,12 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
         } else {
             light.setStatus(0);
         }
-        return this.updateById(light);
+        boolean result = this.updateById(light);
+
+        // MQTT发布组合命令（含状态+亮度）
+        mqttPublishService.publishCombinedControl(light.getLightCode(), light.getStatus(), brightness);
+
+        return result;
     }
 
     @Override

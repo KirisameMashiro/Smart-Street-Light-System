@@ -2,6 +2,7 @@ package com.smartlight.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlight.backend.dto.SensorDataDTO;
+import com.smartlight.backend.event.MqttReconnectedEvent;
 import com.smartlight.backend.service.SensorDataIngestService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -9,7 +10,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
@@ -21,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 public class MqttConfig {
 
     private final SensorDataIngestService sensorDataIngestService;
+    private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     @Value("${mqtt.broker-url}")
@@ -77,7 +81,25 @@ public class MqttConfig {
             options.setConnectionTimeout(30);
             options.setKeepAliveInterval(60);
 
-            mqttClient.setCallback(new MqttCallback() {
+            mqttClient.setCallback(new MqttCallbackExtended() {
+                @Override
+                public void connectComplete(boolean reconnect, String serverURI) {
+                    log.info("MQTT 连接{}: serverURI={}", reconnect ? "重连成功" : "成功", serverURI);
+                    try {
+                        String sensorTopic = topicPrefix + "sensor/+";
+                        mqttClient.subscribe(sensorTopic, qos);
+                        log.info("MQTT 已订阅主题: {}", sensorTopic);
+                    } catch (MqttException e) {
+                        log.error("MQTT 订阅失败: {}", e.getMessage());
+                    }
+                    connecting = false;
+                    // 重连成功后，发布事件让监听器同步路灯状态
+                    if (reconnect) {
+                        log.info("MQTT 重连成功，发布重连事件...");
+                        eventPublisher.publishEvent(new MqttReconnectedEvent(this));
+                    }
+                }
+
                 @Override
                 public void connectionLost(Throwable cause) {
                     log.warn("MQTT 连接断开: {}, 将自动重连...", cause.getMessage());
@@ -96,10 +118,8 @@ public class MqttConfig {
             });
 
             mqttClient.connect(options);
-            String sensorTopic = topicPrefix + "sensor/+";
-            mqttClient.subscribe(sensorTopic, qos);
 
-            log.info("MQTT 连接成功: broker={}, topic={}", brokerUrl, sensorTopic);
+            log.info("MQTT 连接中: broker={}", brokerUrl);
             connecting = false;
 
         } catch (MqttException e) {
@@ -132,6 +152,29 @@ public class MqttConfig {
         } catch (Exception e) {
             log.error("MQTT 消息处理失败: topic={}, error={}", topic, e.getMessage(), e);
         }
+    }
+
+    // ==================== 暴露给 MqttPublishService 的 getter ====================
+
+    /**
+     * 获取 MqttClient 实例（用于发布消息）
+     */
+    public MqttClient getMqttClient() {
+        return mqttClient;
+    }
+
+    /**
+     * 检查 MQTT 是否已连接
+     */
+    public boolean isMqttConnected() {
+        return mqttClient != null && mqttClient.isConnected();
+    }
+
+    /**
+     * 获取 Topic 前缀
+     */
+    public String getTopicPrefix() {
+        return topicPrefix;
     }
 
     @PreDestroy
