@@ -114,3 +114,10 @@ yarn-error.log*
 hs_err_pid*
 replay_pid*
 "}
+
+# Python backend
+backend-python/.venv/
+backend-python/*.bak
+
+# 自定义配置文件（包含敏感信息，不上传）
+backend-python/config.ini
