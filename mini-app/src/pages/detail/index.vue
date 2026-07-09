@@ -123,7 +123,7 @@
               activeColor="#409eff"
               backgroundColor="#ebeef5"
               block-size="28"
-              :disabled="light.status === 3"
+              :disabled="light.status === 2"
               @change="onBrightnessChange"
             />
             <text class="brightness-num">{{ brightness }}%</text>
@@ -135,7 +135,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { getLightById, getLatestSensorData, switchLight, setLightBrightness, type Light, type SensorData } from '@/api/light'
 
 const lightId = ref(0)
@@ -167,11 +168,8 @@ const sensorData = ref<SensorData>({
   samplingEnergy: 0
 })
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1] as any
-  const options = currentPage.options || {}
-  lightId.value = parseInt(options.id) || 0
+onLoad((options: any) => {
+  lightId.value = parseInt(options?.id) || 0
 
   if (lightId.value > 0) {
     fetchLightDetail()
@@ -185,10 +183,15 @@ onMounted(() => {
 async function fetchLightDetail() {
   try {
     const res = await getLightById(lightId.value)
-    light.value = res.data
-    brightness.value = res.data.brightness || 0
-  } catch (e) {
+    if (res.data) {
+      light.value = res.data
+      brightness.value = res.data.brightness || 0
+    } else {
+      uni.showToast({ title: '路灯不存在', icon: 'none' })
+    }
+  } catch (e: any) {
     console.error('获取路灯详情失败', e)
+    uni.showToast({ title: e.message || '获取路灯详情失败', icon: 'none' })
   } finally {
     loading.value = false
   }

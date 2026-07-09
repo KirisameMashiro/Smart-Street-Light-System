@@ -166,13 +166,14 @@ async function loadAlerts() {
     if (currentLevel.value) params.alertLevel = currentLevel.value
     if (currentStatus.value >= 0) params.status = currentStatus.value
     if (searchText.value) {
-      params.alertType = searchText.value
+      params.alertMessage = searchText.value
     }
     const res = await getAlertPage(params)
     alertList.value = res.data?.records || []
     totalCount.value = res.data?.total || 0
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载告警失败', e)
+    uni.showToast({ title: e.message || '加载告警失败', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -185,7 +186,7 @@ async function loadStats() {
     const unRes = await getAlertPage({ pageNum: 1, pageSize: 1, status: 0 })
     unhandledCount.value = unRes.data?.total || 0
     handledCount.value = totalCount.value - unhandledCount.value
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载告警统计失败', e)
   }
 }
@@ -221,12 +222,22 @@ function getLevelIcon(level: string): string {
   return map[level] || 'ℹ'
 }
 
-function formatTime(timeStr: string): string {
-  if (!timeStr) return ''
+function formatTime(timeValue: any): string {
+  if (!timeValue) return ''
+  let date: Date
   try {
-    const date = new Date(timeStr)
+    if (Array.isArray(timeValue) && timeValue.length >= 5) {
+      const [year, month, day, hour = 0, minute = 0, second = 0] = timeValue
+      date = new Date(year, month - 1, day, hour, minute, second)
+    } else if (typeof timeValue === 'string') {
+      date = new Date(timeValue.replace(' ', 'T'))
+    } else {
+      return String(timeValue)
+    }
+    if (isNaN(date.getTime())) return String(timeValue)
     const now = new Date()
     const diff = now.getTime() - date.getTime()
+    if (diff < 0) return '刚刚'
     const minutes = Math.floor(diff / 60000)
     if (minutes < 1) return '刚刚'
     if (minutes < 60) return `${minutes}分钟前`
@@ -234,7 +245,7 @@ function formatTime(timeStr: string): string {
     if (hours < 24) return `${hours}小时前`
     return `${Math.floor(hours / 24)}天前`
   } catch (e) {
-    return timeStr
+    return String(timeValue)
   }
 }
 
