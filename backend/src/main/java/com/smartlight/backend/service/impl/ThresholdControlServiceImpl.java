@@ -132,10 +132,16 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
             // 如果状态或亮度有变化才执行
             boolean changed = false;
             if (!Integer.valueOf(targetStatus).equals(light.getStatus())) {
+                if (targetStatus == 0 && Boolean.TRUE.equals(light.getManualControl())) {
+                    continue;
+                }
                 light.setStatus(targetStatus);
                 changed = true;
             }
             if (!targetBrightness.equals(light.getBrightness())) {
+                if (targetBrightness == 0 && Boolean.TRUE.equals(light.getManualControl())) {
+                    continue;
+                }
                 light.setBrightness(targetBrightness);
                 changed = true;
             }

@@ -63,6 +63,7 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
         List<Light> lights = this.listByIds(ids);
         for (Light light : lights) {
             light.setStatus(status);
+            light.setManualControl(true);
             if (status == 0) {
                 light.setBrightness(0);
             } else if (status == 1 && (light.getBrightness() == null || light.getBrightness() == 0)) {

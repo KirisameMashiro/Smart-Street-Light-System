@@ -122,6 +122,9 @@ public class TimedStrategyScheduler {
             if (light.getStatus() == 2) {
                 continue;
             }
+            if (Boolean.TRUE.equals(light.getManualControl())) {
+                continue;
+            }
             if (light.getStatus() != 0) {
                 light.setStatus(0);
                 light.setBrightness(0);
