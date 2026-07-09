@@ -148,12 +148,28 @@ async function fetchAlerts() {
   }
 }
 
-function formatTime(timeStr: string): string {
-  if (!timeStr) return ''
+function formatTime(timeValue: any): string {
+  if (!timeValue) return ''
+
+  let date: Date
+
   try {
-    const date = new Date(timeStr)
+    // 兼容后端 LocalDateTime 数组格式: [2025, 7, 1, 14, 0] 或 [2025, 7, 1, 14, 0, 0]
+    if (Array.isArray(timeValue) && timeValue.length >= 5) {
+      const [year, month, day, hour = 0, minute = 0, second = 0] = timeValue
+      date = new Date(year, month - 1, day, hour, minute, second)
+    } else if (typeof timeValue === 'string') {
+      date = new Date(timeValue.replace(' ', 'T'))
+    } else {
+      return String(timeValue)
+    }
+
+    if (isNaN(date.getTime())) return String(timeValue)
+
     const now = new Date()
     const diff = now.getTime() - date.getTime()
+    if (diff < 0) return '刚刚'
+
     const minutes = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     if (minutes < 1) return '刚刚'
@@ -161,7 +177,7 @@ function formatTime(timeStr: string): string {
     if (hours < 24) return `${hours}小时前`
     return `${Math.floor(hours / 24)}天前`
   } catch (e) {
-    return timeStr
+    return String(timeValue)
   }
 }
 

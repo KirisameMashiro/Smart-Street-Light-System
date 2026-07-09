@@ -120,7 +120,7 @@
           </view>
         </view>
       </view>
-      <button class="add-btn" @click="showAddRule = true">+ 新增规则</button>
+      <button class="add-btn" @click="navigateToThreshold">+ 配置阈值</button>
     </view>
 
     <view v-if="showAddStrategy" class="modal-overlay" @click="showAddStrategy = false">
@@ -471,6 +471,10 @@ function deleteStrategy(id: number) {
       }
     }
   })
+}
+
+function navigateToThreshold() {
+  uni.navigateTo({ url: '/pages/threshold/index' })
 }
 
 function saveStrategy() {

@@ -92,27 +92,27 @@
       <view class="control-section">
         <view class="section-title">远程控制</view>
         <view class="control-buttons">
-          <button 
-            class="control-btn" 
-            :class="{ disabled: light.status === 3 }"
-            :disabled="light.status === 3"
+          <button
+            class="control-btn"
+            :class="{ disabled: light.status === 2 }"
+            :disabled="light.status === 2"
             @click="handleSwitch(1)"
           >
             <text class="btn-icon">▶</text>
             <text>开灯</text>
           </button>
-          <button 
-            class="control-btn off" 
-            :class="{ disabled: light.status === 3 }"
-            :disabled="light.status === 3"
-            @click="handleSwitch(2)"
+          <button
+            class="control-btn off"
+            :class="{ disabled: light.status === 2 }"
+            :disabled="light.status === 2"
+            @click="handleSwitch(0)"
           >
             <text class="btn-icon">⏹</text>
             <text>关灯</text>
           </button>
         </view>
-        
-        <view class="brightness-control" :class="{ disabled: light.status === 3 }">
+
+        <view class="brightness-control" :class="{ disabled: light.status === 2 }">
           <text class="brightness-label">亮度调节</text>
           <view class="brightness-slider-wrap">
             <slider 
@@ -169,13 +169,16 @@ const sensorData = ref<SensorData>({
 
 onMounted(() => {
   const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  const options = (currentPage as any).$page?.options || {}
+  const currentPage = pages[pages.length - 1] as any
+  const options = currentPage.options || {}
   lightId.value = parseInt(options.id) || 0
-  
+
   if (lightId.value > 0) {
     fetchLightDetail()
     fetchSensorData()
+  } else {
+    loading.value = false
+    uni.showToast({ title: '无效的设备ID', icon: 'none' })
   }
 })
 

@@ -75,16 +75,18 @@
         placeholder="行政区"
         clearable
         style="width: 150px"
+        @change="onDistrictChange"
       >
-        <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+        <el-option v-for="o in districtOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
       <el-select
         v-model="query.road"
         placeholder="路段"
         clearable
         style="width: 150px"
+        @change="onRoadChange"
       >
-        <el-option v-for="o in ROAD_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+        <el-option v-for="o in filteredRoadOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
       <el-select
         v-model="query.deviceType"
@@ -205,10 +207,8 @@ import {
   Sunny,
   Operation
 } from '@element-plus/icons-vue'
-import { getAllLights, batchSwitchLight, setLightBrightness } from '@/api/light'
+import { getAllLights, batchSwitchLight, setLightBrightness, getDistricts, getRoads } from '@/api/light'
 import {
-  DISTRICT_OPTIONS,
-  ROAD_OPTIONS,
   DEVICE_TYPE_OPTIONS,
   GROUP_BY_OPTIONS,
   LIGHT_STATUS_MAP
@@ -241,6 +241,11 @@ const tableRef = ref()
 const dimDialogVisible = ref(false)
 const currentDimLight = ref(null)
 
+const districtOptions = ref([])
+const roadOptions = ref([])
+const districtRoadMap = ref({})
+const roadDistrictMap = ref({})
+
 const query = reactive({
   district: undefined,
   road: undefined,
@@ -257,6 +262,11 @@ const filteredData = computed(() => {
     if (query.status !== undefined && query.status !== null && d.status !== query.status) return false
     return true
   })
+})
+
+const filteredRoadOptions = computed(() => {
+  if (!query.district) return roadOptions.value
+  return (districtRoadMap.value[query.district] || []).map(r => ({ value: r, label: r }))
 })
 
 // 分组：按所选维度聚合当前筛选结果
@@ -281,8 +291,15 @@ const groups = computed(() => {
 async function loadData() {
   loading.value = true
   try {
-    const res = await getAllLights()
-    allData.value = res.data || []
+    const [lightsRes, districtsRes, roadsRes] = await Promise.all([
+      getAllLights(),
+      getDistricts(),
+      getRoads()
+    ])
+    allData.value = lightsRes.data || []
+    districtOptions.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
+    roadOptions.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
+    buildDistrictRoadMap()
   } catch (e) {
     allData.value = []
   } finally {
@@ -290,8 +307,36 @@ async function loadData() {
   }
 }
 
+function buildDistrictRoadMap() {
+  districtRoadMap.value = {}
+  roadDistrictMap.value = {}
+  allData.value.forEach(light => {
+    const district = light.district
+    const road = light.road
+    if (district && road) {
+      if (!districtRoadMap.value[district]) {
+        districtRoadMap.value[district] = []
+      }
+      if (!districtRoadMap.value[district].includes(road)) {
+        districtRoadMap.value[district].push(road)
+      }
+      roadDistrictMap.value[road] = district
+    }
+  })
+}
+
 function onSelectionChange(rows) {
   selection.value = rows
+}
+
+function onDistrictChange() {
+  query.road = undefined
+}
+
+function onRoadChange(val) {
+  if (val && roadDistrictMap.value[val]) {
+    query.district = roadDistrictMap.value[val]
+  }
 }
 
 function onReset() {
