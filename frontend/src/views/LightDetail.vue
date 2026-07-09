@@ -161,6 +161,9 @@ import {
 } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -249,6 +252,7 @@ async function onBrightnessChange(val) {
     await setLightBrightness(lightId, val)
     ElMessage.success('亮度已更新')
     broadcastLightUpdate(lightId)
+    appStore.notifyLightDataChanged()
   } catch (e) {
     light.value.brightness = oldVal
     ElMessage.error('亮度更新失败')
@@ -306,6 +310,12 @@ function onVisibilityChange() {
     startPolling()
   }
 }
+
+import { watch } from 'vue'
+
+watch(() => appStore.lightDataVersion, () => {
+  loadAll()
+})
 
 onMounted(() => {
   loadAll()

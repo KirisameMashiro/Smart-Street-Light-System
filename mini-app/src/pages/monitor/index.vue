@@ -153,8 +153,8 @@ function onStatusChange(e: { detail: { value: number } }) {
 function getStatusClass(status: number) {
   const map: Record<number, string> = {
     1: 'online',
-    2: 'offline',
-    3: 'fault'
+    0: 'offline',
+    2: 'fault'
   }
   return map[status] || 'offline'
 }
@@ -162,8 +162,8 @@ function getStatusClass(status: number) {
 function getStatusText(status: number) {
   const map: Record<number, string> = {
     1: '在线',
-    2: '离线',
-    3: '故障'
+    0: '离线',
+    2: '故障'
   }
   return map[status] || '未知'
 }

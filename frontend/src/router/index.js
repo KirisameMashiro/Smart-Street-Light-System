@@ -83,6 +83,12 @@ const routes = [
         component: () => import('@/views/Alerts.vue'),
         meta: { title: '报警管理', keepAlive: true }
       },
+      {
+        path: 'faults',
+        name: 'FaultHandle',
+        component: () => import('@/views/FaultHandle.vue'),
+        meta: { title: '故障处理', keepAlive: true }
+      },
       // ===== 碳减排分析 =====
       {
         path: 'carbon',
@@ -95,7 +101,7 @@ const routes = [
         path: 'ai/predict',
         name: 'AiPredict',
         component: () => import('@/views/ai/AiPredict.vue'),
-        meta: { title: 'AI 预测调光', keepAlive: true }
+        meta: { title: '预测调光', keepAlive: true }
       },
       {
         path: 'ai/assistant',

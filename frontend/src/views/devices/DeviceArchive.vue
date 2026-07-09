@@ -39,7 +39,7 @@
         placeholder="行政区"
         clearable
         style="width: 140px"
-        @change="onSearch"
+        @change="onDistrictChange"
       >
         <el-option
           v-for="o in districtOptions"
@@ -56,7 +56,7 @@
         @change="onSearch"
       >
         <el-option
-          v-for="o in roadOptions"
+          v-for="o in filteredRoadOptions"
           :key="o.value"
           :label="o.label"
           :value="o.value"
@@ -175,7 +175,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="行政区" prop="district">
-              <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%">
+              <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%" @change="onFormDistrictChange">
                 <el-option
                   v-for="o in districtOptions"
                   :key="o.value"
@@ -189,7 +189,7 @@
             <el-form-item label="路段" prop="road">
               <el-select v-model="form.road" placeholder="请选择" clearable style="width:100%">
                 <el-option
-                  v-for="o in roadOptions"
+                  v-for="o in formFilteredRoadOptions"
                   :key="o.value"
                   :label="o.label"
                   :value="o.value"
@@ -219,7 +219,11 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
-              <el-select v-model="form.status" style="width:100%">
+              <el-select
+                v-model="form.status"
+                style="width:100%"
+                :disabled="originalStatus === 2"
+              >
                 <el-option
                   v-for="(item, key) in LIGHT_STATUS_MAP"
                   :key="key"
@@ -227,6 +231,15 @@
                   :value="Number(key)"
                 />
               </el-select>
+              <el-alert
+                v-if="originalStatus === 2"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin-top: 4px"
+              >
+                <template #title>该路灯处于故障状态，不可编辑状态。请前往「故障处理」页面进行修复。</template>
+              </el-alert>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -285,7 +298,7 @@
 
 <script setup>
 defineOptions({ name: 'DeviceArchive' })
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus,
@@ -303,11 +316,15 @@ import {
   batchSwitchLight,
   getDistricts,
   getRoads,
-  getDeviceTypes
+  getDeviceTypes,
+  getAllLights
 } from '@/api/light'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const syncChannel = typeof BroadcastChannel !== 'undefined'
   ? new BroadcastChannel('smartlight_light_detail')
@@ -332,17 +349,46 @@ const query = reactive({
 const districtOptions = ref([])
 const roadOptions = ref([])
 const deviceTypeOptions = ref([])
+const districtRoadMap = ref({})
+
+const filteredRoadOptions = computed(() => {
+  if (!query.district) return roadOptions.value
+  return (districtRoadMap.value[query.district] || []).map(r => ({ value: r, label: r }))
+})
+
+const formDistrictRoadMap = ref({})
+
+const formFilteredRoadOptions = computed(() => {
+  if (!form.district) return roadOptions.value
+  return (formDistrictRoadMap.value[form.district] || []).map(r => ({ value: r, label: r }))
+})
 
 async function loadOptions() {
   try {
-    const [dRes, rRes, tRes] = await Promise.all([
+    const [dRes, rRes, tRes, lightsRes] = await Promise.all([
       getDistricts(),
       getRoads(),
-      getDeviceTypes()
+      getDeviceTypes(),
+      getAllLights()
     ])
     districtOptions.value = (dRes.data || []).map((v) => ({ value: v, label: v }))
     roadOptions.value = (rRes.data || []).map((v) => ({ value: v, label: v }))
     deviceTypeOptions.value = (tRes.data || []).map((v) => ({ value: v, label: v }))
+    
+    const map = {}
+    const lights = lightsRes.data || []
+    lights.forEach(light => {
+      if (light.district && light.road) {
+        if (!map[light.district]) {
+          map[light.district] = []
+        }
+        if (!map[light.district].includes(light.road)) {
+          map[light.district].push(light.road)
+        }
+      }
+    })
+    districtRoadMap.value = map
+    formDistrictRoadMap.value = map
   } catch (e) {}
 }
 
@@ -359,6 +405,16 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function onDistrictChange() {
+  query.road = undefined
+  query.pageNum = 1
+  loadData()
+}
+
+function onFormDistrictChange() {
+  form.road = undefined
 }
 
 function onSearch() {
@@ -400,6 +456,7 @@ async function onBatchSwitch(status) {
       `批量${text} ${ids.length} 盏路灯（${ids.join(',')}）`,
       '成功'
     )
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理
@@ -438,6 +495,7 @@ async function onBatchDelete() {
       `批量删除路灯 ${ok} 盏`,
       fail ? `部分失败(${fail})` : '成功'
     )
+    appStore.notifyLightDataChanged()
   }
   loadData()
 }
@@ -457,6 +515,7 @@ async function onDelete(row) {
     await deleteLight(row.id)
     ElMessage.success('删除成功')
     logOperation('user_delete', `删除路灯 ${row.lightCode || row.lightName}`, '成功')
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理
@@ -467,6 +526,7 @@ async function onDelete(row) {
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
+const originalStatus = ref(0)
 const form = reactive({
   id: undefined,
   lightCode: '',
@@ -493,8 +553,10 @@ function openDialog(row) {
   isEdit.value = !!row
   if (row) {
     Object.assign(form, row)
+    originalStatus.value = row.status ?? 0
   } else {
     resetForm()
+    originalStatus.value = 0
   }
   dialogVisible.value = true
 }
@@ -546,6 +608,7 @@ async function onSubmit() {
       )
     }
     dialogVisible.value = false
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理

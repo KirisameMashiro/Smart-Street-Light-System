@@ -7,6 +7,7 @@ import com.smartlight.backend.entity.ThresholdControl;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.SensorDataMapper;
 import com.smartlight.backend.mapper.ThresholdControlMapper;
+import com.smartlight.backend.service.MqttPublishService;
 import com.smartlight.backend.service.ThresholdControlService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
     private final ThresholdControlMapper thresholdControlMapper;
     private final SensorDataMapper sensorDataMapper;
     private final LightMapper lightMapper;
+    private final MqttPublishService mqttPublishService;
 
     @Override
     public ThresholdControl getConfig() {
@@ -130,16 +132,24 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
             // 如果状态或亮度有变化才执行
             boolean changed = false;
             if (!Integer.valueOf(targetStatus).equals(light.getStatus())) {
+                if (targetStatus == 0 && Boolean.TRUE.equals(light.getManualControl())) {
+                    continue;
+                }
                 light.setStatus(targetStatus);
                 changed = true;
             }
             if (!targetBrightness.equals(light.getBrightness())) {
+                if (targetBrightness == 0 && Boolean.TRUE.equals(light.getManualControl())) {
+                    continue;
+                }
                 light.setBrightness(targetBrightness);
                 changed = true;
             }
 
             if (changed) {
                 lightMapper.updateById(light);
+                // MQTT发布组合命令
+                mqttPublishService.publishCombinedControl(light.getLightCode(), targetStatus, targetBrightness);
                 adjustedCount++;
                 log.debug("阈值联动: lightId={}, 光照={}lux, 状态={}, 亮度={}%",
                         light.getId(), illuminance, targetStatus, targetBrightness);

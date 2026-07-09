@@ -190,6 +190,7 @@ const cachedViews = [
   'ThresholdControl',
   'OperationLog',
   'Alerts',
+  'FaultHandle',
   'CarbonAnalysis',
   'AiPredict',
   'AiAssistant',
@@ -253,17 +254,23 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator']
   },
   {
+    title: '故障处理',
+    path: '/faults',
+    icon: 'FirstAidKit',
+    roles: ['admin', 'municipal', 'operator']
+  },
+  {
     title: '碳减排分析',
     path: '/carbon',
     icon: 'TrendCharts',
     roles: ['admin', 'municipal']
   },
   {
-    title: 'AI 智能中心',
+    title: '智能中心',
     icon: 'MagicStick',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: 'AI 预测调光', path: '/ai/predict', icon: 'MagicStick' },
+      { title: '预测调光', path: '/ai/predict', icon: 'MagicStick' },
       { title: 'AI 运维助手', path: '/ai/assistant', icon: 'ChatDotRound' },
       { title: '知识库管理', path: '/ai/knowledge', icon: 'Collection', roles: ['admin'] }
     ]

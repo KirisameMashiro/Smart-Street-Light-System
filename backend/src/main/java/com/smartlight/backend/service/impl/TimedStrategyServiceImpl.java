@@ -7,6 +7,7 @@ import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.entity.TimedStrategy;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.TimedStrategyMapper;
+import com.smartlight.backend.service.MqttPublishService;
 import com.smartlight.backend.service.TimedStrategyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,7 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
 
     private final TimedStrategyMapper timedStrategyMapper;
     private final LightMapper lightMapper;
+    private final MqttPublishService mqttPublishService;
 
     @Override
     public IPage<TimedStrategy> getPage(int pageNum, int pageSize, String type, String name) {
@@ -107,11 +109,14 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         }
         
         for (Light light : lights) {
+            if (light.getStatus() == 2) continue; // 故障灯跳过
             light.setStatus(1);
             light.setBrightness(strategy.getBrightness());
             lightMapper.updateById(light);
+            // MQTT发布组合命令
+            mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
         }
-        
+
         log.info("策略「{}」已立即执行，调整了 {} 盏路灯", strategy.getName(), lights.size());
     }
 
@@ -123,14 +128,17 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         
         int count = 0;
         for (Light light : lights) {
+            if (light.getStatus() == 2) continue; // 故障灯跳过
             if (light.getStatus() != 0) {
                 light.setStatus(0);
                 light.setBrightness(0);
                 lightMapper.updateById(light);
+                // MQTT发布组合命令（关灯）
+                mqttPublishService.publishCombinedControl(light.getLightCode(), 0, 0);
                 count++;
             }
         }
-        
+
         if (count > 0) {
             log.info("策略「{}」已停用，关闭了 {} 盏路灯", strategy.getName(), count);
         }

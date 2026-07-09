@@ -297,6 +297,9 @@ import 'leaflet/dist/leaflet.css'
 import { getLightPage, getAllLights, getLightById } from '@/api/light'
 import { getLatestSensorData } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const loading = ref(false)
 const mode = ref('list')
@@ -345,7 +348,9 @@ const availableDistricts = computed(() => {
 const availableRoads = computed(() => {
   const roads = new Set()
   allLights.value.forEach((l) => {
-    if (l.road) roads.add(l.road)
+    if (!l.road) return
+    if (filter.district && l.district !== filter.district) return
+    roads.add(l.road)
   })
   const arr = Array.from(roads)
   if (arr.length === 0) {
@@ -719,6 +724,12 @@ function onFilterChange(changedField) {
 }
 
 function onDistrictChange(v) {
+  if (filter.road) {
+    const districts = roadDistrictsMap.value.get(filter.road)
+    if (!districts || !districts.has(v)) {
+      filter.road = undefined
+    }
+  }
   onFilterChange('district', v)
 }
 
@@ -838,6 +849,10 @@ watch(mode, async (m) => {
       }
     }, 100)
   }
+})
+
+watch(() => appStore.lightDataVersion, () => {
+  refreshAll(false)
 })
 
 function onResize() {

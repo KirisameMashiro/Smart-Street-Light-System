@@ -35,6 +35,9 @@ public class Light {
     /** 亮度百分比 (0-100) */
     private Integer brightness;
 
+    /** 是否手动控制：true-手动控制（定时策略不会关闭），false-自动控制 */
+    private Boolean manualControl;
+
     /** 设备类型 */
     private String deviceType;
 

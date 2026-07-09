@@ -4,6 +4,7 @@ import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.entity.TimedStrategy;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.TimedStrategyMapper;
+import com.smartlight.backend.service.MqttPublishService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class TimedStrategyScheduler {
 
     private final TimedStrategyMapper timedStrategyMapper;
     private final LightMapper lightMapper;
+    private final MqttPublishService mqttPublishService;
 
     @Scheduled(cron = "0 * * * * ?")
     public void executeStrategies() {
@@ -98,6 +100,8 @@ public class TimedStrategyScheduler {
                 light.setStatus(1);
                 light.setBrightness(strategy.getBrightness());
                 lightMapper.updateById(light);
+                // MQTT发布组合命令
+                mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
                 count++;
             }
         }
@@ -118,10 +122,15 @@ public class TimedStrategyScheduler {
             if (light.getStatus() == 2) {
                 continue;
             }
+            if (Boolean.TRUE.equals(light.getManualControl())) {
+                continue;
+            }
             if (light.getStatus() != 0) {
                 light.setStatus(0);
                 light.setBrightness(0);
                 lightMapper.updateById(light);
+                // MQTT发布组合命令
+                mqttPublishService.publishCombinedControl(light.getLightCode(), 0, 0);
                 count++;
             }
         }

@@ -1,38 +1,45 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export interface User {
+export interface UserInfo {
   id: number
   username: string
   realName: string
   role: string
-  token: string
+  phone?: string
+  email?: string
 }
 
 export const useUserStore = defineStore('user', () => {
-  const user = ref<User | null>(null)
-  
-  function setUser(data: User) {
+  const user = ref<UserInfo | null>(null)
+
+  function setUser(data: UserInfo) {
     user.value = data
     uni.setStorageSync('user', JSON.stringify(data))
   }
-  
-  function getUser() {
-    if (!user.value) {
-      const stored = uni.getStorageSync('user')
-      if (stored) {
-        user.value = JSON.parse(stored)
+
+  function loadUser() {
+    const str = uni.getStorageSync('user')
+    if (str) {
+      try {
+        user.value = JSON.parse(str)
+      } catch (e) {
+        console.error('解析用户信息失败', e)
+        user.value = null
       }
     }
     return user.value
   }
-  
+
   function logout() {
     user.value = null
-    uni.removeStorageSync('token')
     uni.removeStorageSync('user')
-    uni.navigateTo({ url: '/pages/login/index' })
   }
-  
-  return { user, setUser, getUser, logout }
+
+  return {
+    user,
+    setUser,
+    loadUser,
+    logout
+  }
 })

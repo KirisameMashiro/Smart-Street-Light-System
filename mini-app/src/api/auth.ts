@@ -10,20 +10,16 @@ export interface UserInfo {
   username: string
   realName: string
   role: string
-  token: string
 }
 
 export async function loginApi(form: LoginForm) {
-  const res = await post('/auth/login', form)
+  const res = await post('/api/users/login', form)
   if (res.data) {
-    uni.setStorageSync('token', res.data.token)
     uni.setStorageSync('user', JSON.stringify(res.data))
   }
   return res
 }
 
 export async function logoutApi() {
-  await post('/auth/logout')
-  uni.removeStorageSync('token')
   uni.removeStorageSync('user')
 }

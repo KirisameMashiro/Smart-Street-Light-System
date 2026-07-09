@@ -38,6 +38,86 @@
         "navigationBarBackgroundColor": "#0a1628",
         "navigationBarTextStyle": "white"
       }
+    },
+    {
+      "path": "pages/alerts/index",
+      "style": {
+        "navigationBarTitleText": "告警管理",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/alerts/detail",
+      "style": {
+        "navigationBarTitleText": "告警详情",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/strategy/index",
+      "style": {
+        "navigationBarTitleText": "定时策略",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/strategy/edit",
+      "style": {
+        "navigationBarTitleText": "策略编辑",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/threshold/index",
+      "style": {
+        "navigationBarTitleText": "阈值联动",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/carbon/index",
+      "style": {
+        "navigationBarTitleText": "碳减排分析",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/archive/index",
+      "style": {
+        "navigationBarTitleText": "设备档案",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/logs/index",
+      "style": {
+        "navigationBarTitleText": "操作日志",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人中心",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
+      "path": "pages/profile/password",
+      "style": {
+        "navigationBarTitleText": "修改密码",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
     }
   ],
   "globalStyle": {
@@ -64,6 +144,10 @@
       {
         "pagePath": "pages/control/index",
         "text": "控制"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
       }
     ]
   }

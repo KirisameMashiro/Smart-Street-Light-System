@@ -16,24 +16,46 @@ interface ResponseData<T = any> {
   data: T
 }
 
+function buildQueryString(params: any): string {
+  if (!params) return ''
+  const parts: string[] = []
+  for (const key in params) {
+    if (params.hasOwnProperty(key) && params[key] !== undefined && params[key] !== null) {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(params[key]))
+    }
+  }
+  return parts.join('&')
+}
+
 export async function request<T = any>(config: RequestConfig): Promise<ResponseData<T>> {
   return new Promise((resolve, reject) => {
-    const token = uni.getStorageSync('token')
+    const userStr = uni.getStorageSync('user')
+    let username = ''
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr)
+        username = user.username || ''
+      } catch (e) {
+        console.error('解析用户信息失败', e)
+      }
+    }
     
     const header: UniApp.RequestOptions['header'] = {
       'Content-Type': 'application/json',
       ...config.header
     }
     
-    if (token) {
-      header['Authorization'] = `Bearer ${token}`
+    if (username) {
+      header['X-Username'] = username
     }
     
     let url = baseURL + config.url
     
     if (config.params) {
-      const params = new URLSearchParams(config.params)
-      url += '?' + params.toString()
+      const queryString = buildQueryString(config.params)
+      if (queryString) {
+        url += '?' + queryString
+      }
     }
     
     uni.request({
@@ -47,9 +69,8 @@ export async function request<T = any>(config: RequestConfig): Promise<ResponseD
         if (data.code === 200 || data.code === 0) {
           resolve(data)
         } else if (data.code === 401) {
-          uni.removeStorageSync('token')
           uni.removeStorageSync('user')
-          uni.navigateTo({ url: '/pages/login/index' })
+          uni.redirectTo({ url: '/pages/login/index' })
           reject(new Error('登录过期'))
         } else {
           reject(new Error(data.message || '请求失败'))
@@ -70,8 +91,8 @@ export function post<T = any>(url: string, data?: any): Promise<ResponseData<T>>
   return request<T>({ url, method: 'POST', data })
 }
 
-export function put<T = any>(url: string, data?: any): Promise<ResponseData<T>> {
-  return request<T>({ url, method: 'PUT', data })
+export function put<T = any>(url: string, data?: any, params?: any): Promise<ResponseData<T>> {
+  return request<T>({ url, method: 'PUT', data, params })
 }
 
 export function del<T = any>(url: string, params?: any): Promise<ResponseData<T>> {
