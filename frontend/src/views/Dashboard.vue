@@ -137,6 +137,9 @@ import {
   STATUS_COLORS
 } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const loading = ref(false)
 const autoRefresh = ref(false)
@@ -354,6 +357,10 @@ watch(autoRefresh, (v) => {
 })
 watch(interval, () => {
   if (autoRefresh.value) startPolling()
+})
+
+watch(() => appStore.lightDataVersion, () => {
+  loadAll()
 })
 
 onMounted(() => {

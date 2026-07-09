@@ -64,13 +64,13 @@
           </view>
           <text class="action-text">远程控制</text>
         </view>
-        <view class="action-item" @click="showToast('设备档案开发中')">
+        <view class="action-item" @click="navigateTo('/pages/archive/index')">
           <view class="action-icon">
             <text>📋</text>
           </view>
           <text class="action-text">设备档案</text>
         </view>
-        <view class="action-item" @click="showToast('数据分析开发中')">
+        <view class="action-item" @click="navigateTo('/pages/carbon/index')">
           <view class="action-icon">
             <text>📈</text>
           </view>

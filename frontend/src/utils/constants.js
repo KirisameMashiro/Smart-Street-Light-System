@@ -102,6 +102,7 @@ export const OPERATION_TYPE_MAP = {
   strategy_enable: '启用/停用策略',
   threshold_update: '阈值配置',
   predict_apply: '启用预测调光',
+  fault_repair: '故障修复',
   user_login: '用户登录',
   user_create: '新增用户',
   user_update: '修改用户',

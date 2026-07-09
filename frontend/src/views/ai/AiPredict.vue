@@ -196,8 +196,10 @@ async function loadAll() {
   try {
     await Promise.all([loadResult(), loadCompare()])
     await nextTick()
-    renderBright()
-    renderCompare()
+    setTimeout(() => {
+      renderBright()
+      renderCompare()
+    }, 100)
   } finally {
     loading.value = false
   }
@@ -205,7 +207,10 @@ async function loadAll() {
 
 function renderBright() {
   if (!brightRef.value || resultError.value) return
-  brightChart = brightChart || echarts.init(brightRef.value)
+  if (brightChart) {
+    brightChart.dispose()
+  }
+  brightChart = echarts.init(brightRef.value)
   let hours = []
   let values = []
   if (Array.isArray(resultData.value) && resultData.value.length) {
@@ -222,9 +227,9 @@ function renderBright() {
       trigger: 'axis',
       formatter: (p) => `${p[0].axisValue} 时<br/>推荐亮度：${p[0].value}%`
     },
-    grid: { left: 50, right: 20, top: 30, bottom: 40 },
-    xAxis: { type: 'category', data: hours, name: '小时' },
-    yAxis: { type: 'value', name: '亮度(%)', min: 0, max: 100 },
+    grid: { left: 60, right: 100, top: 40, bottom: 50 },
+    xAxis: { type: 'category', data: hours, name: '小时', nameTextStyle: { padding: [0, 0, 10, 0] } },
+    yAxis: { type: 'value', name: '亮度(%)', min: 0, max: 100, nameTextStyle: { padding: [0, 20, 0, 0] } },
     series: [
       {
         name: '推荐亮度',
@@ -246,15 +251,18 @@ function renderBright() {
 
 function renderCompare() {
   if (!compareRef.value || compareError.value) return
-  compareChart = compareChart || echarts.init(compareRef.value)
+  if (compareChart) {
+    compareChart.dispose()
+  }
+  compareChart = echarts.init(compareRef.value)
   const d = compareData.value || {}
   const categories = ['预测模式', '固定阈值模式']
   const energy = [Number(d.predictEnergy ?? 0), Number(d.fixedEnergy ?? 0)]
   compareChart.setOption({
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 55, right: 20, top: 20, bottom: 40 },
-    xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value', name: '能耗(kWh)' },
+    grid: { left: 60, right: 60, top: 30, bottom: 50 },
+    xAxis: { type: 'category', data: categories, nameTextStyle: { padding: [0, 0, 10, 0] } },
+    yAxis: { type: 'value', name: '能耗(kWh)', nameTextStyle: { padding: [0, 20, 0, 0] } },
     series: [
       {
         name: '能耗',
@@ -363,8 +371,9 @@ onUnmounted(() => {
 }
 
 .chart-box {
-  height: 300px;
+  height: 320px;
   width: 100%;
+  min-height: 320px;
 }
 
 .accuracy-card {

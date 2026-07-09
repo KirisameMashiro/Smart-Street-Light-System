@@ -297,6 +297,9 @@ import 'leaflet/dist/leaflet.css'
 import { getLightPage, getAllLights, getLightById } from '@/api/light'
 import { getLatestSensorData } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const loading = ref(false)
 const mode = ref('list')
@@ -846,6 +849,10 @@ watch(mode, async (m) => {
       }
     }, 100)
   }
+})
+
+watch(() => appStore.lightDataVersion, () => {
+  refreshAll(false)
 })
 
 function onResize() {

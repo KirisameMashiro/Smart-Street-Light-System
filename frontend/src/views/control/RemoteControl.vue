@@ -21,30 +21,8 @@
 
     <!-- 控制面板 -->
     <div class="control-panel">
-      <!-- 单灯调光：仅选中单灯时显示 -->
-      <el-card v-if="selection.length === 1" shadow="never" class="panel-card">
-        <template #header>
-          <div class="panel-header">
-            <el-icon><Sunny /></el-icon>
-            <span>单灯调光 — {{ selection[0].lightCode }} {{ selection[0].lightName }}</span>
-          </div>
-        </template>
-        <div class="dimming-row">
-          <span class="dim-label">亮度</span>
-          <el-slider
-            v-model="dimBrightness"
-            :min="0"
-            :max="100"
-            :step="1"
-            style="flex: 1; margin: 0 16px"
-          />
-          <span class="dim-value">{{ dimBrightness }}%</span>
-          <el-button type="primary" :loading="dimming" @click="onApplyDimming">下发亮度</el-button>
-        </div>
-      </el-card>
-
       <!-- 分组操作 -->
-      <el-card shadow="never" class="panel-card">
+      <el-card shadow="never" class="panel-card full-width">
         <template #header>
           <div class="panel-header">
             <el-icon><Operation /></el-icon>
@@ -69,10 +47,21 @@
             <div class="group-info">
               <span class="group-name">{{ g.label }}</span>
               <el-tag size="small" type="info">{{ g.count }} 盏</el-tag>
+              <el-tag v-if="g.faultCount > 0" size="small" type="danger">{{ g.faultCount }} 盏故障</el-tag>
             </div>
             <div class="group-ops">
-              <el-button size="small" type="success" @click="onGroupSwitch(g, 1)">全部开灯</el-button>
-              <el-button size="small" type="info" @click="onGroupSwitch(g, 0)">全部关灯</el-button>
+              <el-button
+                size="small"
+                type="success"
+                :disabled="g.faultCount === g.count"
+                @click="onGroupSwitch(g, 1)"
+              >全部开灯</el-button>
+              <el-button
+                size="small"
+                type="info"
+                :disabled="g.faultCount === g.count"
+                @click="onGroupSwitch(g, 0)"
+              >全部关灯</el-button>
             </div>
           </div>
         </div>
@@ -149,11 +138,58 @@
           <template #default="{ row }">
             <el-button link type="success" :disabled="row.status === 2" @click="onSingleSwitch(row, 1)">开灯</el-button>
             <el-button link type="info" :disabled="row.status === 2" @click="onSingleSwitch(row, 0)">关灯</el-button>
-            <el-button link type="primary" @click="onSelectSingle(row)">调光</el-button>
+            <el-button link type="primary" :disabled="row.status === 2" @click="onSelectSingle(row)">调光</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
+
+    <!-- 调光弹窗 -->
+    <el-dialog v-model="dimDialogVisible" title="单灯调光" width="480px">
+      <div v-if="currentDimLight" class="dim-dialog-content">
+        <div class="dim-light-info">
+          <div class="dim-light-name">{{ currentDimLight.lightName || '-' }}</div>
+          <div class="dim-light-code">{{ currentDimLight.lightCode }}</div>
+          <el-tag
+            :type="LIGHT_STATUS_MAP[currentDimLight.status]?.type"
+            size="small"
+            style="margin-top: 8px"
+          >
+            {{ LIGHT_STATUS_MAP[currentDimLight.status]?.label }}
+          </el-tag>
+        </div>
+        <el-alert
+          v-if="currentDimLight.status === 2"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #title>该路灯处于故障状态，无法进行调光操作。请前往「故障处理」页面进行修复。</template>
+        </el-alert>
+        <div class="dim-slider-row">
+          <span class="dim-label">亮度</span>
+          <el-slider
+            v-model="dimBrightness"
+            :min="0"
+            :max="100"
+            :step="1"
+            :disabled="currentDimLight.status === 2"
+            style="flex: 1; margin: 0 16px"
+          />
+          <span class="dim-value">{{ dimBrightness }}%</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="dimDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="dimming"
+          :disabled="currentDimLight?.status === 2"
+          @click="onApplyDimming"
+        >下发亮度</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -178,6 +214,9 @@ import {
   LIGHT_STATUS_MAP
 } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const syncChannel = typeof BroadcastChannel !== 'undefined'
   ? new BroadcastChannel('smartlight_light_detail')
@@ -189,6 +228,7 @@ function broadcastLightUpdate() {
       syncChannel.postMessage({ type: 'light:updated', ts: Date.now() })
     } catch (e) {}
   }
+  appStore.notifyLightDataChanged()
 }
 
 const loading = ref(false)
@@ -198,6 +238,8 @@ const selection = ref([])
 const groupBy = ref('district')
 const dimBrightness = ref(0)
 const tableRef = ref()
+const dimDialogVisible = ref(false)
+const currentDimLight = ref(null)
 
 const query = reactive({
   district: undefined,
@@ -229,16 +271,12 @@ const groups = computed(() => {
     key,
     label: key,
     count: list.length,
+    faultCount: list.filter((x) => x.status === 2).length,
     ids: list.map((x) => x.id)
   }))
 })
 
-// 选中单灯时回填亮度滑块
-watch(selection, (val) => {
-  if (val.length === 1) {
-    dimBrightness.value = val[0].brightness ?? 0
-  }
-})
+
 
 async function loadData() {
   loading.value = true
@@ -263,10 +301,11 @@ function onReset() {
   query.status = undefined
 }
 
-// 通过“调光”按钮选中单灯
+// 打开调光弹窗
 function onSelectSingle(row) {
-  tableRef.value?.clearSelection()
-  tableRef.value?.toggleRowSelection(row, true)
+  currentDimLight.value = row
+  dimBrightness.value = row.brightness ?? 0
+  dimDialogVisible.value = true
 }
 
 // 批量开关灯（基于勾选）
@@ -353,14 +392,15 @@ async function onSingleSwitch(row, status) {
 
 // 下发亮度
 async function onApplyDimming() {
-  if (selection.value.length !== 1) return
-  const row = selection.value[0]
+  if (!currentDimLight.value) return
+  const row = currentDimLight.value
   const name = row.lightName || row.lightCode
   dimming.value = true
   try {
     await setLightBrightness(row.id, dimBrightness.value)
     ElMessage.success(`已设置「${name}」亮度为 ${dimBrightness.value}%`)
     await logOperation('dimming', `设置「${name}」亮度为 ${dimBrightness.value}%`, '成功')
+    dimDialogVisible.value = false
     loadData()
     broadcastLightUpdate()
   } catch (e) {
@@ -369,6 +409,10 @@ async function onApplyDimming() {
     dimming.value = false
   }
 }
+
+watch(() => appStore.lightDataVersion, () => {
+  loadData()
+})
 
 onMounted(loadData)
 </script>
@@ -384,12 +428,34 @@ onMounted(loadData)
   flex: 1;
   min-width: 320px;
 }
+.panel-card.full-width {
+  flex: 1 1 100%;
+}
 .panel-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.dimming-row {
+.dim-dialog-content {
+  padding: 8px 0;
+}
+.dim-light-info {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #ebeef5;
+}
+.dim-light-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+}
+.dim-light-code {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 4px;
+}
+.dim-slider-row {
   display: flex;
   align-items: center;
   gap: 12px;

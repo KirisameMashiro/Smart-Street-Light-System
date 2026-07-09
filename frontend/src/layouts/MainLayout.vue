@@ -190,6 +190,7 @@ const cachedViews = [
   'ThresholdControl',
   'OperationLog',
   'Alerts',
+  'FaultHandle',
   'CarbonAnalysis',
   'AiPredict',
   'AiAssistant',
@@ -250,6 +251,12 @@ const menuConfig = [
     title: '告警管理',
     path: '/alerts',
     icon: 'Bell',
+    roles: ['admin', 'municipal', 'operator']
+  },
+  {
+    title: '故障处理',
+    path: '/faults',
+    icon: 'FirstAidKit',
     roles: ['admin', 'municipal', 'operator']
   },
   {

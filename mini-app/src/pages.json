@@ -88,6 +88,14 @@
       }
     },
     {
+      "path": "pages/archive/index",
+      "style": {
+        "navigationBarTitleText": "设备档案",
+        "navigationBarBackgroundColor": "#0a1628",
+        "navigationBarTextStyle": "white"
+      }
+    },
+    {
       "path": "pages/logs/index",
       "style": {
         "navigationBarTitleText": "操作日志",

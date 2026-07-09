@@ -219,7 +219,11 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态" prop="status">
-              <el-select v-model="form.status" style="width:100%">
+              <el-select
+                v-model="form.status"
+                style="width:100%"
+                :disabled="originalStatus === 2"
+              >
                 <el-option
                   v-for="(item, key) in LIGHT_STATUS_MAP"
                   :key="key"
@@ -227,6 +231,15 @@
                   :value="Number(key)"
                 />
               </el-select>
+              <el-alert
+                v-if="originalStatus === 2"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin-top: 4px"
+              >
+                <template #title>该路灯处于故障状态，不可编辑状态。请前往「故障处理」页面进行修复。</template>
+              </el-alert>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -309,6 +322,9 @@ import {
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
+import { useAppStore } from '@/store/app'
+
+const appStore = useAppStore()
 
 const syncChannel = typeof BroadcastChannel !== 'undefined'
   ? new BroadcastChannel('smartlight_light_detail')
@@ -440,6 +456,7 @@ async function onBatchSwitch(status) {
       `批量${text} ${ids.length} 盏路灯（${ids.join(',')}）`,
       '成功'
     )
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理
@@ -478,6 +495,7 @@ async function onBatchDelete() {
       `批量删除路灯 ${ok} 盏`,
       fail ? `部分失败(${fail})` : '成功'
     )
+    appStore.notifyLightDataChanged()
   }
   loadData()
 }
@@ -497,6 +515,7 @@ async function onDelete(row) {
     await deleteLight(row.id)
     ElMessage.success('删除成功')
     logOperation('user_delete', `删除路灯 ${row.lightCode || row.lightName}`, '成功')
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理
@@ -507,6 +526,7 @@ async function onDelete(row) {
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
+const originalStatus = ref(0)
 const form = reactive({
   id: undefined,
   lightCode: '',
@@ -533,8 +553,10 @@ function openDialog(row) {
   isEdit.value = !!row
   if (row) {
     Object.assign(form, row)
+    originalStatus.value = row.status ?? 0
   } else {
     resetForm()
+    originalStatus.value = 0
   }
   dialogVisible.value = true
 }
@@ -586,6 +608,7 @@ async function onSubmit() {
       )
     }
     dialogVisible.value = false
+    appStore.notifyLightDataChanged()
     loadData()
   } catch (e) {
     // 失败提示由拦截器处理

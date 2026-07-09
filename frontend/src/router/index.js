@@ -83,6 +83,12 @@ const routes = [
         component: () => import('@/views/Alerts.vue'),
         meta: { title: '报警管理', keepAlive: true }
       },
+      {
+        path: 'faults',
+        name: 'FaultHandle',
+        component: () => import('@/views/FaultHandle.vue'),
+        meta: { title: '故障处理', keepAlive: true }
+      },
       // ===== 碳减排分析 =====
       {
         path: 'carbon',
