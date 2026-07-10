@@ -2,7 +2,6 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.smartlight.backend.mapper.SensorDataMapper">
 
-    <!-- 基础结果映射 -->
     <resultMap id="BaseResultMap" type="com.smartlight.backend.entity.SensorData">
         <id column="id" property="id"/>
         <result column="light_id" property="lightId"/>
@@ -16,7 +15,7 @@
         <result column="create_time" property="createTime"/>
     </resultMap>
 
-    <!-- 批量插入传感器数据（无主键回填，提升批量写入性能） -->
+    <!-- 批量插入传感器数据（无主键回填，保留向后兼容） -->
     <insert id="insertBatch" useGeneratedKeys="false">
         INSERT INTO sensor_data (light_id, illuminance, power, voltage, current,
                                  temperature, humidity, sampling_energy, collect_time, create_time)
@@ -50,11 +49,7 @@
             total_energy    = total_energy + VALUES(total_energy),
             data_count      = data_count + VALUES(data_count),
             max_power       = GREATEST(IFNULL(max_power, 0), VALUES(max_power)),
-            min_power       = CASE
-                                WHEN min_power IS NULL THEN VALUES(min_power)
-                                WHEN VALUES(min_power) > 0 AND VALUES(min_power) < min_power THEN VALUES(min_power)
-                                ELSE min_power
-                              END
+            min_power       = LEAST(IFNULL(min_power, VALUES(min_power)), VALUES(min_power))
     </insert>
 
     <!-- 删除 collect_time 早于指定时间的原始数据（数据保留策略） -->
