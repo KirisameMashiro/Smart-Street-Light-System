@@ -59,7 +59,7 @@
         <el-table-column label="目标亮度" width="100">
           <template #default="{ row }">{{ row.brightness ?? 0 }}%</template>
         </el-table-column>
-        <el-table-column label="适用分组" width="180">
+        <el-table-column label="适用区域" width="180">
           <template #default="{ row }">
             <template v-if="row.district || row.roads?.length || row.road">
               <span v-if="row.district">{{ row.district }}</span>
@@ -167,15 +167,62 @@
         <el-form-item label="目标亮度" prop="brightness">
           <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" />
         </el-form-item>
-        <el-form-item label="行政区" prop="district">
-          <el-select v-model="form.district" clearable filterable placeholder="选择行政区" style="width: 100%" @change="onDistrictChange">
-            <el-option v-for="o in DISTRICT_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="路段" prop="roads">
-          <el-select v-model="form.roads" multiple clearable filterable placeholder="选择路段" style="width: 100%">
-            <el-option v-for="o in filteredRoadOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
+        <el-form-item label="适用区域">
+          <div class="apply-groups">
+            <div
+              v-for="(group, index) in form.applyGroups"
+              :key="index"
+              class="apply-group-item"
+            >
+              <div class="group-fields">
+                <el-select
+                  v-model="group.district"
+                  clearable
+                  filterable
+                  placeholder="选择行政区"
+                  style="width: 35%"
+                  @change="() => { group.roads = [] }"
+                >
+                  <el-option
+                    v-for="o in DISTRICT_OPTIONS"
+                    :key="o.value"
+                    :label="o.label"
+                    :value="o.value"
+                    :disabled="isDistrictDisabled(o.value, index)"
+                  />
+                </el-select>
+                <div class="road-select-wrapper">
+                  <el-select
+                    v-model="group.roads"
+                    multiple
+                    clearable
+                    filterable
+                    placeholder="选择路段"
+                    class="road-select-multi"
+                  >
+                    <el-option
+                      v-for="o in (group.district ? (districtRoadMap[group.district] || []).map(r => ({ value: r, label: r })) : [])"
+                      :key="o.value"
+                      :label="o.label"
+                      :value="o.value"
+                    />
+                  </el-select>
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="selectAllRoads(index)"
+                    :disabled="!group.district"
+                  >全选</el-button>
+                </div>
+              </div>
+              <div v-if="form.applyGroups.length > 1" class="group-actions">
+                <el-button type="danger" size="small" @click="removeApplyGroup(index)">删除</el-button>
+              </div>
+            </div>
+            <el-button type="primary" size="small" @click="addApplyGroup" class="add-group-btn">
+              + 添加行政区
+            </el-button>
+          </div>
         </el-form-item>
         <el-form-item label="启用" prop="enabled">
           <el-switch v-model="form.enabled" />
@@ -213,11 +260,6 @@ const total = ref(0)
 const DISTRICT_OPTIONS = ref([])
 const ROAD_OPTIONS = ref([])
 const districtRoadMap = ref({})
-
-const filteredRoadOptions = computed(() => {
-  if (!form.district) return ROAD_OPTIONS.value
-  return (districtRoadMap.value[form.district] || []).map(r => ({ value: r, label: r }))
-})
 
 const query = reactive({
   pageNum: 1,
@@ -293,10 +335,40 @@ const form = reactive({
   startTime: '18:00:00',
   endTime: '06:00:00',
   brightness: 80,
-  district: '',
-  roads: [],
+  applyGroups: [],
   enabled: true
 })
+
+function addApplyGroup() {
+  const usedDistricts = form.applyGroups.map(g => g.district).filter(Boolean)
+  const available = DISTRICT_OPTIONS.value.find(o => !usedDistricts.includes(o.value))
+  if (!available) {
+    ElMessage.warning('所有行政区已添加，无法重复添加')
+    return
+  }
+  form.applyGroups.push({
+    district: '',
+    roads: []
+  })
+}
+
+function removeApplyGroup(index) {
+  form.applyGroups.splice(index, 1)
+}
+
+function isDistrictDisabled(districtValue, currentIndex) {
+  return form.applyGroups.some((g, idx) => idx !== currentIndex && g.district === districtValue)
+}
+
+function selectAllRoads(index) {
+  const group = form.applyGroups[index]
+  if (!group.district) {
+    ElMessage.warning('请先选择行政区')
+    return
+  }
+  const districtRoads = districtRoadMap.value[group.district] || []
+  group.roads = [...districtRoads]
+}
 
 const rules = {
   name: [{ required: true, message: '请输入策略名称', trigger: 'blur' }],
@@ -306,6 +378,13 @@ const rules = {
 function openDialog(row) {
   isEdit.value = !!row
   if (row) {
+    let applyGroups = []
+    if (row.district || row.roads?.length || row.road) {
+      applyGroups = [{
+        district: row.district || '',
+        roads: Array.isArray(row.roads) ? [...row.roads] : (row.road ? [row.road] : [])
+      }]
+    }
     Object.assign(form, {
       id: row.id,
       name: row.name || '',
@@ -316,8 +395,7 @@ function openDialog(row) {
       startTime: row.startTime || '18:00:00',
       endTime: row.endTime || '06:00:00',
       brightness: row.brightness ?? 80,
-      district: row.district || '',
-      roads: Array.isArray(row.roads) ? [...row.roads] : (row.road ? [row.road] : []),
+      applyGroups,
       enabled: !!row.enabled
     })
   } else {
@@ -337,15 +415,10 @@ function resetForm() {
     startTime: '18:00:00',
     endTime: '06:00:00',
     brightness: 80,
-    district: '',
-    roads: [],
+    applyGroups: [{ district: '', roads: [] }],
     enabled: true
   })
   formRef.value?.clearValidate()
-}
-
-function onDistrictChange() {
-  form.roads = []
 }
 
 function parseTimeStr(t) {
@@ -381,11 +454,13 @@ function isTimeRangeOverlap(start1, end1, start2, end2) {
   return false
 }
 
-function isRoadOverlap(other) {
-  const formDistrict = form.district || ''
-  const formRoads = form.roads || []
-  const otherDistrict = other.district || ''
-  const otherRoads = other.roads || (other.road ? [other.road] : [])
+function getFormAllRoads() {
+  return form.applyGroups.flatMap(g => g.roads || [])
+}
+
+function isGroupOverlap(group, otherDistrict, otherRoads) {
+  const formDistrict = group.district || ''
+  const formRoads = group.roads || []
 
   if (!formDistrict && !formRoads.length) {
     return true
@@ -419,6 +494,18 @@ function isRoadOverlap(other) {
   }
 
   return false
+}
+
+function isRoadOverlap(other) {
+  const otherDistrict = other.district || ''
+  const otherRoads = other.roads || (other.road ? [other.road] : [])
+
+  if (!form.applyGroups || form.applyGroups.length === 0) {
+    if (!otherDistrict && !otherRoads.length) return true
+    return false
+  }
+
+  return form.applyGroups.some(group => isGroupOverlap(group, otherDistrict, otherRoads))
 }
 
 function isDateOverlap(other) {
@@ -542,7 +629,14 @@ async function onSubmit() {
 
   submitting.value = true
   try {
-    const payload = { ...form, road: form.roads?.[0] || '' }
+    const firstGroup = form.applyGroups[0] || {}
+    const { applyGroups, ...restForm } = form
+    const payload = {
+      ...restForm,
+      district: firstGroup.district || '',
+      road: firstGroup.roads?.[0] || '',
+      roads: form.applyGroups.flatMap(g => g.roads || [])
+    }
     if (isEdit.value) {
       await updateStrategy(payload)
       ElMessage.success('更新成功')
@@ -632,5 +726,119 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: 4px;
   margin-bottom: 2px;
+}
+
+.apply-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.apply-group-item {
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.group-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.road-select-wrapper {
+  display: flex;
+  gap: 6px;
+  width: calc(65% - 8px);
+  align-items: flex-start;
+}
+
+.road-select-multi {
+  width: 100%;
+}
+
+.road-select-multi :deep(.el-select__wrapper) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.road-select-multi :deep(.el-select__selection) {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.road-select-multi :deep(.el-select__tags) {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.road-select-multi :deep(.el-tag) {
+  display: inline-flex;
+  margin: 0 !important;
+  flex-shrink: 0;
+}
+
+.group-actions {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
+.add-group-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+}
+</style>
+
+<style>
+.road-select-multi .el-select__tags {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 2px !important;
+  align-items: center !important;
+}
+
+.road-select-multi .el-select__tags > * {
+  display: inline-flex !important;
+  flex-direction: row !important;
+}
+
+.road-select-multi .el-tag {
+  display: inline-flex !important;
+  margin: 0 !important;
+  flex-shrink: 0;
+  padding: 0 3px !important;
+  height: 20px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+}
+
+.road-select-multi .el-tag .el-tag__close {
+  margin-left: 2px !important;
+  font-size: 10px !important;
+}
+
+.road-select-multi .el-select__wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.road-select-multi .el-select__selection {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 </style>
