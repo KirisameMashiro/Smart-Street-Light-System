@@ -46,4 +46,11 @@ public interface CarbonService {
      * @return 写入的记录数
      */
     int computeDailyStats(String date);
+
+    /**
+     * 全量重新计算所有历史碳减排统计（基准配置变更后调用）
+     * 清空 carbon_stats 表，基于当前基准配置重新计算所有有传感器数据的日期
+     * @return 处理的天数
+     */
+    int recomputeAllStats();
 }

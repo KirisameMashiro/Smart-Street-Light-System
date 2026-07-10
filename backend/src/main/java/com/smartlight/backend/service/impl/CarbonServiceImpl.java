@@ -356,6 +356,44 @@ public class CarbonServiceImpl implements CarbonService {
         return inserted;
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int recomputeAllStats() {
+        log.info("全量碳减排统计重算：开始...");
+        try {
+            // 获取所有有传感器数据的日期
+            List<Map<String, Object>> dates = sensorDataMapper.selectDistinctDates();
+            if (dates == null || dates.isEmpty()) {
+                log.warn("全量重算：无传感器数据，跳过");
+                return 0;
+            }
+
+            // 先清空所有历史统计
+            carbonStatsMapper.delete(new LambdaQueryWrapper<>());
+
+            // 对每天重新计算（使用当前最新的基准配置）
+            int totalDays = 0;
+            for (Map<String, Object> row : dates) {
+                Object dateObj = row.get("statDate");
+                if (dateObj == null) continue;
+                String dateStr;
+                if (dateObj instanceof java.sql.Date) {
+                    dateStr = ((java.sql.Date) dateObj).toLocalDate().toString();
+                } else {
+                    dateStr = dateObj.toString();
+                }
+                int count = computeDailyStats(dateStr);
+                if (count > 0) totalDays++;
+            }
+
+            log.info("全量碳减排统计重算完成：共处理 {} 天数据", totalDays);
+            return totalDays;
+        } catch (Exception e) {
+            log.error("全量碳减排统计重算失败", e);
+            throw e;
+        }
+    }
+
     private double getConfigDouble(String key, double defaultValue) {
         SystemConfig config = systemConfigMapper.selectOne(
                 new LambdaQueryWrapper<SystemConfig>().eq(SystemConfig::getConfigKey, key));

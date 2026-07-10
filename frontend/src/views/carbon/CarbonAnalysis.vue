@@ -144,7 +144,8 @@ import {
   getCarbonRoadCompare,
   getEnergyBaseline,
   updateEnergyBaseline,
-  exportCarbonReport
+  exportCarbonReport,
+  recomputeCarbonStats
 } from '@/api/carbon'
 
 const loading = ref(false)
@@ -388,9 +389,19 @@ async function loadBaseline() {
 async function onSaveBaseline() {
   baselineSaving.value = true
   try {
+    // 1. 保存基准配置到后端
     await updateEnergyBaseline({ ...baseline })
     ElMessage.success('基准配置已保存')
-    // 刷新核心指标、趋势图和路段对比图（使用已算好的旧数据）
+
+    // 2. 触发后端全量重算碳减排统计（使用新基准重新计算所有历史数据）
+    try {
+      const res = await recomputeCarbonStats()
+      ElMessage.success(res?.data?.message || '碳减排统计已重新计算')
+    } catch (e) {
+      console.warn('碳减排统计重算失败（可能无传感器数据）', e)
+    }
+
+    // 3. 重新加载核心指标、趋势图、路段对比图
     await loadAll()
   } catch (e) {
     // 失败：错误已由拦截器提示
