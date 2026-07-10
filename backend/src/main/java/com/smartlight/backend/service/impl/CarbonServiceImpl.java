@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 import org.springframework.scheduling.annotation.Scheduled;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,7 +33,7 @@ public class CarbonServiceImpl implements CarbonService {
     public void initHistoryStats() {
         log.info("碳减排统计初始化：开始补全历史数据...");
         try {
-            List<Map<String, Object>> dates = sensorDataMapper.selectDistinctDates();
+            List<Map<String, Object>> dates = sensorDataMapper.selectDistinctDatesFromHourly();
             if (dates == null || dates.isEmpty()) {
                 log.info("碳减排统计初始化：无传感器数据，跳过");
                 return;
@@ -256,26 +257,35 @@ public class CarbonServiceImpl implements CarbonService {
                 ? LocalDate.parse(dateStr)
                 : LocalDate.now().minusDays(1);
 
-        List<Map<String, Object>> dailyEnergy = sensorDataMapper.selectDailyEnergyPerLight();
-        if (dailyEnergy == null || dailyEnergy.isEmpty()) {
-            log.warn("computeDailyStats: {} 无传感器数据，跳过", statDate);
-            return 0;
-        }
+        // 先从小时聚合表查询（覆盖 99.9% 场景，仅扫描 24 行/灯）
+        LocalDateTime hourStart = statDate.atStartOfDay();
+        LocalDateTime hourEnd = statDate.plusDays(1).atStartOfDay();
+        List<Map<String, Object>> hourlyData = sensorDataMapper.selectDailyEnergyByHourly(hourStart, hourEnd);
 
-        LocalDate targetDate = statDate;
-        List<Map<String, Object>> filtered = dailyEnergy.stream()
-                .filter(row -> {
-                    Object dateObj = row.get("statDate");
-                    if (dateObj == null) return false;
-                    if (dateObj instanceof java.sql.Date) {
-                        return targetDate.equals(((java.sql.Date) dateObj).toLocalDate());
-                    }
-                    return targetDate.equals(dateObj.toString());
-                })
-                .collect(Collectors.toList());
-        if (filtered.isEmpty()) {
-            log.warn("computeDailyStats: {} 无传感器数据，跳过", statDate);
-            return 0;
+        // 小时聚合表可能还没有数据（首次部署刚启动时），回退到原始 sensor_data
+        if (hourlyData == null || hourlyData.isEmpty()) {
+            hourlyData = sensorDataMapper.selectDailyEnergyPerLight();
+            if (hourlyData == null || hourlyData.isEmpty()) {
+                log.warn("computeDailyStats: {} 无传感器数据，跳过", statDate);
+                return 0;
+            }
+            LocalDate target = statDate;
+            List<Map<String, Object>> filtered = hourlyData.stream()
+                    .filter(row -> {
+                        Object dateObj = row.get("statDate");
+                        if (dateObj == null) return false;
+                        if (dateObj instanceof java.sql.Date) {
+                            return target.equals(((java.sql.Date) dateObj).toLocalDate());
+                        }
+                        return target.equals(dateObj.toString());
+                    })
+                    .collect(Collectors.toList());
+            if (filtered.isEmpty()) {
+                log.warn("computeDailyStats: {} 无传感器数据，跳过", statDate);
+                return 0;
+            }
+            hourlyData = filtered;
+            log.info("computeDailyStats: {} 使用原始数据表回退（聚合表尚未准备就绪）", statDate);
         }
 
         double baselinePower = getConfigDouble("energy_baseline_power", 250);
@@ -295,7 +305,7 @@ public class CarbonServiceImpl implements CarbonService {
 
         Map<String, Double> roadActualEnergy = new HashMap<>();
         double totalActualEnergy = 0.0;
-        for (Map<String, Object> row : filtered) {
+        for (Map<String, Object> row : hourlyData) {
             Long lightId = ((Number) row.get("lightId")).longValue();
             double energy = ((Number) row.get("dailyEnergyKwh")).doubleValue();
             String road = lightRoadMap.get(lightId);
@@ -362,7 +372,7 @@ public class CarbonServiceImpl implements CarbonService {
         log.info("全量碳减排统计重算：开始...");
         try {
             // 获取所有有传感器数据的日期
-            List<Map<String, Object>> dates = sensorDataMapper.selectDistinctDates();
+            List<Map<String, Object>> dates = sensorDataMapper.selectDistinctDatesFromHourly();
             if (dates == null || dates.isEmpty()) {
                 log.warn("全量重算：无传感器数据，跳过");
                 return 0;

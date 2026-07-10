@@ -1,8 +1,8 @@
 package com.smartlight.backend.service.impl;
 
 import com.smartlight.backend.entity.SensorData;
+import com.smartlight.backend.entity.SensorDataHourlyVO;
 import com.smartlight.backend.mapper.SensorDataMapper;
-import com.smartlight.backend.service.AlertCheckService;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,17 +10,21 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
 
 /**
- * 传感器数据批量写入服务
+ * 传感器数据小时聚合写入服务
  * <p>
- * 传感器数据先进入内存缓冲区，然后由定时任务每 5 秒批量刷入 MySQL。
- * 大幅减少 MySQL 事务提交频率（从每秒数百次降至每 5 秒一次）。
+ * 每 5 秒将缓冲区中的传感器数据在内存中做小时级聚合，然后批量 UPSERT 到
+ * {@code sensor_data_hourly} 表。不再写入原始 {@code sensor_data} 表，
+ * MySQL 写入量从每天 2800 万行降至每天 2.4 万行。
+ * <p>
+ * 重启时最多丢失 5 秒缓冲数据（约 500 条采样），
+ * 不影响碳排放计算（只看完整小时）和实时监控（数据已写入 Redis）。
  */
 @Slf4j
 @Service
@@ -28,72 +32,70 @@ import java.util.concurrent.TimeUnit;
 public class SensorDataBatchService {
 
     private final SensorDataMapper sensorDataMapper;
-    private final AlertCheckService alertCheckService;
 
-    /** 线程安全缓冲区 */
-    private final BlockingQueue<SensorData> buffer = new LinkedBlockingQueue<>();
+    /** 小时聚合缓冲区：key = "lightId@hourStart" */
+    private final Map<String, SensorDataHourlyVO> hourlyBuffer = new HashMap<>();
 
-    /** 缓冲区告警阈值 */
-    private static final int WARN_THRESHOLD = 2000;
+    /** 聚合 key 分隔符 */
+    private static final String HOURLY_KEY_SEPARATOR = "@";
 
-    /** 将数据加入写入缓冲区 */
+    /**
+     * 将一条传感器数据加入小时聚合缓冲区
+     * <p>
+     * 数据在 ingest() 阶段已写入 Redis，此处仅做内存聚合。
+     */
     public void enqueue(SensorData data) {
-        if (data == null) return;
-        buffer.offer(data);
+        if (data == null || data.getCollectTime() == null) return;
 
-        int size = buffer.size();
-        if (size > WARN_THRESHOLD && size % 500 == 0) {
-            log.warn("传感器数据缓冲区积压: {} 条，请检查消费速度", size);
-        }
+        LocalDateTime hourStart = data.getCollectTime()
+                .withMinute(0).withSecond(0).withNano(0);
+        String key = data.getLightId() + HOURLY_KEY_SEPARATOR + hourStart;
+
+        SensorDataHourlyVO agg = hourlyBuffer.computeIfAbsent(key,
+                k -> new SensorDataHourlyVO(data.getLightId(), hourStart));
+        agg.accumulate(data);
     }
 
-    /** 获取当前缓冲区大小 */
+    /** 获取当前聚合缓冲区中待 flush 的条目数 */
     public int getBufferSize() {
-        return buffer.size();
+        return hourlyBuffer.size();
     }
 
     /**
-     * 定时批量刷入 MySQL
-     * 每 5 秒执行一次，每次最多取 500 条
+     * 定时批量 UPSERT 小时聚合数据
+     * 每 5 秒执行一次，将内存中累积的小时聚合数据写入 MySQL
      */
     @Scheduled(fixedDelay = 5000)
     @Transactional(rollbackFor = Exception.class)
     public void flushToDatabase() {
-        List<SensorData> batch = new ArrayList<>();
-        buffer.drainTo(batch, 500);
-
-        if (batch.isEmpty()) return;
+        if (hourlyBuffer.isEmpty()) return;
 
         long start = System.currentTimeMillis();
 
-        // 批量 INSERT
-        sensorDataMapper.insertBatch(batch);
+        List<SensorDataHourlyVO> hourlyList = new ArrayList<>(hourlyBuffer.values());
+        try {
+            sensorDataMapper.upsertHourlyBatch(hourlyList);
+            hourlyBuffer.clear();
 
-        long elapsed = System.currentTimeMillis() - start;
-        log.info("批量写入传感器数据: {} 条, 耗时 {}ms", batch.size(), elapsed);
-
-        // 批量触发异步告警检测
-        for (SensorData data : batch) {
-            try {
-                alertCheckService.checkAndGenerateAlert(data);
-            } catch (Exception e) {
-                log.error("批量告警检测失败: lightId={}, error={}", data.getLightId(), e.getMessage());
-            }
+            long elapsed = System.currentTimeMillis() - start;
+            log.debug("小时聚合 flush 完成: {} 条, 耗时 {}ms", hourlyList.size(), elapsed);
+        } catch (Exception e) {
+            log.error("小时聚合写入失败: {}, 缓冲区保留待下次重试", e.getMessage());
+            // 不 clear，下次 flush 会重试
         }
     }
 
     @PreDestroy
     public void destroy() {
-        // 应用关闭前，将缓冲区剩余数据全部刷入数据库
-        List<SensorData> remaining = new ArrayList<>();
-        buffer.drainTo(remaining);
-        if (!remaining.isEmpty()) {
-            log.info("服务关闭前刷入剩余 {} 条传感器数据", remaining.size());
-            try {
-                sensorDataMapper.insertBatch(remaining);
-            } catch (Exception e) {
-                log.error("关闭前刷入失败: {}", e.getMessage());
-            }
+        if (hourlyBuffer.isEmpty()) return;
+
+        List<SensorDataHourlyVO> remaining = new ArrayList<>(hourlyBuffer.values());
+        log.info("服务关闭前刷入剩余 {} 条小时聚合数据", remaining.size());
+        try {
+            sensorDataMapper.upsertHourlyBatch(remaining);
+            hourlyBuffer.clear();
+        } catch (Exception e) {
+            log.error("关闭前刷入失败: {}", e.getMessage());
         }
     }
 }

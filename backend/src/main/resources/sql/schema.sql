@@ -222,3 +222,30 @@ CREATE TABLE IF NOT EXISTS `timed_strategy` (
 -- 更新示例路灯的行政区/路段
 UPDATE `light` SET `district`='中心区', `road`='人民路' WHERE `light_code` IN ('SL-001','SL-002');
 UPDATE `light` SET `district`='城北区', `road`='建设路' WHERE `light_code` IN ('SL-003','SL-004');
+
+-- ============================================================
+-- 传感器数据小时级聚合表
+-- 用途：
+--   1. 碳排放分析从此表读取，替代全表扫 sensor_data
+--   2. 历史趋势图从此表读取，行数减少 99.9%
+--   3. sensor_data 原始数据 30 天后自动清理，不影响统计
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `sensor_data_hourly` (
+    `id`              BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `light_id`        BIGINT NOT NULL COMMENT '关联路灯ID',
+    `hour_start`      DATETIME NOT NULL COMMENT '统计小时起点（分钟秒归零）',
+    `avg_illuminance` DECIMAL(10,2) DEFAULT NULL COMMENT '小时平均光照(lux)',
+    `avg_power`       DECIMAL(10,2) DEFAULT NULL COMMENT '小时平均功率(W)',
+    `avg_voltage`     DECIMAL(10,2) DEFAULT NULL COMMENT '小时平均电压(V)',
+    `avg_current`     DECIMAL(10,3) DEFAULT NULL COMMENT '小时平均电流(A)',
+    `avg_temperature` DECIMAL(5,2)  DEFAULT NULL COMMENT '小时平均温度(°C)',
+    `avg_humidity`    DECIMAL(5,2)  DEFAULT NULL COMMENT '小时平均湿度(%RH)',
+    `total_energy`    DECIMAL(12,3) DEFAULT 0 COMMENT '小时累计耗电(Wh)',
+    `data_count`      INT DEFAULT 0 COMMENT '小时采样次数',
+    `max_power`       DECIMAL(10,2) DEFAULT NULL COMMENT '小时最高功率(W)',
+    `min_power`       DECIMAL(10,2) DEFAULT NULL COMMENT '小时最低功率(W)',
+    `create_time`     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_light_hour` (`light_id`, `hour_start`),
+    KEY `idx_hour_start` (`hour_start`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='传感器数据小时级聚合表（用于碳排放计算、历史趋势、统计分析）';

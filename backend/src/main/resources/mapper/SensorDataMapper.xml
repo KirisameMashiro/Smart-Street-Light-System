@@ -28,4 +28,40 @@
         </foreach>
     </insert>
 
+    <!-- 批量 UPSERT 小时级聚合数据 -->
+    <insert id="upsertHourlyBatch">
+        INSERT INTO sensor_data_hourly
+            (light_id, hour_start, avg_illuminance, avg_power, avg_voltage, avg_current,
+             avg_temperature, avg_humidity, total_energy, data_count, max_power, min_power)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.lightId}, #{item.hourStart},
+             #{item.avgIlluminance}, #{item.avgPower}, #{item.avgVoltage}, #{item.avgCurrent},
+             #{item.avgTemperature}, #{item.avgHumidity},
+             #{item.totalEnergy}, #{item.dataCount}, #{item.maxPower}, #{item.minPower})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            avg_illuminance = (avg_illuminance * data_count + VALUES(avg_illuminance)) / (data_count + 1),
+            avg_power       = (avg_power * data_count + VALUES(avg_power)) / (data_count + 1),
+            avg_voltage     = (avg_voltage * data_count + VALUES(avg_voltage)) / (data_count + 1),
+            avg_current     = (avg_current * data_count + VALUES(avg_current)) / (data_count + 1),
+            avg_temperature = (avg_temperature * data_count + VALUES(avg_temperature)) / (data_count + 1),
+            avg_humidity    = (avg_humidity * data_count + VALUES(avg_humidity)) / (data_count + 1),
+            total_energy    = total_energy + VALUES(total_energy),
+            data_count      = data_count + VALUES(data_count),
+            max_power       = GREATEST(IFNULL(max_power, 0), VALUES(max_power)),
+            min_power       = CASE
+                                WHEN min_power IS NULL THEN VALUES(min_power)
+                                WHEN VALUES(min_power) > 0 AND VALUES(min_power) < min_power THEN VALUES(min_power)
+                                ELSE min_power
+                              END
+    </insert>
+
+    <!-- 删除 collect_time 早于指定时间的原始数据（数据保留策略） -->
+    <delete id="deleteByCollectTimeBefore">
+        DELETE FROM sensor_data
+        WHERE collect_time <![CDATA[ < ]]> #{cutoff}
+        LIMIT 10000
+    </delete>
+
 </mapper>
