@@ -630,9 +630,8 @@ async function onSubmit() {
   submitting.value = true
   try {
     const firstGroup = form.applyGroups[0] || {}
-    const { applyGroups, ...restForm } = form
     const payload = {
-      ...restForm,
+      ...form,
       district: firstGroup.district || '',
       road: firstGroup.roads?.[0] || '',
       roads: form.applyGroups.flatMap(g => g.roads || [])
