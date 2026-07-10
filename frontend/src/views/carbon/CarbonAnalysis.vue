@@ -390,6 +390,8 @@ async function onSaveBaseline() {
   try {
     await updateEnergyBaseline({ ...baseline })
     ElMessage.success('基准配置已保存')
+    // 刷新核心指标、趋势图和路段对比图（使用已算好的旧数据）
+    await loadAll()
   } catch (e) {
     // 失败：错误已由拦截器提示
   } finally {
