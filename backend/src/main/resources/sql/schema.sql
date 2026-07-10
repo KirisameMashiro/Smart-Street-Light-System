@@ -204,18 +204,18 @@ CREATE TABLE IF NOT EXISTS `threshold_control` (
 -- 11. 定时策略表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `timed_strategy` (
-    `id`          BIGINT AUTO_INCREMENT COMMENT '主键ID',
-    `name`        VARCHAR(100) NOT NULL COMMENT '策略名称',
-    `type`        VARCHAR(20) NOT NULL COMMENT '策略类型: default/timed',
-    `weekdays`    JSON DEFAULT NULL COMMENT '适用星期 [1,2,3,4,5,6,7]',
-    `start_date`  DATE DEFAULT NULL COMMENT '开始日期',
-    `end_date`    DATE DEFAULT NULL COMMENT '结束日期',
-    `start_time`  TIME NOT NULL COMMENT '开始时间',
-    `end_time`    TIME NOT NULL COMMENT '结束时间',
-    `brightness`  INT NOT NULL DEFAULT 80 COMMENT '目标亮度 0-100',
-    `district`    VARCHAR(50) DEFAULT NULL COMMENT '行政区',
-    `road`        VARCHAR(100) DEFAULT NULL COMMENT '路段',
-    `enabled`     TINYINT DEFAULT 1 COMMENT '是否启用 0-禁用 1-启用',
+    `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `name` VARCHAR(100) NOT NULL COMMENT '策略名称',
+    `type` VARCHAR(20) NOT NULL COMMENT '策略类型：default/timed',
+    `weekdays` JSON DEFAULT NULL COMMENT '适用星期 [1,2,3,4,5,6,7]，默认类型必填',
+    `start_date` DATE DEFAULT NULL COMMENT '开始日期，时间段类型必填',
+    `end_date` DATE DEFAULT NULL COMMENT '结束日期，时间段类型必填',
+    `start_time` TIME NOT NULL COMMENT '开始时间',
+    `end_time` TIME NOT NULL COMMENT '结束时间',
+    `brightness` INT NOT NULL DEFAULT 80 COMMENT '目标亮度 0-100',
+    `district` VARCHAR(50) DEFAULT NULL COMMENT '行政区',
+    `roads` JSON DEFAULT NULL COMMENT '路段列表，JSON数组',
+    `enabled` TINYINT DEFAULT 1 COMMENT '是否启用 0-禁用 1-启用',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
@@ -237,3 +237,29 @@ CREATE TABLE IF NOT EXISTS `knowledge` (
     PRIMARY KEY (`id`),
     INDEX `idx_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
+
+-- ============================================================
+-- 13. 亮度推荐记录表 (brightness_recommendation)
+-- 每小时对每种道路等级计算一次推荐亮度并记录
+-- ============================================================
+DROP TABLE IF EXISTS `brightness_recommendation`;
+CREATE TABLE `brightness_recommendation` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `calc_hour` DATETIME NOT NULL COMMENT '计算的目标小时',
+    `road_level` VARCHAR(20) DEFAULT NULL COMMENT '道路等级：主干道/次干道/园区道路',
+    `solar_elevation` DOUBLE DEFAULT NULL COMMENT '太阳高度角（度）',
+    `theoretical_lux` DOUBLE DEFAULT NULL COMMENT '理论基准照度 Lstd (lux)',
+    `weather_correction` DOUBLE DEFAULT NULL COMMENT '天气修正系数 Wcorr',
+    `environmental_lux` DOUBLE DEFAULT NULL COMMENT '等效环境光照 Lenv (lux)',
+    `e_min` INT DEFAULT NULL COMMENT '道路最低安全照度 Emin (lux)',
+    `recommended_brightness` INT DEFAULT NULL COMMENT '推荐亮度 0-100',
+    `period_label` VARCHAR(20) DEFAULT NULL COMMENT '时段标签',
+    `cloud_cover` INT DEFAULT NULL COMMENT '云量 0-100',
+    `rain_level` VARCHAR(20) DEFAULT NULL COMMENT '降雨等级',
+    `weather_desc` VARCHAR(50) DEFAULT NULL COMMENT '天气描述',
+    `latitude` DOUBLE DEFAULT NULL COMMENT '纬度',
+    `longitude` DOUBLE DEFAULT NULL COMMENT '经度',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    KEY `idx_calc_hour` (`calc_hour`),
+    KEY `idx_road_level` (`road_level`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='亮度推荐记录表';

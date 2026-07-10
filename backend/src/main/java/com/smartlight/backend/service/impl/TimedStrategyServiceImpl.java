@@ -187,8 +187,8 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         if (StringUtils.hasText(strategy.getDistrict())) {
             wrapper.eq(Light::getDistrict, strategy.getDistrict());
         }
-        if (StringUtils.hasText(strategy.getRoad())) {
-            wrapper.eq(Light::getRoad, strategy.getRoad());
+        if (strategy.getRoads() != null && !strategy.getRoads().isEmpty()) {
+            wrapper.in(Light::getRoad, strategy.getRoads());
         }
         
         return lightMapper.selectList(wrapper);

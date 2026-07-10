@@ -115,8 +115,8 @@
         <text class="form-label">路段</text>
         <picker mode="selector" :range="filteredRoads" @change="onRoadChange">
           <view class="form-picker">
-            <text :class="{ placeholder: !form.road }">
-              {{ form.road || '请选择路段' }}
+            <text :class="{ placeholder: !form.roads || form.roads.length === 0 }">
+              {{ (form.roads && form.roads.length > 0) ? form.roads[0] : '请选择路段' }}
             </text>
             <text class="picker-arrow">›</text>
           </view>
@@ -165,7 +165,7 @@ const form = reactive<TimedStrategy>({
   startDate: '',
   endDate: '',
   district: '',
-  road: '',
+  roads: [] as string[],
   brightness: 80,
   enabled: true
 })
@@ -247,12 +247,12 @@ async function loadRoads() {
 function onDistrictChange(e: { detail: { value: number } }) {
   const district = districtOptions.value[e.detail.value]
   form.district = district
-  form.road = ''
+  form.roads = []
 }
 
 function onRoadChange(e: { detail: { value: number } }) {
   const road = filteredRoads.value[e.detail.value]
-  form.road = road
+  form.roads = road ? [road] : []
   if (road) {
     const district = roadDistrictMap[road]
     if (district) {

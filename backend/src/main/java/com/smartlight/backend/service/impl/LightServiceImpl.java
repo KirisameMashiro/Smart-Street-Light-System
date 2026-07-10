@@ -69,11 +69,11 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
         LambdaQueryWrapper<Light> wrapper = new LambdaQueryWrapper<>();
 
         if (StringUtils.hasText(keyword)) {
-            wrapper.like(Light::getLightName, keyword)
-                   .or()
-                   .like(Light::getLightCode, keyword)
-                   .or()
-                   .like(Light::getLocation, keyword);
+            wrapper.and(w -> w.like(Light::getLightName, keyword)
+                              .or()
+                              .like(Light::getLightCode, keyword)
+                              .or()
+                              .like(Light::getLocation, keyword));
         }
 
         if (status != null) {

@@ -37,7 +37,9 @@ public class TimedStrategy {
 
     private String district;
 
-    private String road;
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    @JsonProperty("roads")
+    private List<String> roads;
 
     private Boolean enabled;
 

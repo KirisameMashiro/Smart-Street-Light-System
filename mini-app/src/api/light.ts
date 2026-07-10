@@ -13,7 +13,7 @@ export interface Light {
   deviceType: string
   ratedPower: number
   district: string
-  road: string
+  roads: string[]
 }
 
 export interface LightStats {

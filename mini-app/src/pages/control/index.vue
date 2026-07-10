@@ -553,7 +553,7 @@ async function saveStrategy() {
     weekdays: strategyForm.value.type === 'default' ? strategyForm.value.weekdays : undefined,
     brightness: Number(strategyForm.value.brightness) || 50,
     district: '',
-    road: '',
+    roads: [] as string[],
     enabled: true
   }
 
