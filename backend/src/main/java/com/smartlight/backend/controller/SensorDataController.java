@@ -14,6 +14,9 @@ import java.util.Map;
 
 /**
  * 传感器数据管理 API
+ * <p>
+ * - 历史数据查询 /page、/average 仍走 MySQL<br>
+ * - 最新数据查询 /latest/{lightId}、/latest/all 优先走 Redis 缓存
  */
 @RestController
 @RequestMapping("/api/sensor-data")
@@ -26,7 +29,7 @@ public class SensorDataController {
     private CumulativeEnergyService cumulativeEnergyService;
 
     /**
-     * 分页查询传感器数据
+     * 分页查询传感器数据（历史数据，查 MySQL）
      */
     @GetMapping("/page")
     public Result<IPage<SensorData>> getPage(SensorDataQueryDTO queryDTO) {
@@ -42,6 +45,7 @@ public class SensorDataController {
 
     /**
      * 获取路灯最新传感器数据
+     * 优先读 Redis 缓存，Miss 则查 MySQL
      */
     @GetMapping("/latest/{lightId}")
     public Result<SensorData> getLatest(@PathVariable Long lightId) {
@@ -49,7 +53,18 @@ public class SensorDataController {
     }
 
     /**
-     * 获取平均传感器数据
+     * 批量获取所有路灯最新传感器数据
+     * 通过 Redis pipeline 一次获取全部，替代 N+1 次独立查询
+     * 实时监控页面使用此接口替代逐盏查询
+     */
+    @GetMapping("/latest/all")
+    public Result<Map<Long, SensorData>> getAllLatest() {
+        Map<Long, SensorData> allLatest = sensorDataService.getAllLatest();
+        return Result.success(allLatest);
+    }
+
+    /**
+     * 获取平均传感器数据（历史聚合，查 MySQL）
      */
     @GetMapping("/average/{lightId}")
     public Result<SensorData> getAverage(

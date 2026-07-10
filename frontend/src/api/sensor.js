@@ -26,3 +26,9 @@ export function addSensorData(data) {
 export function getTodayEnergy() {
   return request.get('/sensor-data/today-energy')
 }
+
+// 批量获取所有路灯最新传感器数据
+// 替代之前的逐盏查询，后端从 Redis pipeline 一次读取
+export function getAllLatestSensorData() {
+  return request.get('/sensor-data/latest/all')
+}

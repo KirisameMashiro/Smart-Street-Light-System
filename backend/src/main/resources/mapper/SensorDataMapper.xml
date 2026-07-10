@@ -16,4 +16,16 @@
         <result column="create_time" property="createTime"/>
     </resultMap>
 
+    <!-- 批量插入传感器数据（无主键回填，提升批量写入性能） -->
+    <insert id="insertBatch" useGeneratedKeys="false">
+        INSERT INTO sensor_data (light_id, illuminance, power, voltage, current,
+                                 temperature, humidity, sampling_energy, collect_time, create_time)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.lightId}, #{item.illuminance}, #{item.power}, #{item.voltage},
+             #{item.current}, #{item.temperature}, #{item.humidity},
+             #{item.samplingEnergy}, #{item.collectTime}, NOW())
+        </foreach>
+    </insert>
+
 </mapper>

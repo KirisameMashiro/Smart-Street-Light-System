@@ -3,6 +3,7 @@ package com.smartlight.backend.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.smartlight.backend.entity.SensorData;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -51,4 +52,9 @@ public interface SensorDataMapper extends BaseMapper<SensorData> {
             "FROM sensor_data WHERE sampling_energy IS NOT NULL AND collect_time >= CURDATE() " +
             "GROUP BY light_id")
     List<Map<String, Object>> selectTodayEnergySum();
+
+    /**
+     * 批量插入传感器数据（无主键回填，提升批量写入性能）
+     */
+    Long insertBatch(@Param("list") List<SensorData> list);
 }

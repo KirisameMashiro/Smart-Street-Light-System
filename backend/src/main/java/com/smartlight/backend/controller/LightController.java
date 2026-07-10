@@ -51,7 +51,7 @@ public class LightController {
 
     @GetMapping
     public Result<List<Light>> getAll() {
-        return Result.success(lightService.list());
+        return Result.success(lightService.getCachedList());
     }
 
     @GetMapping("/{id}")

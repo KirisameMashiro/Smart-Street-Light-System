@@ -42,4 +42,9 @@ public interface LightService extends IService<Light> {
      * 获取所有设备类型列表
      */
     List<String> getDeviceTypes();
+
+    /**
+     * 获取全量路灯列表（优先从 Redis 缓存读取）
+     */
+    List<Light> getCachedList();
 }

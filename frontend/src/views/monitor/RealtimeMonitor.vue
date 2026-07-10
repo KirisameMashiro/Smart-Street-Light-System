@@ -126,7 +126,7 @@
               {{ sensorMap[row.id]?.humidity != null ? sensorMap[row.id].humidity.toFixed(1) : '-' }}
             </template>
           </el-table-column>
-          <el-table-column label="累计耗电(Wh)" width="120">
+          <el-table-column label="今日累计耗电(Wh)" width="140">
           <template #default="{ row }">
             {{ cumulativeEnergyMap[row.id] != null ? cumulativeEnergyMap[row.id].toFixed(3) : '-' }}
           </template>
@@ -295,7 +295,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLightPage, getAllLights, getLightById } from '@/api/light'
-import { getLatestSensorData, getTodayEnergy } from '@/api/sensor'
+import { getAllLatestSensorData, getLatestSensorData, getTodayEnergy } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { useAppStore } from '@/store/app'
 
@@ -312,6 +312,9 @@ const allLights = ref([])
 const sensorMap = reactive({})
 const cumulativeEnergyMap = reactive({})
 const sensorApiAvailable = ref(null)
+
+/** 是否使用批量传感器API（/latest/all — Redis缓存版） */
+const useBatchSensorApi = ref(false)
 
 const filter = reactive({ district: undefined, road: undefined, status: undefined })
 const listQuery = reactive({ pageNum: 1, pageSize: 10 })
@@ -390,28 +393,40 @@ function applySensor(id, d) {
   }
 }
 
-async function runConcurrent(items, limit, fn) {
-  const queue = [...items]
-  async function worker() {
-    while (queue.length) {
-      const item = queue.shift()
-      if (!item) break
-      try {
-        await fn(item)
-      } catch (e) {}
-    }
-  }
-  const workers = Array.from(
-    { length: Math.min(limit, items.length) },
-    worker
-  )
-  await Promise.all(workers)
-}
-
+/**
+ * 加载传感器数据 — 优先使用批量接口（Redis 缓存版）
+ *
+ * 优化后：一次 GET /api/sensor-data/latest/all 获取所有路灯最新数据
+ * 降级方案：如果批量接口不可用，回退到逐盏查询
+ */
 async function loadSensorData(lights) {
   if (!lights || lights.length === 0) return
   if (sensorApiAvailable.value === false) return
 
+  // ===== 优先尝试批量接口（Redis pipeline，一次返回全部） =====
+  try {
+    const res = await getAllLatestSensorData()
+    // 请求成功 -> 全部数据从 Redis 拿到
+    sensorApiAvailable.value = true
+    useBatchSensorApi.value = true
+
+    const dataMap = res.data || {}
+    // 清空旧数据
+    Object.keys(sensorMap).forEach(k => delete sensorMap[k])
+    // 填入批量结果
+    Object.entries(dataMap).forEach(([lightId, data]) => {
+      applySensor(Number(lightId), data)
+    })
+    return
+  } catch (e) {
+    // 批量接口不可用（如 Redis 未部署），降级
+    if (useBatchSensorApi.value !== true) {
+      console.warn('[sensor] 批量接口不可用，降级为逐盏查询', e.message)
+    }
+    useBatchSensorApi.value = false
+  }
+
+  // ===== 降级方案：逐盏查询（保持向后兼容） =====
   if (sensorApiAvailable.value === null) {
     try {
       const res = await getLatestSensorData(lights[0].id)
@@ -421,19 +436,36 @@ async function loadSensorData(lights) {
       sensorApiAvailable.value = false
       return
     }
-    await runConcurrent(lights.slice(1), 8, async (l) => {
-      try {
-        const res = await getLatestSensorData(l.id)
-        applySensor(l.id, res.data)
-      } catch (e) {}
-    })
+    // 并发 8 路查询剩余路灯
+    const queue = lights.slice(1)
+    const workers = Array.from({ length: Math.min(8, queue.length) }, () =>
+      (async () => {
+        while (queue.length) {
+          const l = queue.shift()
+          if (!l) break
+          try {
+            const res = await getLatestSensorData(l.id)
+            applySensor(l.id, res.data)
+          } catch (e) { /* 单盏查询失败跳过 */ }
+        }
+      })()
+    )
+    await Promise.all(workers)
   } else {
-    await runConcurrent(lights, 8, async (l) => {
-      try {
-        const res = await getLatestSensorData(l.id)
-        applySensor(l.id, res.data)
-      } catch (e) {}
-    })
+    const queue = [...lights]
+    const workers = Array.from({ length: Math.min(8, queue.length) }, () =>
+      (async () => {
+        while (queue.length) {
+          const l = queue.shift()
+          if (!l) break
+          try {
+            const res = await getLatestSensorData(l.id)
+            applySensor(l.id, res.data)
+          } catch (e) { /* 单盏查询失败跳过 */ }
+        }
+      })()
+    )
+    await Promise.all(workers)
   }
 }
 
@@ -561,7 +593,7 @@ function renderMarkers() {
 
   lightsWithLocation.value.forEach((light) => {
     currentIds.add(light.id)
-    
+
     if (markerMap[light.id]) {
       const marker = markerMap[light.id]
       const icon = createMarkerIcon(light)
@@ -572,11 +604,11 @@ function renderMarkers() {
         [Number(light.latitude), Number(light.longitude)],
         { icon }
       ).addTo(markersLayer)
-      
+
       marker.on('click', () => {
         onMarkerClick(light)
       })
-      
+
       markerMap[light.id] = marker
     }
   })
@@ -948,281 +980,5 @@ onUnmounted(() => {
 
 .map-wrapper {
   flex: 1;
-  border-radius: 0 0 8px 8px;
-  overflow: hidden;
-}
-
-.status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 4px;
-}
-
-.status-dot.online {
-  background-color: #67c23a;
-}
-
-.status-dot.fault {
-  background-color: #f56c6c;
-}
-
-.status-dot.offline {
-  background-color: #909399;
-}
-
-.table-wrapper {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.table-wrapper :deep(.el-table) {
-  min-width: 100%;
-}
-
-.light-detail {
-  padding: 8px 0;
-}
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.detail-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #fff;
-}
-
-.detail-icon.marker-online {
-  background-color: #67c23a;
-}
-
-.detail-icon.marker-fault {
-  background-color: #f56c6c;
-}
-
-.detail-icon.marker-offline {
-  background-color: #909399;
-}
-
-.detail-info h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.detail-status {
-  margin-top: 4px;
-}
-
-.detail-body {
-  display: grid;
-  grid-template-columns: 100px 1fr;
-  gap: 12px 8px;
-}
-
-.detail-row {
-  display: contents;
-}
-
-.detail-label {
-  color: #909399;
-  font-size: 13px;
-}
-
-.detail-value {
-  color: #303133;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.sensor-section {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px dashed #ebeef5;
-}
-
-.sensor-title {
-  margin: 0 0 12px 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: #303133;
-  grid-column: 1 / -1;
-}
-
-@media (max-width: 768px) {
-  .map-card {
-    height: 400px;
-    max-height: calc(100vh - 280px);
-  }
-
-  .map-header {
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 12px;
-  }
-
-  .map-header .text-muted:last-child {
-    margin-left: 0;
-    margin-top: 4px;
-  }
-
-  .map-info {
-    margin-left: 0;
-    gap: 8px;
-    font-size: 11px;
-  }
-
-  .detail-body {
-    grid-template-columns: 80px 1fr;
-  }
-
-  .filter-bar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .filter-bar .el-select {
-    width: calc(50% - 4px) !important;
-  }
-
-  .filter-bar .text-muted {
-    margin-left: 0 !important;
-    width: 100%;
-    text-align: center;
-  }
-
-  .table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    -ms-overflow-style: -ms-autohiding-scrollbar;
-  }
-
-  .table-wrapper::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .table-wrapper::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-  }
-
-  .table-wrapper::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-  }
-}
-</style>
-
-<style>
-.light-marker {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  cursor: pointer;
-}
-
-.marker-glow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 40px;
-  height: 40px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background-color: #67c23a;
-  opacity: 0.25;
-  filter: blur(4px);
-  animation: marker-glow 2s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes marker-glow {
-  0%, 100% {
-    opacity: 0.25;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: translate(-50%, -50%) scale(1.2);
-  }
-}
-
-.marker-outer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 28px;
-  height: 28px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: linear-gradient(135deg, #e8eaec 0%, #c0c4cc 50%, #909399 100%);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-
-.marker-inner {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  box-shadow: 0 0 3px rgba(255, 255, 255, 0.6) inset;
-}
-
-.marker-online .marker-inner {
-  background-color: #67c23a;
-}
-
-.marker-fault .marker-inner {
-  background-color: #f56c6c;
-}
-
-.marker-offline .marker-inner {
-  background-color: #909399;
-}
-
-.marker-pulse {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 28px;
-  height: 28px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background-color: rgba(245, 108, 108, 0.4);
-  animation: marker-pulse 1.5s ease-out infinite;
-  pointer-events: none;
-  z-index: 1;
-}
-
-@keyframes marker-pulse {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(2.2);
-    opacity: 0;
-  }
-}
-
-.leaflet-div-icon {
-  background: transparent;
-  border: none;
 }
 </style>
