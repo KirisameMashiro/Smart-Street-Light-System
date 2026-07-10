@@ -15,12 +15,14 @@ import com.smartlight.backend.websocket.AlertWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 告警自动检测服务实现
@@ -44,6 +46,10 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     private final LightMapper lightMapper;
     private final AlertRuleEvaluator alertRuleEvaluator;
     private final AlertPushService alertPushService;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    /** Redis Key 前缀：每盏路灯最新传感器数据 */
+    private static final String KEY_SENSOR_LATEST_PREFIX = "sensor:latest:";
 
     @Value("${alert.dedup.minutes:30}")
     private int dedupWindowMinutes;
@@ -95,7 +101,8 @@ public class AlertCheckServiceImpl implements AlertCheckService {
 
         int alertCount = 0;
         for (Light light : lights) {
-            SensorData latest = sensorDataMapper.selectLatestByLightId(light.getId());
+            // 从 Redis 读取最新传感器数据（不走 SensorDataService 避免循环依赖）
+            SensorData latest = getLatestFromRedis(light.getId());
             if (latest == null) continue;
 
             for (AlertRule rule : enabledRules) {
@@ -116,6 +123,36 @@ public class AlertCheckServiceImpl implements AlertCheckService {
 
         if (alertCount > 0) {
             log.info("定时告警检查完成: 生成 {} 条新告警（已入推送缓冲区）", alertCount);
+        }
+    }
+
+    /**
+     * 从 Redis 读取某盏灯的最新传感器数据
+     */
+    private SensorData getLatestFromRedis(Long lightId) {
+        String key = KEY_SENSOR_LATEST_PREFIX + lightId;
+        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+        if (entries.isEmpty()) return null;
+
+        SensorData data = new SensorData();
+        data.setLightId(lightId);
+        data.setIlluminance(getDouble(entries, "illuminance"));
+        data.setPower(getDouble(entries, "power"));
+        data.setVoltage(getDouble(entries, "voltage"));
+        data.setCurrent(getDouble(entries, "current"));
+        data.setTemperature(getDouble(entries, "temperature"));
+        data.setHumidity(getDouble(entries, "humidity"));
+        data.setSamplingEnergy(getDouble(entries, "samplingEnergy"));
+        return data;
+    }
+
+    private Double getDouble(Map<Object, Object> map, String key) {
+        Object val = map.get(key);
+        if (val == null) return null;
+        try {
+            return Double.parseDouble(val.toString());
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 
@@ -150,7 +187,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     }
 
     /**
-     * 保存告警并放入合并推送缓冲区（代替之前的直接推送+邮件）
+     * 保存告警并放入合并推送缓冲区
      */
     private void saveAndEnqueue(Long lightId, EvaluateResult result, AlertRule rule) {
         Alert alert = saveAlert(lightId, result, rule);
