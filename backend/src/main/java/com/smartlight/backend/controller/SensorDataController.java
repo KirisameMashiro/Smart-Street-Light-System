@@ -4,11 +4,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.smartlight.backend.common.Result;
 import com.smartlight.backend.dto.SensorDataQueryDTO;
 import com.smartlight.backend.entity.SensorData;
+import com.smartlight.backend.service.CumulativeEnergyService;
 import com.smartlight.backend.service.SensorDataService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * 传感器数据管理 API
@@ -19,6 +21,9 @@ public class SensorDataController {
 
     @Autowired
     private SensorDataService sensorDataService;
+
+    @Autowired
+    private CumulativeEnergyService cumulativeEnergyService;
 
     /**
      * 分页查询传感器数据
@@ -69,5 +74,13 @@ public class SensorDataController {
             sensorData.setCollectTime(LocalDateTime.now());
         }
         return Result.success(sensorDataService.save(sensorData));
+    }
+
+    /**
+     * 获取所有路灯今日累计耗电 (Wh)
+     */
+    @GetMapping("/today-energy")
+    public Result<Map<Long, Double>> getTodayEnergy() {
+        return Result.success(cumulativeEnergyService.getAllTodayEnergy());
     }
 }

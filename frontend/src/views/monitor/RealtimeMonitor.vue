@@ -126,9 +126,9 @@
               {{ sensorMap[row.id]?.humidity != null ? sensorMap[row.id].humidity.toFixed(1) : '-' }}
             </template>
           </el-table-column>
-          <el-table-column label="累计耗电(kWh)" width="120">
+          <el-table-column label="累计耗电(Wh)" width="120">
           <template #default="{ row }">
-            {{ sensorMap[row.id]?.samplingEnergy != null ? (sensorMap[row.id].samplingEnergy / 1000).toFixed(3) : '-' }}
+            {{ cumulativeEnergyMap[row.id] != null ? cumulativeEnergyMap[row.id].toFixed(3) : '-' }}
           </template>
         </el-table-column>
         </el-table>
@@ -238,7 +238,7 @@
             </div>
             <div class="detail-row">
               <span class="detail-label">累计耗电</span>
-              <span class="detail-value">{{ sensorMap[selectedLight.id].samplingEnergy != null ? (sensorMap[selectedLight.id].samplingEnergy / 1000).toFixed(3) : '-' }} kWh</span>
+              <span class="detail-value">{{ cumulativeEnergyMap[selectedLight.id] != null ? cumulativeEnergyMap[selectedLight.id].toFixed(3) : '-' }} Wh</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">采集时间</span>
@@ -295,7 +295,7 @@ import { Refresh } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLightPage, getAllLights, getLightById } from '@/api/light'
-import { getLatestSensorData } from '@/api/sensor'
+import { getLatestSensorData, getTodayEnergy } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { useAppStore } from '@/store/app'
 
@@ -310,6 +310,7 @@ const router = useRouter()
 const page = ref({ records: [], total: 0 })
 const allLights = ref([])
 const sensorMap = reactive({})
+const cumulativeEnergyMap = reactive({})
 const sensorApiAvailable = ref(null)
 
 const filter = reactive({ district: undefined, road: undefined, status: undefined })
@@ -670,6 +671,16 @@ async function refreshAll(reprobe = false) {
     page.value = newPage
     allLights.value = newAll
     await loadSensorData(allLights.value)
+    // 获取今日累计耗电（独立于传感器采样间隔耗电）
+    try {
+      const energyRes = await getTodayEnergy()
+      if (energyRes.data) {
+        Object.keys(cumulativeEnergyMap).forEach(k => delete cumulativeEnergyMap[k])
+        Object.entries(energyRes.data).forEach(([lightId, energy]) => {
+          cumulativeEnergyMap[lightId] = energy
+        })
+      }
+    } catch (e) { /* 累计耗电接口失败不影响主流程 */ }
     if (mode.value === 'map') {
       await nextTick()
       renderMarkers()

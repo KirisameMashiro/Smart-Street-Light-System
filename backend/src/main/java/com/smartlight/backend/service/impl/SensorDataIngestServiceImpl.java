@@ -4,6 +4,7 @@ import com.smartlight.backend.dto.SensorDataDTO;
 import com.smartlight.backend.entity.SensorData;
 import com.smartlight.backend.mapper.SensorDataMapper;
 import com.smartlight.backend.service.AlertCheckService;
+import com.smartlight.backend.service.CumulativeEnergyService;
 import com.smartlight.backend.service.SensorDataIngestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
 
     private final SensorDataMapper sensorDataMapper;
     private final AlertCheckService alertCheckService;
+    private final CumulativeEnergyService cumulativeEnergyService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -59,6 +61,11 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
         sensorDataMapper.insert(entity);
         log.info("传感器数据入库成功: lightId={}, collectTime={}, samplingEnergy={}Wh",
                 dto.getLightId(), dto.getCollectTime(), entity.getSamplingEnergy());
+
+        // 实时累加今日累计耗电
+        if (entity.getSamplingEnergy() != null && entity.getSamplingEnergy() > 0) {
+            cumulativeEnergyService.accumulate(dto.getLightId(), entity.getSamplingEnergy());
+        }
 
         // 入库后立即触发告警实时检测
         try {

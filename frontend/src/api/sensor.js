@@ -21,3 +21,8 @@ export function getAverageSensorData(lightId, startTime, endTime) {
 export function addSensorData(data) {
   return request.post('/sensor-data', data)
 }
+
+// 获取所有路灯今日累计耗电 (Wh)
+export function getTodayEnergy() {
+  return request.get('/sensor-data/today-energy')
+}

@@ -1,6 +1,7 @@
 package com.smartlight.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartlight.backend.config.AIConfig;
 import com.smartlight.backend.entity.Knowledge;
@@ -10,7 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -508,6 +519,209 @@ public class AgentService {
         }
 
         return "操作已执行，但响应超时。";
+    }
+
+    // ==================== 流式输出 ====================
+
+    /** HTTP 客户端（用于 SSE 流式连接） */
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
+
+    /**
+     * 流式对话：文本内容逐字回调，工具调用内部静默处理
+     */
+    public void chatStream(String sessionId, String userMessage, Consumer<String> onChunk) {
+        LinkedList<Map<String, Object>> history = getOrCreateSession(sessionId);
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+        messages.add(Map.of("role", "system", "content", aiConfig.getSystemPrompt()));
+        messages.addAll(history);
+        messages.add(Map.of("role", "user", "content", userMessage));
+
+        history.add(Map.of("role", "user", "content", userMessage));
+        trimHistory(history);
+
+        for (int round = 0; round < 5; round++) {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", aiConfig.getModel());
+            body.put("messages", messages);
+            body.put("temperature", 0.7);
+            body.put("tools", tools);
+            body.put("tool_choice", "auto");
+            body.put("stream", true);
+
+            SSEParseResult result = callSSE(body);
+            if (result == null) {
+                onChunk.accept("抱歉，AI 服务暂时不可用。");
+                return;
+            }
+
+            if (!result.hasToolCalls) {
+                // 文本回复：逐 chunk 推送给前端
+                for (String chunk : result.contentChunks) {
+                    if (chunk != null && !chunk.isEmpty()) {
+                        onChunk.accept(chunk);
+                    }
+                }
+                // 保存完整回复到历史
+                history.add(Map.of("role", "assistant", "content", result.content));
+                trimHistory(history);
+                return;
+            }
+
+            // 工具调用：内部处理，不推给前端
+            messages.add(result.assistantMessage);
+
+            for (Map.Entry<String, SSEParseResult.ToolCall> entry : result.toolCalls.entrySet()) {
+                SSEParseResult.ToolCall tc = entry.getValue();
+                log.info("Agent 调用工具: {} 参数: {}", tc.name, tc.arguments);
+                String toolResult = executeTool(tc.name, tc.arguments);
+                log.info("工具 {} 返回: {}", tc.name,
+                        toolResult.length() > 100 ? toolResult.substring(0, 100) + "..." : toolResult);
+
+                messages.add(Map.of(
+                        "role", "tool",
+                        "tool_call_id", entry.getKey(),
+                        "content", toolResult
+                ));
+            }
+        }
+
+        onChunk.accept("操作已执行。");
+    }
+
+    /**
+     * 发起 SSE 流式请求并解析结果
+     */
+    private SSEParseResult callSSE(Map<String, Object> body) {
+        try {
+            String json = objectMapper.writeValueAsString(body);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(aiConfig.getBaseUrl() + "/chat/completions"))
+                    .header("Authorization", "Bearer " + aiConfig.getApiKey())
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "text/event-stream")
+                    .timeout(Duration.ofSeconds(60))
+                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                    .build();
+
+            HttpResponse<java.io.InputStream> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofInputStream());
+
+            if (response.statusCode() != 200) {
+                log.error("SSE 请求失败: HTTP {}", response.statusCode());
+                return null;
+            }
+
+            SSEParseResult result = new SSEParseResult();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(response.body(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isEmpty()) continue;
+                    if (!line.startsWith("data: ")) continue;
+
+                    String data = line.substring(6);
+                    if ("[DONE]".equals(data)) break;
+
+                    try {
+                        result.feed(objectMapper.readTree(data));
+                    } catch (Exception e) {
+                        log.warn("SSE 解析跳过: {}", data.substring(0, Math.min(50, data.length())));
+                    }
+                }
+            }
+            result.finish();
+            return result;
+        } catch (Exception e) {
+            log.error("SSE 调用失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * SSE 流解析结果
+     */
+    @SuppressWarnings("unchecked")
+    private static class SSEParseResult {
+        String content = "";
+        List<String> contentChunks = new ArrayList<>();
+        boolean hasToolCalls = false;
+        Map<String, ToolCall> toolCalls = new LinkedHashMap<>();
+        Map<String, Object> assistantMessage;
+
+        void feed(JsonNode root) {
+            if (root.has("choices")) {
+                JsonNode delta = root.get("choices").get(0).get("delta");
+                if (delta == null) return;
+
+                // 文本内容
+                JsonNode contentNode = delta.get("content");
+                if (contentNode != null && !contentNode.isNull()) {
+                    String chunk = contentNode.asText();
+                    content += chunk;
+                    contentChunks.add(chunk);
+                }
+
+                // 工具调用
+                JsonNode tcNode = delta.get("tool_calls");
+                if (tcNode != null && tcNode.isArray()) {
+                    hasToolCalls = true;
+                    for (JsonNode tc : tcNode) {
+                        String index = tc.get("index").asText();
+                        ToolCall t = toolCalls.computeIfAbsent(index, k -> new ToolCall());
+                        JsonNode idNode = tc.get("id");
+                        if (idNode != null) t.id = idNode.asText();
+                        JsonNode fnNode = tc.get("function");
+                        if (fnNode != null) {
+                            JsonNode nameNode = fnNode.get("name");
+                            if (nameNode != null) t.name += nameNode.asText();
+                            JsonNode argsNode = fnNode.get("arguments");
+                            if (argsNode != null) t.argsBuf += argsNode.asText();
+                        }
+                    }
+                }
+            }
+        }
+
+        void finish() {
+            // 解析工具调用参数 JSON
+            for (ToolCall tc : toolCalls.values()) {
+                try {
+                    tc.arguments = new ObjectMapper().readValue(tc.argsBuf, Map.class);
+                } catch (Exception e) {
+                    tc.arguments = Collections.emptyMap();
+                }
+            }
+            // 构建 assistant 消息
+            Map<String, Object> msg = new LinkedHashMap<>();
+            msg.put("role", "assistant");
+            if (!content.isEmpty()) msg.put("content", content);
+            if (!toolCalls.isEmpty()) {
+                List<Map<String, Object>> tcList = new ArrayList<>();
+                for (Map.Entry<String, ToolCall> entry : toolCalls.entrySet()) {
+                    Map<String, Object> tcMap = new LinkedHashMap<>();
+                    tcMap.put("id", entry.getValue().id);
+                    tcMap.put("type", "function");
+                    tcMap.put("index", Integer.parseInt(entry.getKey()));
+                    tcMap.put("function", Map.of(
+                            "name", entry.getValue().name,
+                            "arguments", entry.getValue().argsBuf
+                    ));
+                    tcList.add(tcMap);
+                }
+                msg.put("tool_calls", tcList);
+            }
+            assistantMessage = msg;
+        }
+
+        static class ToolCall {
+            String id = "";
+            String name = "";
+            String argsBuf = "";
+            Map<String, Object> arguments = Collections.emptyMap();
+        }
     }
 
     /** 裁剪历史消息，保留最近 N 条，防止 Token 溢出 */

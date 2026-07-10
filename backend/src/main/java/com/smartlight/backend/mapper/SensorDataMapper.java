@@ -43,4 +43,12 @@ public interface SensorDataMapper extends BaseMapper<SensorData> {
      */
     @Select("SELECT DATEDIFF(MAX(collect_time), MIN(collect_time)) + 1 AS days FROM sensor_data")
     Map<String, Object> selectDataSpanDays();
+
+    /**
+     * 查询今天所有路灯的累计耗电 (Wh)
+     */
+    @Select("SELECT light_id AS lightId, SUM(sampling_energy) AS totalEnergy " +
+            "FROM sensor_data WHERE sampling_energy IS NOT NULL AND collect_time >= CURDATE() " +
+            "GROUP BY light_id")
+    List<Map<String, Object>> selectTodayEnergySum();
 }
