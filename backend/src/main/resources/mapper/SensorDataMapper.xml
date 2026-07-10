@@ -15,19 +15,7 @@
         <result column="create_time" property="createTime"/>
     </resultMap>
 
-    <!-- 批量插入传感器数据（无主键回填，保留向后兼容） -->
-    <insert id="insertBatch" useGeneratedKeys="false">
-        INSERT INTO sensor_data (light_id, illuminance, power, voltage, current,
-                                 temperature, humidity, sampling_energy, collect_time, create_time)
-        VALUES
-        <foreach collection="list" item="item" separator=",">
-            (#{item.lightId}, #{item.illuminance}, #{item.power}, #{item.voltage},
-             #{item.current}, #{item.temperature}, #{item.humidity},
-             #{item.samplingEnergy}, #{item.collectTime}, NOW())
-        </foreach>
-    </insert>
-
-    <!-- 批量 UPSERT 小时级聚合数据 -->
+    <!-- 批量 UPSERT 小时聚合数据（MyBatis-Plus 不提供 ON DUPLICATE KEY UPDATE） -->
     <insert id="upsertHourlyBatch">
         INSERT INTO sensor_data_hourly
             (light_id, hour_start, avg_illuminance, avg_power, avg_voltage, avg_current,
@@ -51,12 +39,5 @@
             max_power       = GREATEST(IFNULL(max_power, 0), VALUES(max_power)),
             min_power       = LEAST(IFNULL(min_power, VALUES(min_power)), VALUES(min_power))
     </insert>
-
-    <!-- 删除 collect_time 早于指定时间的原始数据（数据保留策略） -->
-    <delete id="deleteByCollectTimeBefore">
-        DELETE FROM sensor_data
-        WHERE collect_time <![CDATA[ < ]]> #{cutoff}
-        LIMIT 10000
-    </delete>
 
 </mapper>
