@@ -149,6 +149,7 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import {
   getDistricts,
   getRoads,
+  getAllLights,
   getStrategyPage,
   addStrategy,
   updateStrategy,
@@ -226,6 +227,18 @@ async function loadRoads() {
   try {
     const res = await getRoads()
     roadOptions.value = res.data || []
+    // 同时加载所有路灯数据，建立行政区-路段映射关系
+    const lightsRes = await getAllLights()
+    const lights = lightsRes.data || []
+    lights.forEach((l: any) => {
+      if (l.district && l.road) {
+        if (!districtRoadMap[l.district]) districtRoadMap[l.district] = []
+        if (!districtRoadMap[l.district].includes(l.road)) {
+          districtRoadMap[l.district].push(l.road)
+        }
+        roadDistrictMap[l.road] = l.district
+      }
+    })
   } catch (e) {
     console.error('加载路段失败', e)
   }

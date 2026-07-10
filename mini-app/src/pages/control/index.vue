@@ -99,7 +99,7 @@
           </view>
           <view class="strategy-actions">
             <button class="action-btn" @click="editStrategy(strategy)">编辑</button>
-            <button class="action-btn delete" @click="deleteStrategy(strategy.id)">删除</button>
+            <button class="action-btn delete" @click="onDeleteStrategy(strategy.id)">删除</button>
           </view>
         </view>
       </view>
@@ -120,7 +120,7 @@
           </view>
         </view>
       </view>
-      <button class="add-btn" @click="showAddRule = true">+ 新增规则</button>
+      <button class="add-btn" @click="navigateToThreshold">+ 配置阈值</button>
     </view>
 
     <view v-if="showAddStrategy" class="modal-overlay" @click="showAddStrategy = false">
@@ -208,7 +208,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getAllLights, batchSwitch as batchSwitchApi, type Light } from '@/api/light'
+import { getAllLights, batchSwitch as batchSwitchApi, getStrategyList, deleteStrategy, addStrategy as addStrategyApi, type Light, type TimedStrategy } from '@/api/light'
 
 const currentTab = ref('remote')
 const searchText = ref('')
@@ -249,10 +249,7 @@ const strategyForm = ref({
   brightness: 50
 })
 
-const timedStrategies = ref([
-  { id: 1, name: '夜间照明策略', timeRange: '19:00-06:00', enabled: true },
-  { id: 2, name: '节能模式', timeRange: '00:00-05:00', enabled: false }
-])
+const timedStrategies = ref<{ id?: number; name: string; timeRange: string; enabled: boolean; type?: string }[]>([])
 
 const thresholdRules = ref([
   { id: 1, name: '亮度自动调节', condition: '光照度 < 30lux', enabled: true },
@@ -300,6 +297,7 @@ const minStartDate = computed(() => {
 
 onMounted(() => {
   fetchLights()
+  loadStrategies()
 })
 
 async function fetchLights() {
@@ -309,6 +307,23 @@ async function fetchLights() {
     buildDistrictRoadMap()
   } catch (e) {
     console.error('获取路灯数据失败', e)
+  }
+}
+
+async function loadStrategies() {
+  try {
+    const res = await getStrategyList()
+    const list: TimedStrategy[] = res.data || []
+    timedStrategies.value = list.map(s => ({
+      id: s.id,
+      name: s.name,
+      timeRange: `${s.startTime || ''}-${s.endTime || ''}`,
+      enabled: s.enabled,
+      type: s.type
+    }))
+  } catch (e) {
+    console.error('获取定时策略失败', e)
+    uni.showToast({ title: '获取定时策略失败', icon: 'none' })
   }
 }
 
@@ -460,48 +475,58 @@ function editStrategy(strategy: any) {
   uni.navigateTo({ url: `/pages/strategy/edit?id=${strategy.id}` })
 }
 
-function deleteStrategy(id: number) {
+async function onDeleteStrategy(id: number) {
   uni.showModal({
     title: '删除策略',
     content: '确定要删除该策略吗？',
-    success: (res) => {
+    success: async (res) => {
       if (res.confirm) {
-        timedStrategies.value = timedStrategies.value.filter(s => s.id !== id)
-        uni.showToast({ title: '删除成功', icon: 'success' })
+        try {
+          await deleteStrategy(id)
+          uni.showToast({ title: '删除成功', icon: 'success' })
+          loadStrategies()
+        } catch (e: any) {
+          uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+        }
       }
     }
   })
 }
 
-function saveStrategy() {
+function navigateToThreshold() {
+  uni.navigateTo({ url: '/pages/threshold/index' })
+}
+
+async function saveStrategy() {
   if (!strategyForm.value.name) {
     uni.showToast({ title: '请输入策略名称', icon: 'none' })
     return
   }
-  
+
   const startHour = parseInt(strategyForm.value.startHour)
   const startMinute = parseInt(strategyForm.value.startMinute)
   const endHour = parseInt(strategyForm.value.endHour)
   const endMinute = parseInt(strategyForm.value.endMinute)
-  
+
   if (isNaN(startHour) || isNaN(startMinute) || isNaN(endHour) || isNaN(endMinute)) {
     uni.showToast({ title: '请完整填写时间', icon: 'none' })
     return
   }
-  
+
   if (startHour < 0 || startHour > 23 || startMinute < 0 || startMinute > 59) {
     uni.showToast({ title: '开始时间无效，小时0-23，分钟0-59', icon: 'none' })
     return
   }
-  
+
   if (endHour < 0 || endHour > 23 || endMinute < 0 || endMinute > 59) {
     uni.showToast({ title: '结束时间无效，小时0-23，分钟0-59', icon: 'none' })
     return
   }
-  
+
   const pad = (n: number) => String(n).padStart(2, '0')
-  const timeRange = `${pad(startHour)}:${pad(startMinute)}-${pad(endHour)}:${pad(endMinute)}`
-  
+  const startTime = `${pad(startHour)}:${pad(startMinute)}`
+  const endTime = `${pad(endHour)}:${pad(endMinute)}`
+
   if (strategyForm.value.type === 'timed') {
     if (!strategyForm.value.startDate || !strategyForm.value.endDate) {
       uni.showToast({ title: '请选择日期范围', icon: 'none' })
@@ -517,20 +542,43 @@ function saveStrategy() {
       return
     }
   }
-  
-  uni.showToast({ title: '保存成功', icon: 'success' })
-  showAddStrategy.value = false
-  strategyForm.value = {
-    name: '',
-    type: 'default',
-    startHour: '',
-    startMinute: '',
-    endHour: '',
-    endMinute: '',
-    startDate: '',
-    endDate: '',
-    weekdays: [1, 2, 3, 4, 5],
-    brightness: 50
+
+  const payload: TimedStrategy = {
+    name: strategyForm.value.name,
+    type: strategyForm.value.type,
+    startTime,
+    endTime,
+    startDate: strategyForm.value.startDate || undefined,
+    endDate: strategyForm.value.endDate || undefined,
+    weekdays: strategyForm.value.type === 'default' ? strategyForm.value.weekdays : undefined,
+    brightness: Number(strategyForm.value.brightness) || 50,
+    district: '',
+    road: '',
+    enabled: true
+  }
+
+  uni.showLoading({ title: '保存中...' })
+  try {
+    await addStrategyApi(payload)
+    uni.showToast({ title: '保存成功', icon: 'success' })
+    showAddStrategy.value = false
+    strategyForm.value = {
+      name: '',
+      type: 'default',
+      startHour: '',
+      startMinute: '',
+      endHour: '',
+      endMinute: '',
+      startDate: '',
+      endDate: '',
+      weekdays: [1, 2, 3, 4, 5],
+      brightness: 50
+    }
+    loadStrategies()
+  } catch (e: any) {
+    uni.showToast({ title: e.message || '保存失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
   }
 }
 </script>

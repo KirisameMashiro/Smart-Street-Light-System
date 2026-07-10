@@ -92,27 +92,27 @@
       <view class="control-section">
         <view class="section-title">远程控制</view>
         <view class="control-buttons">
-          <button 
-            class="control-btn" 
-            :class="{ disabled: light.status === 3 }"
-            :disabled="light.status === 3"
+          <button
+            class="control-btn"
+            :class="{ disabled: light.status === 2 }"
+            :disabled="light.status === 2"
             @click="handleSwitch(1)"
           >
             <text class="btn-icon">▶</text>
             <text>开灯</text>
           </button>
-          <button 
-            class="control-btn off" 
-            :class="{ disabled: light.status === 3 }"
-            :disabled="light.status === 3"
-            @click="handleSwitch(2)"
+          <button
+            class="control-btn off"
+            :class="{ disabled: light.status === 2 }"
+            :disabled="light.status === 2"
+            @click="handleSwitch(0)"
           >
             <text class="btn-icon">⏹</text>
             <text>关灯</text>
           </button>
         </view>
-        
-        <view class="brightness-control" :class="{ disabled: light.status === 3 }">
+
+        <view class="brightness-control" :class="{ disabled: light.status === 2 }">
           <text class="brightness-label">亮度调节</text>
           <view class="brightness-slider-wrap">
             <slider 
@@ -123,7 +123,7 @@
               activeColor="#409eff"
               backgroundColor="#ebeef5"
               block-size="28"
-              :disabled="light.status === 3"
+              :disabled="light.status === 2"
               @change="onBrightnessChange"
             />
             <text class="brightness-num">{{ brightness }}%</text>
@@ -135,7 +135,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { getLightById, getLatestSensorData, switchLight, setLightBrightness, type Light, type SensorData } from '@/api/light'
 
 const lightId = ref(0)
@@ -167,25 +168,30 @@ const sensorData = ref<SensorData>({
   samplingEnergy: 0
 })
 
-onMounted(() => {
-  const pages = getCurrentPages()
-  const currentPage = pages[pages.length - 1]
-  const options = (currentPage as any).$page?.options || {}
-  lightId.value = parseInt(options.id) || 0
-  
+onLoad((options: any) => {
+  lightId.value = parseInt(options?.id) || 0
+
   if (lightId.value > 0) {
     fetchLightDetail()
     fetchSensorData()
+  } else {
+    loading.value = false
+    uni.showToast({ title: '无效的设备ID', icon: 'none' })
   }
 })
 
 async function fetchLightDetail() {
   try {
     const res = await getLightById(lightId.value)
-    light.value = res.data
-    brightness.value = res.data.brightness || 0
-  } catch (e) {
+    if (res.data) {
+      light.value = res.data
+      brightness.value = res.data.brightness || 0
+    } else {
+      uni.showToast({ title: '路灯不存在', icon: 'none' })
+    }
+  } catch (e: any) {
     console.error('获取路灯详情失败', e)
+    uni.showToast({ title: e.message || '获取路灯详情失败', icon: 'none' })
   } finally {
     loading.value = false
   }

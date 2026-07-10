@@ -139,64 +139,68 @@ onMounted(() => {
 
 async function loadSummary() {
   try {
-    const res = await getCarbonSummary()
+    const period = getCurrentPeriod()
+    const res = await getCarbonSummary(currentType.value, period)
     if (res.data) summary.value = res.data
   } catch (e) {
     console.error('加载概览数据失败', e)
-    summary.value = {
-      savedEnergy: 1234.5,
-      reducedCo2: 987.6,
-      energySavingRate: 28.5
-    }
+    summary.value = { savedEnergy: 0, reducedCo2: 0, energySavingRate: 0 }
   }
 }
 
 async function loadTrend() {
   try {
-    const res = await getCarbonTrend(currentType.value)
-    trendData.value = res.data || []
+    const period = getCurrentPeriod()
+    const res = await getCarbonTrend(currentType.value, period)
+    trendData.value = normalizeTrendData(res.data || [])
     maxBarValue.value = Math.max(...trendData.value.map(d => d.savedEnergy), 1)
   } catch (e) {
     console.error('加载趋势数据失败', e)
-    trendData.value = generateMockTrend()
-    maxBarValue.value = Math.max(...trendData.value.map(d => d.savedEnergy), 1)
+    trendData.value = []
+    maxBarValue.value = 1
   }
 }
 
 async function loadRoadCompare() {
   try {
-    const res = await getRoadCompare()
+    const period = getCurrentPeriod()
+    const res = await getRoadCompare(currentType.value, period)
     roadData.value = (res.data || []).sort((a, b) => b.savedEnergy - a.savedEnergy)
   } catch (e) {
     console.error('加载路段对比失败', e)
-    roadData.value = [
-      { road: '人民路', district: '市中心区', savedEnergy: 235.5 },
-      { road: '中山路', district: '市中心区', savedEnergy: 198.2 },
-      { road: '解放路', district: '东区', savedEnergy: 175.8 },
-      { road: '和平路', district: '西区', savedEnergy: 142.3 },
-      { road: '建设路', district: '南区', savedEnergy: 118.6 }
-    ]
+    roadData.value = []
   }
 }
 
-function generateMockTrend(): CarbonTrend[] {
-  const result: CarbonTrend[] = []
-  const days = currentType.value === 'day' ? 24 : currentType.value === 'month' ? 30 : 12
-  const unit = currentType.value === 'day' ? '时' : currentType.value === 'month' ? '日' : '月'
-  for (let i = 0; i < days; i++) {
-    const value = Math.floor(30 + Math.random() * 70 + Math.sin(i / 3) * 20)
-    result.push({
-      date: `${i + 1}${unit}`,
-      savedEnergy: value,
-      reducedCo2: +(value * 0.8).toFixed(1)
-    })
+function getCurrentPeriod(): string {
+  const now = new Date()
+  if (currentType.value === 'day') {
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  } else if (currentType.value === 'month') {
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  } else {
+    return `${now.getFullYear()}`
   }
-  return result
+}
+
+function normalizeTrendData(data: any[]): CarbonTrend[] {
+  if (!data || data.length === 0) return []
+  return data.map(item => {
+    // 兼容后端不同字段名: period/date/month/statDate
+    const date = item.period || item.date || item.month || item.statDate || ''
+    return {
+      date: formatDate(date),
+      savedEnergy: Number(item.savedEnergy || 0),
+      reducedCo2: Number(item.reducedCo2 || item.co2Reduction || 0)
+    }
+  })
 }
 
 function onTypeChange(type: string) {
   currentType.value = type
+  loadSummary()
   loadTrend()
+  loadRoadCompare()
 }
 
 function getBarHeight(value: number): number {
@@ -208,8 +212,22 @@ function getRoadPercent(value: number): number {
   return (value / max) * 100
 }
 
-function formatDate(date: string): string {
-  return date
+function formatDate(date: string | number): string {
+  if (!date) return '-'
+  const s = String(date)
+  // 月度每日趋势: 2025-07-01 -> 1日
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return parseInt(s.slice(8, 10)) + '日'
+  }
+  // 年度每月趋势: 1-12 -> X月
+  if (/^\d{1,2}$/.test(s)) {
+    return s + '月'
+  }
+  // 月度汇总: 2025-07 -> 7月
+  if (/^\d{4}-\d{2}$/.test(s)) {
+    return parseInt(s.slice(5, 7)) + '月'
+  }
+  return s
 }
 </script>
 

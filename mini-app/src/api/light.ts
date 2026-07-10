@@ -65,7 +65,8 @@ export async function getAverageSensorData(lightId: number) {
 }
 
 export async function switchLight(id: number, status: number) {
-  return post(`/api/lights/${id}/switch`, { status })
+  // 后端暂无单灯开关接口，使用批量开关接口兼容
+  return post('/api/lights/batch-switch', { ids: [id], status })
 }
 
 export async function setLightBrightness(id: number, brightness: number) {
