@@ -96,17 +96,6 @@ public class CarbonController {
     }
 
     /**
-     * 全量重新计算所有历史碳减排统计（基准配置变更后调用）
-     * 基于当前基准配置重新计算所有有传感器数据的日期
-     * @return 重算的天数
-     */
-    @PostMapping("/recompute-all")
-    public Result<Integer> recomputeAll() {
-        int days = carbonService.recomputeAllStats();
-        return Result.success("全量碳减排统计重算完成，共处理 " + days + " 天数据", days);
-    }
-
-    /**
      * Excel 报表导出（预留）
      */
     @GetMapping("/export")

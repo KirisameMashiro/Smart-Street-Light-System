@@ -33,8 +33,3 @@ export function exportCarbonReport(params) {
     responseType: 'blob'
   })
 }
-
-// 全量重算碳减排统计（基准配置变更后调用）
-export function recomputeCarbonStats() {
-  return request.post('/carbon/recompute-all')
-}
