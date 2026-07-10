@@ -319,12 +319,23 @@ function connectWS() {
     (data) => {
       // 收到新告警推送：刷新列表和未处理计数
       if (data && data.id) {
+        // 单条告警（兼容旧模式）
         loadAll()
-        ElMessage.info(`新告警: ${data.message?.substring(0, 50) || ''}...`)
+        ElMessage.info(`新告警: ${data.message?.substring(0, 50) || ""}...`)
+      } else if (data && data.total && data.groups) {
+        // 合并告警推送（时间窗口内多条聚合为一条）
+        loadAll()
+        const groupDesc = data.groups
+          .map((g) => `[${g.alertLevel === 4 ? "紧急" : g.alertLevel === 3 ? "严重" : "一般"}]${g.count}条`)
+          .join(" ")
+        ElMessage.warning({
+          message: `收到 ${data.total} 条新告警: ${groupDesc}`,
+          duration: 5000
+        })
       }
     },
     (error) => {
-      console.error('[Alerts] WebSocket error:', error)
+      console.error("[Alerts] WebSocket error:", error)
     }
   )
 }

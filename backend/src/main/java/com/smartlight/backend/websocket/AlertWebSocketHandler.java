@@ -12,6 +12,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,19 +50,12 @@ public class AlertWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 推送告警到所有在线客户端
-     * @param alert 新生成的告警
+     * 推送单条告警到所有在线客户端
      */
     public void pushAlert(Alert alert) {
-        if (sessions.isEmpty()) {
-            return;
-        }
-
+        if (sessions.isEmpty()) return;
         try {
-            // 未处理告警数量
             long unhandledCount = alertService.countUnhandled();
-
-            // 构建推送消息
             Map<String, Object> payload = Map.of(
                     "type", "new_alert",
                     "data", Map.of(
@@ -75,25 +69,54 @@ public class AlertWebSocketHandler extends TextWebSocketHandler {
                             "unhandledCount", unhandledCount
                     )
             );
+            broadcastMessage(objectMapper.writeValueAsString(payload));
+            log.info("WebSocket 单条告警推送完成: alertId={}", alert.getId());
+        } catch (Exception e) {
+            log.error("WebSocket 单条告警推送失败: alertId={}, error={}", alert.getId(), e.getMessage(), e);
+        }
+    }
 
-            String json = objectMapper.writeValueAsString(payload);
-            TextMessage textMessage = new TextMessage(json);
+    /**
+     * 推送合并告警消息（时间窗口内多条告警合并为一条摘要）
+     * @param total   告警总数
+     * @param groups  按类型+级别分组的摘要列表 [{alertType, alertLevel, count, lightIds, sampleMessage}]
+     */
+    public void pushMergedAlert(int total, List<Map<String, Object>> groups) {
+        if (sessions.isEmpty() || groups == null || groups.isEmpty()) return;
+        try {
+            long unhandledCount = alertService.countUnhandled();
+            Map<String, Object> payload = Map.of(
+                    "type", "merged_alert",
+                    "data", Map.of(
+                            "total", total,
+                            "unhandledCount", unhandledCount,
+                            "groups", groups
+                    )
+            );
+            broadcastMessage(objectMapper.writeValueAsString(payload));
+            log.info("WebSocket 合并告警推送完成: total={}, groups={}", total, groups.size());
+        } catch (Exception e) {
+            log.error("WebSocket 合并告警推送失败: total={}, error={}", total, e.getMessage(), e);
+        }
+    }
 
-            int sent = 0;
-            for (WebSocketSession session : sessions.values()) {
-                if (session.isOpen()) {
-                    try {
-                        session.sendMessage(textMessage);
-                        sent++;
-                    } catch (IOException e) {
-                        log.error("WebSocket 消息发送失败: sessionId={}, error={}", session.getId(), e.getMessage());
-                        sessions.remove(session.getId());
-                    }
+    /** 广播 JSON 字符串到所有在线客户端 */
+    private void broadcastMessage(String json) {
+        TextMessage textMessage = new TextMessage(json);
+        int sent = 0;
+        for (WebSocketSession session : sessions.values()) {
+            if (session.isOpen()) {
+                try {
+                    session.sendMessage(textMessage);
+                    sent++;
+                } catch (IOException e) {
+                    log.error("WebSocket 消息发送失败: sessionId={}, error={}", session.getId(), e.getMessage());
+                    sessions.remove(session.getId());
                 }
             }
-            log.info("WebSocket 告警推送完成: alertId={}, 已发送 {}/{} 个客户端", alert.getId(), sent, sessions.size());
-        } catch (Exception e) {
-            log.error("WebSocket 告警推送构建失败: alertId={}, error={}", alert.getId(), e.getMessage(), e);
+        }
+        if (sent > 0) {
+            log.debug("WebSocket 广播完成: 已发送 {}/{} 个客户端", sent, sessions.size());
         }
     }
 }

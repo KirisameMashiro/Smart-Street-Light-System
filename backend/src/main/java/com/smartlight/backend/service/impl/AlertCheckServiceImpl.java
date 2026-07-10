@@ -8,6 +8,7 @@ import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.SensorDataMapper;
 import com.smartlight.backend.service.AlertCheckService;
 import com.smartlight.backend.service.AlertEmailService;
+import com.smartlight.backend.service.AlertPushService;
 import com.smartlight.backend.service.AlertRuleEvaluator;
 import com.smartlight.backend.service.AlertRuleEvaluator.EvaluateResult;
 import com.smartlight.backend.websocket.AlertWebSocketHandler;
@@ -29,6 +30,8 @@ import java.util.List;
  * 2. scheduledCheck() — 定时扫描（@Scheduled 定时遍历所有路灯）
  * <p>
  * 告警去重：同一路灯 + 同一告警类型，在 dedupWindowMinutes 内已有未处理告警则跳过
+ * <p>
+ * 推送逻辑已委托给 AlertPushService：不立即推送，放入缓冲区按周期合并推送。
  */
 @Slf4j
 @Service
@@ -40,8 +43,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     private final SensorDataMapper sensorDataMapper;
     private final LightMapper lightMapper;
     private final AlertRuleEvaluator alertRuleEvaluator;
-    private final AlertWebSocketHandler alertWebSocketHandler;
-    private final AlertEmailService alertEmailService;
+    private final AlertPushService alertPushService;
 
     @Value("${alert.dedup.minutes:30}")
     private int dedupWindowMinutes;
@@ -70,7 +72,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
                             sensorData.getLightId(), result.alertType);
                     continue;
                 }
-                saveAndPush(sensorData.getLightId(), result, rule);
+                saveAndEnqueue(sensorData.getLightId(), result, rule);
             }
         }
     }
@@ -82,9 +84,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     public void scheduledCheck() {
         log.debug("定时告警检查开始...");
 
-        // 查询所有路灯
         List<Light> lights = lightMapper.selectList(null);
-        // 查询所有启用的规则
         List<AlertRule> enabledRules = alertRuleMapper.selectList(
                 new LambdaQueryWrapper<AlertRule>().eq(AlertRule::getEnabled, true));
 
@@ -93,13 +93,10 @@ public class AlertCheckServiceImpl implements AlertCheckService {
             return;
         }
 
-        List<Alert> batchAlerts = new java.util.ArrayList<>();
         int alertCount = 0;
         for (Light light : lights) {
             SensorData latest = sensorDataMapper.selectLatestByLightId(light.getId());
-            if (latest == null) {
-                continue;
-            }
+            if (latest == null) continue;
 
             for (AlertRule rule : enabledRules) {
                 EvaluateResult result = alertRuleEvaluator.evaluate(rule, latest, light);
@@ -110,27 +107,15 @@ public class AlertCheckServiceImpl implements AlertCheckService {
                     }
                     Alert alert = saveAlert(light.getId(), result, rule);
                     if (alert != null) {
-                        batchAlerts.add(alert);
+                        alertPushService.enqueueAlert(alert);
                         alertCount++;
-                        // WebSocket 推送（每条单独推送）
-                        try {
-                            alertWebSocketHandler.pushAlert(alert);
-                        } catch (Exception e) {
-                            log.error("WebSocket 推送告警失败: id={}, error={}", alert.getId(), e.getMessage());
-                        }
                     }
                 }
             }
         }
 
         if (alertCount > 0) {
-            log.info("定时告警检查完成: 生成 {} 条新告警", alertCount);
-            // 定时检测：批量合并发送邮件
-            try {
-                alertEmailService.sendBatchAlertEmail(batchAlerts);
-            } catch (Exception e) {
-                log.error("批量发送告警邮件失败: count={}, error={}", batchAlerts.size(), e.getMessage());
-            }
+            log.info("定时告警检查完成: 生成 {} 条新告警（已入推送缓冲区）", alertCount);
         }
     }
 
@@ -142,13 +127,13 @@ public class AlertCheckServiceImpl implements AlertCheckService {
         LambdaQueryWrapper<Alert> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Alert::getLightId, lightId)
                 .eq(Alert::getAlertType, alertType)
-                .eq(Alert::getStatus, 0) // 未处理
+                .eq(Alert::getStatus, 0)
                 .ge(Alert::getCreateTime, windowStart);
         return alertMapper.selectCount(wrapper) > 0;
     }
 
     /**
-     * 保存告警并推送 WebSocket（不含邮件，用于定时检测批量聚合）
+     * 保存告警并返回实体
      */
     private Alert saveAlert(Long lightId, EvaluateResult result, AlertRule rule) {
         Alert alert = new Alert();
@@ -165,23 +150,10 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     }
 
     /**
-     * 保存告警、推送 WebSocket 并发送邮件（用于实时检测）
+     * 保存告警并放入合并推送缓冲区（代替之前的直接推送+邮件）
      */
-    private void saveAndPush(Long lightId, EvaluateResult result, AlertRule rule) {
+    private void saveAndEnqueue(Long lightId, EvaluateResult result, AlertRule rule) {
         Alert alert = saveAlert(lightId, result, rule);
-
-        // WebSocket 推送
-        try {
-            alertWebSocketHandler.pushAlert(alert);
-        } catch (Exception e) {
-            log.error("WebSocket 推送告警失败: id={}, error={}", alert.getId(), e.getMessage());
-        }
-
-        // 邮件发送
-        try {
-            alertEmailService.sendAlertEmail(alert);
-        } catch (Exception e) {
-            log.error("邮件发送告警失败: id={}, error={}", alert.getId(), e.getMessage());
-        }
+        alertPushService.enqueueAlert(alert);
     }
 }

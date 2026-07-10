@@ -42,6 +42,9 @@ export function connectAlertSocket(onMessage, onError) {
       const payload = JSON.parse(event.data)
       if (payload.type === 'new_alert') {
         onMessage(payload.data)
+      } else if (payload.type === 'merged_alert') {
+        // 合并告警：传整个 data 对象 {total, unhandledCount, groups}
+        onMessage(payload.data)
       }
     } catch (e) {
       console.error('[AlertWS] Message parse error:', e)

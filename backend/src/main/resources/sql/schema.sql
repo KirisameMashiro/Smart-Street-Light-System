@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `light` (
     `latitude` DECIMAL(10, 6) DEFAULT NULL COMMENT '纬度',
     `status` INT DEFAULT 0 COMMENT '状态: 0-关闭, 1-开启, 2-故障',
     `brightness` INT DEFAULT 0 COMMENT '亮度百分比 (0-100)',
+    `manual_control` TINYINT(1) DEFAULT 0 COMMENT '是否手动控制: 0-自动控制(可被定时策略关闭), 1-手动控制(定时策略不干预)',
     `device_type` VARCHAR(50) DEFAULT NULL COMMENT '设备类型',
     `rated_power` DECIMAL(10, 2) DEFAULT NULL COMMENT '额定功率 (W)',
     `district` VARCHAR(50) DEFAULT NULL COMMENT '行政区',
@@ -156,7 +157,8 @@ CREATE TABLE IF NOT EXISTS `knowledge` (
 INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
 ('energy_baseline_power', '250', '传统钠灯基准功率(W)'),
 ('energy_baseline_hours', '12', '日均照明时长(h)'),
-('co2_factor', '0.997', '碳排放因子(kg CO₂/kWh)')
+('co2_factor', '0.997', '碳排放因子(kg CO₂/kWh)'),
+('alert_push_interval', '60', '告警推送合并周期(秒)，窗口内告警合并为一条推送')
 ON DUPLICATE KEY UPDATE `config_value`=VALUES(`config_value`);
 
 -- 碳减排日统计数据表
