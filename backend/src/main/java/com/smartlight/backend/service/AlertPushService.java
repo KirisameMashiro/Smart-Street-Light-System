@@ -1,14 +1,12 @@
 package com.smartlight.backend.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.smartlight.backend.entity.Alert;
-import com.smartlight.backend.entity.SystemConfig;
-import com.smartlight.backend.mapper.SystemConfigMapper;
 import com.smartlight.backend.websocket.AlertWebSocketHandler;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -19,20 +17,22 @@ import java.util.stream.Collectors;
  * 告警合并推送服务。
  * <p>
  * 告警不立即逐条推送，而是放入时间窗口缓冲区。
- * 每 {@code alert_push_interval} 秒触发一次合并推送：
+ * 每 {@code alert.push.interval} 秒触发一次合并推送：
  * - WebSocket：推送一条合并消息到所有在线客户端
  * - 邮件：调用 AlertEmailService.sendBatchAlertEmail() 发送汇总邮件
  * <p>
- * 推送周期可从 system_config 表动态读取，支持运行时调整。
+ * 推送周期从 application.properties 的 alert.push.interval 配置读取。
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlertPushService {
 
-    private final SystemConfigMapper systemConfigMapper;
     private final AlertWebSocketHandler alertWebSocketHandler;
     private final AlertEmailService alertEmailService;
+
+    @Value("${alert.push.interval:5}")
+    private int pushIntervalSeconds;
 
     /** 告警缓冲区（线程安全） */
     private final ConcurrentLinkedQueue<Alert> alertBuffer = new ConcurrentLinkedQueue<>();
@@ -41,14 +41,10 @@ public class AlertPushService {
     private ScheduledExecutorService scheduler;
     private volatile boolean running = false;
 
-    /** 当前推送周期（秒），默认 60 */
-    private volatile int pushIntervalSeconds = 60;
-
     // ==================== 生命周期 ====================
 
     @PostConstruct
     public void init() {
-        reloadInterval();
         startScheduler();
     }
 
@@ -71,30 +67,6 @@ public class AlertPushService {
         if (alert == null) return;
         alertBuffer.offer(alert);
         log.debug("告警已入推送缓冲区: alertId={}, bufferSize={}", alert.getId(), alertBuffer.size());
-    }
-
-    /**
-     * 重新加载推送间隔（从 system_config 读取）
-     */
-    public void reloadInterval() {
-        SystemConfig config = systemConfigMapper.selectOne(
-                new LambdaQueryWrapper<SystemConfig>()
-                        .eq(SystemConfig::getConfigKey, "alert_push_interval"));
-        if (config != null && config.getConfigValue() != null) {
-            try {
-                int newInterval = Integer.parseInt(config.getConfigValue());
-                if (newInterval > 0) {
-                    pushIntervalSeconds = newInterval;
-                    log.info("告警推送周期已更新: {} 秒", pushIntervalSeconds);
-                    // 周期变化时重启调度器
-                    if (running) {
-                        startScheduler();
-                    }
-                }
-            } catch (NumberFormatException e) {
-                log.warn("告警推送周期配置无效: {}", config.getConfigValue());
-            }
-        }
     }
 
     // ==================== 内部方法 ====================
