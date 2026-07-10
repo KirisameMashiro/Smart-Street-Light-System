@@ -81,6 +81,7 @@ Desktop.ini
 *.log
 *.sqlite
 *.db
+dump.rdb
 
 # Node (if any frontend in the future)
 node_modules/

@@ -934,8 +934,7 @@ onUnmounted(() => {
 
 <style scoped>
 .map-card {
-  max-height: 560px;
-  height: calc(100vh - 380px);
+  height: 520px;
   min-height: 300px;
   display: flex;
   flex-direction: column;
@@ -980,5 +979,6 @@ onUnmounted(() => {
 
 .map-wrapper {
   flex: 1;
+  min-height: 250px;
 }
 </style>

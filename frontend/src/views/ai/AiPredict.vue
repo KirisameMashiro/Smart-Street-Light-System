@@ -159,18 +159,17 @@ const filteredLightOptions = computed(() => {
 
 function fetchSuggestions(kw, cb) {
   const term = (kw || '').trim().toLowerCase()
-  if (!term) {
-    cb(lightOptions.value.slice(0, 8))
-    return
-  }
-  const results = lightOptions.value.filter(l =>
-    `${l.lightCode} ${l.lightName} ${l.location} ${l.district} ${l.road}`
-      .toLowerCase().includes(term)
-  ).slice(0, 10).map(l => ({
+  const source = lightOptions.value || []
+  const results = term
+    ? source.filter(l =>
+        `${l.lightCode} ${l.lightName} ${l.location} ${l.district} ${l.road}`
+          .toLowerCase().includes(term)
+      )
+    : source
+  cb(results.slice(0, 50).map(l => ({
     ...l,
-    value: `${l.lightCode} - ${l.lightName}`  // autocomplete 显示的 value
-  }))
-  cb(results)
+    value: `${l.lightCode} - ${l.lightName}`
+  })))
 }
 
 function onSelectSuggestion(item) {

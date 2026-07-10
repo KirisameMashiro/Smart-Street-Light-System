@@ -102,6 +102,76 @@ a {
   color: #909399;
 }
 
+/* ========== Leaflet 路灯标记样式 ========== */
+.light-marker {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-glow {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  opacity: 0.35;
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.35; }
+  50% { transform: scale(1.4); opacity: 0.15; }
+}
+
+.marker-outer {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.marker-inner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.marker-pulse {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #f56c6c;
+  animation: fault-pulse 1s ease-out infinite;
+}
+
+@keyframes fault-pulse {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* 状态圆点 */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 2px 0 8px;
+  vertical-align: middle;
+}
+.status-dot.online { background-color: #67c23a; }
+.status-dot.fault { background-color: #f56c6c; }
+.status-dot.offline { background-color: #909399; }
+
 /* 表格内紧凑按钮间距 */
 .table-ops .el-button + .el-button {
   margin-left: 8px;
