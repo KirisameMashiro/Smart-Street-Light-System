@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
 public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements LightService {
 
     private final MqttPublishService mqttPublishService;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
     private final ObjectMapper objectMapper;
 
     /** Redis Key：全量路灯列表缓存 */
@@ -46,10 +47,14 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
     @PostConstruct
     public void initCache() {
         log.info("初始化路灯缓存...");
+        if (stringRedisTemplate.isEmpty()) {
+            log.info("Redis 不可用，跳过缓存初始化");
+            return;
+        }
         try {
             List<Light> lights = baseMapper.selectList(null);
             if (lights != null && !lights.isEmpty()) {
-                stringRedisTemplate.opsForValue().set(
+                stringRedisTemplate.get().opsForValue().set(
                         KEY_LIGHT_ALL,
                         objectMapper.writeValueAsString(lights),
                         LIGHT_CACHE_TTL_SECONDS,
@@ -188,21 +193,23 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
 
     @Override
     public List<Light> getCachedList() {
-        // 优先从 Redis 读取全量路灯列表
-        try {
-            String json = stringRedisTemplate.opsForValue().get(KEY_LIGHT_ALL);
-            if (json != null) {
-                return objectMapper.readValue(json, new TypeReference<List<Light>>() {});
+        // 优先从 Redis 读取全量路灯列表（Redis 不可用时直接查 MySQL）
+        if (stringRedisTemplate.isPresent()) {
+            try {
+                String json = stringRedisTemplate.get().opsForValue().get(KEY_LIGHT_ALL);
+                if (json != null) {
+                    return objectMapper.readValue(json, new TypeReference<List<Light>>() {});
+                }
+            } catch (Exception e) {
+                log.warn("从 Redis 读取路灯列表失败，回退到 MySQL: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("从 Redis 读取路灯列表失败，回退到 MySQL: {}", e.getMessage());
         }
 
-        // Redis Miss，回退到 MySQL 并自动重建缓存
+        // Redis Miss 或 Redis 不可用，回退到 MySQL 并尝试重建缓存
         List<Light> lights = baseMapper.selectList(null);
-        if (lights != null && !lights.isEmpty()) {
+        if (lights != null && !lights.isEmpty() && stringRedisTemplate.isPresent()) {
             try {
-                stringRedisTemplate.opsForValue().set(
+                stringRedisTemplate.get().opsForValue().set(
                         KEY_LIGHT_ALL,
                         objectMapper.writeValueAsString(lights),
                         LIGHT_CACHE_TTL_SECONDS,
@@ -218,8 +225,11 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
      * 使路灯缓存失效（增删改操作后调用）
      */
     private void evictCache() {
+        if (stringRedisTemplate.isEmpty()) {
+            return;
+        }
         try {
-            stringRedisTemplate.delete(KEY_LIGHT_ALL);
+            stringRedisTemplate.get().delete(KEY_LIGHT_ALL);
             log.debug("路灯缓存已失效");
         } catch (Exception e) {
             log.warn("路灯缓存失效失败: {}", e.getMessage());

@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
@@ -14,8 +15,11 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 /**
  * Redis 配置类
+ * <p>
+ * 仅在 redis 配置文件存在且 Redis 可用时生效（通过 @ConditionalOnClass）
  */
 @Configuration
+@Profile("!no-redis")
 public class RedisConfig {
 
     @Bean
@@ -23,18 +27,15 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(factory);
 
-        // 使用 Jackson2JsonRedisSerializer 序列化 value
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
         objectMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance,
                 ObjectMapper.DefaultTyping.NON_FINAL);
-        // 支持 Java 8 日期时间类型
         objectMapper.registerModule(new JavaTimeModule());
 
         Jackson2JsonRedisSerializer<Object> jacksonSerializer =
                 new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
 
-        // key 使用 String 序列化
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
 
         template.setKeySerializer(stringSerializer);

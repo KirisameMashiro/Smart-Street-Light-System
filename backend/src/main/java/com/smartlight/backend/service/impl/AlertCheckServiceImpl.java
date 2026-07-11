@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 告警自动检测服务实现
@@ -46,7 +47,7 @@ public class AlertCheckServiceImpl implements AlertCheckService {
     private final LightMapper lightMapper;
     private final AlertRuleEvaluator alertRuleEvaluator;
     private final AlertPushService alertPushService;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
 
     /** Redis Key 前缀：每盏路灯最新传感器数据 */
     private static final String KEY_SENSOR_LATEST_PREFIX = "sensor:latest:";
@@ -130,8 +131,11 @@ public class AlertCheckServiceImpl implements AlertCheckService {
      * 从 Redis 读取某盏灯的最新传感器数据
      */
     private SensorData getLatestFromRedis(Long lightId) {
+        if (stringRedisTemplate.isEmpty()) {
+            return null;
+        }
         String key = KEY_SENSOR_LATEST_PREFIX + lightId;
-        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+        Map<Object, Object> entries = stringRedisTemplate.get().opsForHash().entries(key);
         if (entries.isEmpty()) return null;
 
         SensorData data = new SensorData();

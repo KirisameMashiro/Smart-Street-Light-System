@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorData> implements SensorDataService {
 
-    private final StringRedisTemplate stringRedisTemplate;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
     private final LightService lightService;
 
     /** Redis Key 前缀：每盏路灯最新传感器数据 */
@@ -63,13 +63,13 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
     public SensorData getLatestByLightId(Long lightId) {
         if (lightId == null) return null;
 
-        // ① 优先从 Redis 读取
-        SensorData cached = getFromRedis(lightId);
+        // ① 优先从 Redis 读取（Redis 不可用时直接查 MySQL）
+        SensorData cached = stringRedisTemplate.isPresent() ? getFromRedis(lightId) : null;
         if (cached != null) {
             return cached;
         }
 
-        // ② Redis Miss，回退到 MySQL
+        // ② Redis Miss 或 Redis 不可用，回退到 MySQL
         LambdaQueryWrapper<SensorData> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SensorData::getLightId, lightId)
                .orderByDesc(SensorData::getCollectTime)
@@ -125,12 +125,18 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
         List<Light> allLights = lightService.getCachedList();
         if (allLights.isEmpty()) return result;
 
+        // Redis 不可用时直接从 MySQL 获取
+        if (stringRedisTemplate.isEmpty()) {
+            fillMissingFromDb(allLights, result);
+            return result;
+        }
+
         // 从 Redis pipeline 批量获取所有路灯的最新传感器数据
         List<String> keys = allLights.stream()
                 .map(l -> KEY_SENSOR_LATEST_PREFIX + l.getId())
                 .collect(Collectors.toList());
 
-        List<Object> redisResults = stringRedisTemplate.executePipelined(
+        List<Object> redisResults = stringRedisTemplate.get().executePipelined(
                 (org.springframework.data.redis.core.RedisCallback<Object>) connection -> {
                     for (String key : keys) {
                         byte[] rawKey = key.getBytes();
@@ -169,8 +175,9 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
      * 从 Redis 读取单盏路灯最新传感器数据
      */
     private SensorData getFromRedis(Long lightId) {
+        if (stringRedisTemplate.isEmpty()) return null;
         String key = KEY_SENSOR_LATEST_PREFIX + lightId;
-        Map<Object, Object> entries = stringRedisTemplate.opsForHash().entries(key);
+        Map<Object, Object> entries = stringRedisTemplate.get().opsForHash().entries(key);
         if (entries.isEmpty()) return null;
         return mapToSensorData(lightId, entries);
     }

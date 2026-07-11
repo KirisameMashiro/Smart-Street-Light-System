@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -31,7 +32,7 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class SensorDataIngestServiceImpl implements SensorDataIngestService {
 
-    private final StringRedisTemplate stringRedisTemplate;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
     private final AlertCheckService alertCheckService;
     private final CumulativeEnergyService cumulativeEnergyService;
     private final SensorDataBatchService sensorDataBatchService;
@@ -57,7 +58,7 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
         entity.setCollectTime(dto.getCollectTime() != null ? dto.getCollectTime() : LocalDateTime.now());
 
         // ===== ① 从 Redis 读取上一周期功率，计算梯形积分耗电 =====
-        // 替代原来的 SELECT MySQL 操作
+        // 替代原来的 SELECT MySQL 操作（Redis 不可用时跳过）
         Double lastPower = getLastPowerFromRedis(dto.getLightId());
 
         if (lastPower != null && entity.getSamplingEnergy() == null) {
@@ -85,8 +86,8 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
         saveToRedis(dto.getLightId(), entity);
 
         // ===== ③ 写入 Redis 今日累计耗电 =====
-        if (entity.getSamplingEnergy() != null && entity.getSamplingEnergy() > 0) {
-            stringRedisTemplate.opsForHash().increment(
+        if (entity.getSamplingEnergy() != null && entity.getSamplingEnergy() > 0 && stringRedisTemplate.isPresent()) {
+            stringRedisTemplate.get().opsForHash().increment(
                     KEY_ENERGY_TODAY, String.valueOf(dto.getLightId()), entity.getSamplingEnergy());
         }
 
@@ -110,7 +111,8 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
      * 从 Redis 读取上一周期功率值
      */
     private Double getLastPowerFromRedis(Long lightId) {
-        Object power = stringRedisTemplate.opsForHash().get(
+        if (stringRedisTemplate.isEmpty()) return null;
+        Object power = stringRedisTemplate.get().opsForHash().get(
                 KEY_SENSOR_LATEST_PREFIX + lightId, "power");
         if (power == null) return null;
         try {
@@ -124,7 +126,8 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
      * 从 Redis 读取上一次采集时间
      */
     private LocalDateTime getLastCollectTimeFromRedis(Long lightId) {
-        Object time = stringRedisTemplate.opsForHash().get(
+        if (stringRedisTemplate.isEmpty()) return null;
+        Object time = stringRedisTemplate.get().opsForHash().get(
                 KEY_SENSOR_LATEST_PREFIX + lightId, "collectTime");
         if (time == null) return null;
         try {
@@ -140,10 +143,11 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
      * 将传感器最新数据写入 Redis
      */
     private void saveToRedis(Long lightId, SensorData entity) {
+        if (stringRedisTemplate.isEmpty()) return;
         String key = KEY_SENSOR_LATEST_PREFIX + lightId;
 
         // 使用 putAll 一次性写入所有字段
-        stringRedisTemplate.opsForHash().putAll(key, Map.of(
+        stringRedisTemplate.get().opsForHash().putAll(key, Map.of(
                 "lightId", String.valueOf(lightId),
                 "illuminance", entity.getIlluminance() != null ? String.valueOf(entity.getIlluminance()) : "",
                 "power", entity.getPower() != null ? String.valueOf(entity.getPower()) : "",
@@ -156,6 +160,6 @@ public class SensorDataIngestServiceImpl implements SensorDataIngestService {
         ));
 
         // 设置过期时间，避免死数据长期占用内存
-        stringRedisTemplate.expire(key, SENSOR_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+        stringRedisTemplate.get().expire(key, SENSOR_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
     }
 }
