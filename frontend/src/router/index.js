@@ -43,13 +43,19 @@ const routes = [
         path: 'monitor/realtime',
         name: 'RealtimeMonitor',
         component: () => import('@/views/monitor/RealtimeMonitor.vue'),
-        meta: { title: '设备监控', keepAlive: true }
+        meta: { title: '实时监测', keepAlive: true }
       },
       {
         path: 'monitor/sensor-data',
         name: 'SensorData',
         component: () => import('@/views/SensorData.vue'),
         meta: { title: '传感器数据', keepAlive: true }
+      },
+      {
+        path: 'monitor/illuminance-trend',
+        name: 'IlluminanceTrend',
+        component: () => import('@/views/monitor/IlluminanceTrend.vue'),
+        meta: { title: '历史光照趋势', keepAlive: true }
       },
       // ===== 照明控制 =====
       {

@@ -185,6 +185,7 @@ const cachedViews = [
   'DeviceLedger',
   'RealtimeMonitor',
   'SensorData',
+  'IlluminanceTrend',
   'RemoteControl',
   'TimedStrategy',
   'ThresholdControl',
@@ -228,12 +229,13 @@ const menuConfig = [
     ]
   },
   {
-    title: '实时监测',
+    title: '设备监控',
     icon: 'Monitor',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: '设备监控', path: '/monitor/realtime', icon: 'Aim' },
-      { title: '传感器数据', path: '/monitor/sensor-data', icon: 'DataLine' }
+      { title: '实时监测', path: '/monitor/realtime', icon: 'Aim' },
+      { title: '传感器数据', path: '/monitor/sensor-data', icon: 'DataLine' },
+      { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts' }
     ]
   },
   {

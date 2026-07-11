@@ -73,13 +73,13 @@
     <div class="chart-grid">
       <div class="chart-card">
         <div class="chart-title">{{ trendLabel }}趋势</div>
-        <el-empty v-if="trendError" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div v-else ref="trendRef" class="chart-box"></div>
+        <el-empty v-show="trendError || (!trendData.length && !loading)" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
+        <div ref="trendRef" class="chart-box"></div>
       </div>
       <div class="chart-card">
-        <div class="chart-title">路段节电量对比</div>
-        <el-empty v-if="roadError" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div v-else ref="roadRef" class="chart-box"></div>
+        <div class="chart-title">{{ rangeType === 'monthly' ? '月度' : '年度' }}路段节电量对比 <span class="chart-subtitle">{{ dateValue }}</span></div>
+        <el-empty v-show="roadError || (!roadData.length && !loading)" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
+        <div ref="roadRef" class="chart-box"></div>
       </div>
     </div>
 
@@ -234,8 +234,12 @@ async function loadTrend() {
 async function loadRoad() {
   roadError.value = false
   try {
-    const res = await getCarbonRoadCompare({ type: rangeType.value, period: dateValue.value })
+    const backendType = rangeType.value === 'monthly' ? 'month' : 'year'
+    const res = await getCarbonRoadCompare({ type: backendType, period: dateValue.value })
     roadData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
+    if (!roadData.value.length) {
+      roadError.value = true
+    }
   } catch (e) {
     roadData.value = []
     roadError.value = true
@@ -247,16 +251,31 @@ async function loadAll() {
   try {
     await Promise.all([loadSummary(), loadTrend(), loadRoad()])
     await nextTick()
-    renderTrend()
-    renderRoad()
+    setTimeout(() => {
+      renderTrend()
+      renderRoad()
+    }, 100)
   } finally {
     loading.value = false
   }
 }
 
 function renderTrend() {
-  if (!trendRef.value || trendError.value) return
-  trendChart = trendChart || echarts.init(trendRef.value)
+  if (!trendRef.value) return
+  if (!trendChart) {
+    trendChart = echarts.init(trendRef.value)
+  }
+  if (trendError.value) {
+    trendChart.setOption({
+      tooltip: {},
+      legend: { show: false },
+      grid: { left: 0, right: 0, top: 0, bottom: 0 },
+      xAxis: { type: 'category', data: [], show: false },
+      yAxis: { type: 'value', show: false },
+      series: []
+    }, true)
+    return
+  }
   
   const isMonthly = rangeType.value === 'monthly'
   
@@ -333,12 +352,24 @@ function renderTrend() {
         itemStyle: { color: '#409eff' }
       }
     ]
-  })
+  }, true)
 }
 
 function renderRoad() {
-  if (!roadRef.value || roadError.value) return
-  roadChart = roadChart || echarts.init(roadRef.value)
+  if (!roadRef.value) return
+  if (!roadChart) {
+    roadChart = echarts.init(roadRef.value)
+  }
+  if (roadError.value) {
+    roadChart.setOption({
+      tooltip: {},
+      grid: { left: 0, right: 0, top: 0, bottom: 0 },
+      xAxis: { type: 'category', data: [], show: false },
+      yAxis: { type: 'value', show: false },
+      series: []
+    }, true)
+    return
+  }
   const names = roadData.value.map((it) => it.road || it.name || '')
   const values = roadData.value.map((it) => {
     if (it.savedEnergy !== undefined) return Number(it.savedEnergy)
@@ -368,7 +399,7 @@ function renderRoad() {
         }
       }
     ]
-  })
+  }, true)
 }
 
 async function loadBaseline() {
@@ -580,6 +611,13 @@ onUnmounted(() => {
   font-weight: 600;
   margin-bottom: 12px;
   color: #303133;
+}
+
+.chart-subtitle {
+  font-size: 13px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 8px;
 }
 
 .chart-box {
