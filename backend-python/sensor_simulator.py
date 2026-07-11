@@ -3,12 +3,6 @@
 
 """
 路灯传感器模拟器（纯 MQTT 模式）
-
-功能：
-1. 启动时通过 HTTP API 从后端获取路灯列表
-2. 每 3-5 秒为每个路灯生成模拟传感器数据并发布 MQTT 消息
-3. 订阅 smartlight/control/+ 接收后端控制命令，更新内存中的状态
-4. 不再直连数据库，避免与后端产生锁冲突
 """
 
 import json
@@ -19,16 +13,15 @@ import configparser
 import os
 import urllib.request
 import urllib.error
+import socket
 import paho.mqtt.client as mqtt
 from datetime import datetime
 
-# ==================== 读取配置文件 ====================
 CONFIG_FILE = 'config.ini'
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         print(f"[Error] Configuration file '{CONFIG_FILE}' not found.")
-        print("Please copy config.example.ini to config.ini and fill in your credentials.")
         exit(1)
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE, encoding='utf-8')
@@ -36,7 +29,6 @@ def load_config():
 
 config = load_config()
 
-# MQTT 配置
 MQTT_BROKER = config.get('mqtt', 'broker')
 MQTT_PORT = config.getint('mqtt', 'port')
 MQTT_KEEPALIVE = config.getint('mqtt', 'keepalive')
@@ -44,21 +36,17 @@ MQTT_CLIENT_ID = config.get('mqtt', 'client_id')
 MQTT_USERNAME = config.get('mqtt', 'username', fallback=None)
 MQTT_PASSWORD = config.get('mqtt', 'password', fallback=None)
 
-# 模拟器配置
 INTERVAL_MIN = config.getfloat('simulator', 'interval_min')
 INTERVAL_MAX = config.getfloat('simulator', 'interval_max')
 
-# 后端 API 地址（用于启动时获取路灯列表）
 BACKEND_API_URL = config.get('backend', 'api_url', fallback='http://localhost:8080')
 
-# ==================== 全局状态（纯内存） ====================
-lights = []             # [{id, light_code, status, brightness}, ...]
+lights = []
 light_lock = threading.Lock()
 CONTROL_TOPIC = 'smartlight/control/+'
+connected_event = threading.Event()
 
-# ==================== 从后端 API 获取路灯列表 ====================
 def fetch_lights_from_api():
-    """启动时调用后端 REST API 获取所有路灯的基本信息"""
     url = f"{BACKEND_API_URL}/api/lights"
     print(f"[API] Fetching lights from {url} ...")
     try:
@@ -66,7 +54,6 @@ def fetch_lights_from_api():
         with urllib.request.urlopen(req, timeout=10) as resp:
             body = resp.read().decode('utf-8')
             result = json.loads(body)
-            # 后端返回 {code, data, message} 格式
             raw_list = result.get('data', [])
             if not raw_list:
                 print("[Warn] API returned empty light list")
@@ -83,24 +70,22 @@ def fetch_lights_from_api():
             return parsed
     except urllib.error.URLError as e:
         print(f"[API Error] Cannot fetch lights: {e}")
-        print("[Warn] Will retry after MQTT connects...")
         return []
     except Exception as e:
         print(f"[API Error] {e}")
         return []
 
-# ==================== 传感器数据生成 ====================
 def generate_sensor_data(light):
     status = light['status']
     brightness = light['brightness']
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if status == 0:   # 关灯
+    if status == 0:
         illuminance = random.randint(0, 50)
         power = round(random.uniform(0.5, 5.0), 2)
         current = round(random.uniform(0.01, 0.05), 3)
         voltage = round(random.uniform(215, 225), 1)
-    else:             # 开灯
+    else:
         ratio = brightness / 100.0
         illuminance = int(200 + ratio * 1600)
         power = round(50 + ratio * 100, 2)
@@ -121,32 +106,30 @@ def generate_sensor_data(light):
         "collectTime": now
     }
 
-# ==================== MQTT 回调 ====================
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("[MQTT] Connected.")
-        client.subscribe(CONTROL_TOPIC)
+def on_connect(client, userdata, flags, reason_code, properties):
+    if reason_code == 0:
+        print(f"[MQTT] Connected to {MQTT_BROKER}:{MQTT_PORT}")
+        client.subscribe(CONTROL_TOPIC, qos=1)
         print(f"[MQTT] Subscribed to {CONTROL_TOPIC}")
-        # 连接后再次尝试获取路灯列表（如果之前失败的话）
+        connected_event.set()
         global lights
         with light_lock:
             if not lights:
                 lights = fetch_lights_from_api()
     else:
-        print(f"[MQTT] Connection failed, code {rc}")
+        print(f"[MQTT] Connection failed, reason code: {reason_code}")
+        connected_event.clear()
+
+def on_disconnect(client, userdata, flags, reason_code, properties):
+    print(f"[MQTT] Disconnected, reason code: {reason_code}")
+    connected_event.clear()
 
 def on_message(client, userdata, msg):
-    """
-    收到后端控制命令 → 只更新内存中的状态，不再写数据库。
-    后端已经自己写了数据库，模拟器无需重复写入。
-    """
     topic = msg.topic
     payload = msg.payload.decode('utf-8')
-    print(f"[MQTT] Received on {topic}: {payload}")
 
     parts = topic.split('/')
     if len(parts) < 3:
-        print("[Warn] Invalid topic format")
         return
     light_code = parts[2]
 
@@ -154,13 +137,11 @@ def on_message(client, userdata, msg):
         cmd = json.loads(payload)
         command_type = cmd.get('command')
         if not command_type:
-            print("[Warn] No 'command' field")
             return
 
         with light_lock:
             light = next((l for l in lights if l['light_code'] == light_code), None)
             if light is None:
-                print(f"[Warn] Light {light_code} not found in memory")
                 return
 
             if command_type == 'switch':
@@ -172,7 +153,6 @@ def on_message(client, userdata, msg):
                     light['brightness'] = 0
                 elif light.get('brightness', 0) == 0:
                     light['brightness'] = 100
-                print(f"[Mem] {light_code} status → {status}")
 
             elif command_type == 'brightness':
                 brightness = cmd.get('brightness')
@@ -183,7 +163,6 @@ def on_message(client, userdata, msg):
                     light['status'] = 1
                 else:
                     light['status'] = 0
-                print(f"[Mem] {light_code} brightness → {brightness}")
 
             elif command_type == 'set':
                 status = cmd.get('status')
@@ -192,57 +171,56 @@ def on_message(client, userdata, msg):
                     return
                 light['status'] = status
                 light['brightness'] = brightness
-                print(f"[Mem] {light_code} status={status}, brightness={brightness}")
-
-            else:
-                print(f"[Warn] Unknown command: {command_type}")
 
     except json.JSONDecodeError:
-        print("[Warn] Invalid JSON")
+        pass
     except Exception as e:
         print(f"[Error] {e}")
 
-# ==================== 定时发布传感器数据 ====================
 def publish_sensor_data(client):
     while True:
         interval = random.uniform(INTERVAL_MIN, INTERVAL_MAX)
         time.sleep(interval)
 
+        if not connected_event.is_set():
+            print("[Warn] Waiting for MQTT connection...")
+            connected_event.wait(timeout=5)
+            continue
+
         with light_lock:
             snapshot = lights.copy()
 
         if not snapshot:
-            print("[Warn] No lights in memory, skipping publish")
             continue
 
         for light in snapshot:
             data = generate_sensor_data(light)
             topic = f"smartlight/sensor/{light['id']}"
             payload = json.dumps(data)
-            result = client.publish(topic, payload)
+            result = client.publish(topic, payload, qos=1)
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
-                print(f"[Pub] {topic} -> {payload}")
+                print(f"[Pub] {topic}")
             else:
-                print(f"[Pub Error] {topic}")
+                print(f"[Pub Error] {topic}, rc={result.rc}")
+            time.sleep(0.02)
 
-# ==================== 主函数 ====================
 def main():
-    # 启动时从后端 API 获取路灯列表（代替之前的直连数据库）
     global lights
     lights = fetch_lights_from_api()
 
-    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, MQTT_CLIENT_ID)
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, MQTT_CLIENT_ID)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
+
+    client.enable_logger()
+
+    client.reconnect_delay_set(min_delay=2, max_delay=60)
 
     if MQTT_USERNAME and MQTT_PASSWORD:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
 
-    try:
-        client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
-    except Exception as e:
-        print(f"[Error] Cannot connect to broker: {e}")
-        return
+    client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
 
     pub_thread = threading.Thread(target=publish_sensor_data, args=(client,), daemon=True)
     pub_thread.start()

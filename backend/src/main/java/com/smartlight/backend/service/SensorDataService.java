@@ -11,10 +11,10 @@ import java.util.Map;
 public interface SensorDataService extends IService<SensorData> {
 
     /**
-     * 分页查询传感器数据（历史数据，直接查 MySQL）
+     * 分页查询传感器数据（历史数据，从小时聚合表查询）
      */
     IPage<SensorData> getPage(int pageNum, int pageSize, Long lightId,
-                              LocalDateTime startTime, LocalDateTime endTime);
+                              String startTime, String endTime);
 
     /**
      * 获取路灯的最新传感器数据

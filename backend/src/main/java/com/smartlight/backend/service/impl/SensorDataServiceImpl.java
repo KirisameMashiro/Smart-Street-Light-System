@@ -40,23 +40,34 @@ public class SensorDataServiceImpl extends ServiceImpl<SensorDataMapper, SensorD
 
     @Override
     public IPage<SensorData> getPage(int pageNum, int pageSize, Long lightId,
-                                     LocalDateTime startTime, LocalDateTime endTime) {
-        // 历史数据查询仍然走 MySQL（数据量大，不适合放 Redis）
-        Page<SensorData> page = new Page<>(pageNum, pageSize);
-        LambdaQueryWrapper<SensorData> wrapper = new LambdaQueryWrapper<>();
+                                     String startTime, String endTime) {
+        List<Map<String, Object>> allRecords = this.getBaseMapper().selectFromHourlyPage(lightId, startTime, endTime);
 
-        if (lightId != null) {
-            wrapper.eq(SensorData::getLightId, lightId);
-        }
-        if (startTime != null) {
-            wrapper.ge(SensorData::getCollectTime, startTime);
-        }
-        if (endTime != null) {
-            wrapper.le(SensorData::getCollectTime, endTime);
-        }
+        int total = allRecords.size();
+        int start = (pageNum - 1) * pageSize;
+        int end = Math.min(start + pageSize, total);
 
-        wrapper.orderByDesc(SensorData::getCollectTime);
-        return this.page(page, wrapper);
+        List<SensorData> pageRecords = allRecords.subList(start, end).stream()
+                .map(this::mapRowToSensorData)
+                .collect(Collectors.toList());
+
+        Page<SensorData> page = new Page<>(pageNum, pageSize, total);
+        page.setRecords(pageRecords);
+        return page;
+    }
+
+    private SensorData mapRowToSensorData(Map<String, Object> map) {
+        SensorData data = new SensorData();
+        data.setLightId(map.get("lightId") != null ? ((Number) map.get("lightId")).longValue() : null);
+        data.setCollectTime(map.get("collectTime") != null ? ((LocalDateTime) map.get("collectTime")) : null);
+        data.setIlluminance(map.get("illuminance") != null ? ((Number) map.get("illuminance")).doubleValue() : null);
+        data.setPower(map.get("power") != null ? ((Number) map.get("power")).doubleValue() : null);
+        data.setVoltage(map.get("voltage") != null ? ((Number) map.get("voltage")).doubleValue() : null);
+        data.setCurrent(map.get("current") != null ? ((Number) map.get("current")).doubleValue() : null);
+        data.setTemperature(map.get("temperature") != null ? ((Number) map.get("temperature")).doubleValue() : null);
+        data.setHumidity(map.get("humidity") != null ? ((Number) map.get("humidity")).doubleValue() : null);
+        data.setSamplingEnergy(map.get("samplingEnergy") != null ? ((Number) map.get("samplingEnergy")).doubleValue() : null);
+        return data;
     }
 
     @Override

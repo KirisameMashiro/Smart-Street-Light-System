@@ -47,7 +47,7 @@
           v-model="startTime"
           type="datetime"
           placeholder="开始时间"
-          value-format="YYYY-MM-DDTHH:mm:ss"
+          value-format="YYYY-MM-DD HH:mm:ss"
           style="width: 200px"
           @change="onSearch"
         />
@@ -56,7 +56,7 @@
           v-model="endTime"
           type="datetime"
           placeholder="结束时间"
-          value-format="YYYY-MM-DDTHH:mm:ss"
+          value-format="YYYY-MM-DD HH:mm:ss"
           style="width: 200px"
           @change="onSearch"
         />
@@ -100,7 +100,10 @@
     <!-- 折线图 -->
     <div class="chart-card">
       <div ref="chartRef" class="chart-container"></div>
-      <div v-if="!loading && chartData.length === 0" class="empty-tip">
+      <div v-if="!loading && !query.lightId" class="empty-tip">
+        请选择路灯查看趋势图
+      </div>
+      <div v-else-if="!loading && chartData.length === 0" class="empty-tip">
         暂无数据
       </div>
     </div>
@@ -198,6 +201,16 @@ function lightNameOf(id) {
   return l ? `${l.lightCode} - ${l.lightName || ''}` : id
 }
 
+function formatLocalDateTime(date) {
+  const y = date.getFullYear()
+  const mo = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  const h = String(date.getHours()).padStart(2, '0')
+  const m = String(date.getMinutes()).padStart(2, '0')
+  const s = String(date.getSeconds()).padStart(2, '0')
+  return `${y}-${mo}-${d} ${h}:${m}:${s}`
+}
+
 function getTimeRange() {
   const now = new Date()
   let start
@@ -222,8 +235,8 @@ function getTimeRange() {
       }
   }
   return {
-    start: start.toISOString().slice(0, 19).replace('T', ' '),
-    end: now.toISOString().slice(0, 19).replace('T', ' ')
+    start: formatLocalDateTime(start),
+    end: formatLocalDateTime(now)
   }
 }
 
@@ -240,13 +253,7 @@ async function loadData() {
   loading.value = true
   try {
     const range = getTimeRange()
-    const chartParams = {
-      pageNum: 1,
-      pageSize: 2000,
-      lightId: query.lightId,
-      startTime: range.start,
-      endTime: range.end
-    }
+
     const tableParams = {
       pageNum: query.pageNum,
       pageSize: query.pageSize,
@@ -254,58 +261,166 @@ async function loadData() {
       startTime: range.start,
       endTime: range.end
     }
-    const [chartRes, tableRes] = await Promise.all([
-      getSensorDataPage(chartParams),
-      getSensorDataPage(tableParams)
-    ])
-    const chartRecords = chartRes.data?.records || []
-    chartData.value = chartRecords
-      .map((r) => ({
-        time: r.collectTime,
-        illuminance: r.illuminance ?? 0
-      }))
-      .sort((a, b) => new Date(a.time) - new Date(b.time))
+    const tableRes = await getSensorDataPage(tableParams)
     tableData.value = tableRes.data?.records || []
     total.value = tableRes.data?.total || 0
+
+    if (query.lightId) {
+      const chartParams = {
+        pageNum: 1,
+        pageSize: 2000,
+        lightId: query.lightId,
+        startTime: range.start,
+        endTime: range.end
+      }
+      const chartRes = await getSensorDataPage(chartParams)
+      const chartRecords = chartRes.data?.records || []
+      chartData.value = chartRecords
+        .map((r) => ({
+          time: r.collectTime,
+          illuminance: r.illuminance ?? 0
+        }))
+        .sort((a, b) => parseTime(a.time) - parseTime(b.time))
+    } else {
+      chartData.value = []
+    }
+
+    await nextTick()
     renderChart()
+    setTimeout(() => {
+      chartInstance?.resize()
+    }, 100)
   } finally {
     loading.value = false
   }
 }
 
+function parseTime(v) {
+  if (v == null) return Date.now()
+  if (typeof v === 'number') return v
+  if (v instanceof Date) return v.getTime()
+  if (typeof v === 'string') {
+    const s = v.replace(' ', 'T')
+    return new Date(s).getTime()
+  }
+  if (Array.isArray(v) && v.length >= 3) {
+    const [y, mo, d, h = 0, mi = 0, s = 0] = v
+    return new Date(y, mo - 1, d, h, mi, s).getTime()
+  }
+  const t = new Date(v).getTime()
+  return isNaN(t) ? Date.now() : t
+}
+
+function computeXAxisOption(points) {
+  const oneHour = 3600 * 1000
+  const oneDay = 24 * oneHour
+  const maxTicks = 8
+
+  let displayStart, displayEnd
+
+  if (points && points.length > 0) {
+    const times = points.map(p => p[0])
+    const dataMin = Math.min(...times)
+    const dataMax = Math.max(...times)
+    const dataSpan = dataMax - dataMin
+
+    if (dataSpan === 0) {
+      displayStart = dataMin - 30 * 60 * 1000
+      displayEnd = dataMax + 30 * 60 * 1000
+    } else {
+      const padding = dataSpan * 0.15
+      displayStart = dataMin - padding
+      displayEnd = dataMax + padding
+    }
+  } else {
+    const range = getTimeRange()
+    displayStart = parseTime(range.start)
+    displayEnd = parseTime(range.end)
+  }
+
+  const span = displayEnd - displayStart
+  let interval = span / maxTicks
+
+  if (span <= oneHour) {
+    interval = Math.max(interval, 10 * 60 * 1000)
+  } else if (span <= 6 * oneHour) {
+    interval = Math.max(interval, oneHour)
+  } else if (span <= 24 * oneHour) {
+    interval = Math.max(interval, 3 * oneHour)
+  } else if (span <= 48 * oneHour) {
+    interval = Math.max(interval, 6 * oneHour)
+  } else if (span <= 7 * oneDay) {
+    interval = Math.max(interval, oneDay)
+  } else if (span <= 14 * oneDay) {
+    interval = Math.max(interval, 2 * oneDay)
+  } else if (span <= 31 * oneDay) {
+    interval = Math.max(interval, 4 * oneDay)
+  } else {
+    interval = Math.ceil(span / maxTicks / oneDay) * oneDay
+  }
+
+  return {
+    type: 'time',
+    interval,
+    min: displayStart,
+    max: displayEnd,
+    boundaryGap: false,
+    axisLabel: {
+      rotate: 0,
+      hideOverlap: true,
+      formatter: (value) => {
+        const d = new Date(value)
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mi = String(d.getMinutes()).padStart(2, '0')
+        if (interval >= oneDay) {
+          return `${mm}-${dd}`
+        }
+        return `${mm}-${dd} ${hh}:${mi}`
+      }
+    },
+    axisLine: { lineStyle: { color: '#dcdfe6' } }
+  }
+}
+
 function renderChart() {
   if (!chartInstance || !chartRef.value) return
-  const times = chartData.value.map((d) => d.time)
-  const values = chartData.value.map((d) => d.illuminance)
+
+  if (!query.lightId) {
+    chartInstance.setOption({
+      xAxis: { type: 'time', min: null, max: null, show: false },
+      yAxis: { show: false },
+      series: [{ data: [] }]
+    }, true)
+    return
+  }
+
+  const points = chartData.value.map((d) => {
+    const t = parseTime(d.time)
+    return [t, d.illuminance ?? 0]
+  })
 
   const option = {
     tooltip: {
       trigger: 'axis',
       formatter: (params) => {
         const p = params[0]
-        return `${p.axisValue}<br/>光照: <strong>${p.value}</strong> lux`
+        const d = new Date(p.value[0])
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mi = String(d.getMinutes()).padStart(2, '0')
+        return `${mm}-${dd} ${hh}:${mi}<br/>光照: <strong>${p.value[1]}</strong> lux`
       }
     },
     grid: {
       left: 60,
       right: 30,
       top: 30,
-      bottom: 60
+      bottom: 40
     },
-    xAxis: {
-      type: 'category',
-      data: times,
-      boundaryGap: false,
-      axisLabel: {
-        rotate: 0,
-        formatter: (value) => {
-          if (!value) return value
-          const t = typeof value === 'string' ? value.replace('T', ' ') : value
-          return t.slice(5, 16)
-        }
-      },
-      axisLine: { lineStyle: { color: '#dcdfe6' } }
-    },
+    xAxis: computeXAxisOption(points),
     yAxis: {
       type: 'value',
       name: '光照 (lux)',
@@ -318,20 +433,13 @@ function renderChart() {
         type: 'inside',
         start: 0,
         end: 100
-      },
-      {
-        type: 'slider',
-        start: 0,
-        end: 100,
-        height: 20,
-        bottom: 10
       }
     ],
     series: [
       {
         name: '光照强度',
         type: 'line',
-        data: values,
+        data: points,
         smooth: true,
         symbol: 'circle',
         symbolSize: 4,
@@ -354,6 +462,9 @@ function renderChart() {
   }
 
   chartInstance.setOption(option, true)
+  nextTick(() => {
+    setTimeout(() => chartInstance?.resize(), 50)
+  })
 }
 
 function onRangeChange() {
@@ -377,7 +488,9 @@ function onReset() {
 }
 
 function handleResize() {
-  chartInstance?.resize()
+  nextTick(() => {
+    chartInstance?.resize()
+  })
 }
 
 function startPolling() {
@@ -411,7 +524,10 @@ onMounted(async () => {
     chartInstance = echarts.init(chartRef.value)
     window.addEventListener('resize', handleResize)
   }
-  loadData()
+  await loadData()
+  setTimeout(() => {
+    chartInstance?.resize()
+  }, 200)
   startPolling()
 })
 
@@ -479,7 +595,7 @@ onUnmounted(() => {
 
 .chart-container {
   width: 100%;
-  height: 480px;
+  height: 400px;
 }
 
 .empty-tip {

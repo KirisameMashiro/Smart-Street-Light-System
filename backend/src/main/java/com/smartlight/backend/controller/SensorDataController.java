@@ -29,7 +29,7 @@ public class SensorDataController {
     private CumulativeEnergyService cumulativeEnergyService;
 
     /**
-     * 分页查询传感器数据（历史数据，查 MySQL）
+     * 分页查询传感器数据（历史数据，从小时聚合表查询）
      */
     @GetMapping("/page")
     public Result<IPage<SensorData>> getPage(SensorDataQueryDTO queryDTO) {

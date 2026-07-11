@@ -59,4 +59,23 @@ public interface SensorDataMapper extends BaseMapper<SensorData> {
             + "FROM sensor_data WHERE sampling_energy IS NOT NULL AND collect_time >= CURDATE() "
             + "GROUP BY light_id")
     List<Map<String, Object>> selectTodayEnergySum();
+
+    /** 从小时聚合表分页查询传感器数据 */
+    @Select("<script>"
+            + "SELECT light_id AS lightId, hour_start AS collectTime, "
+            + "avg_illuminance AS illuminance, avg_power AS power, "
+            + "avg_voltage AS voltage, avg_current AS current, "
+            + "avg_temperature AS temperature, avg_humidity AS humidity, "
+            + "total_energy / 1000 AS samplingEnergy "
+            + "FROM sensor_data_hourly "
+            + "<where>"
+            + "<if test=\"lightId != null\"> AND light_id = #{lightId} </if>"
+            + "<if test=\"startTime != null\"> AND hour_start >= #{startTime} </if>"
+            + "<if test=\"endTime != null\"> AND hour_start &lt;= #{endTime} </if>"
+            + "</where>"
+            + "ORDER BY hour_start DESC"
+            + "</script>")
+    List<Map<String, Object>> selectFromHourlyPage(@Param("lightId") Long lightId,
+                                                    @Param("startTime") String startTime,
+                                                    @Param("endTime") String endTime);
 }
