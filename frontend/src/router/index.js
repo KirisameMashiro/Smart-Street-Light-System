@@ -46,12 +46,6 @@ const routes = [
         meta: { title: '实时监测', keepAlive: true }
       },
       {
-        path: 'monitor/sensor-data',
-        name: 'SensorData',
-        component: () => import('@/views/SensorData.vue'),
-        meta: { title: '传感器数据', keepAlive: true }
-      },
-      {
         path: 'monitor/illuminance-trend',
         name: 'IlluminanceTrend',
         component: () => import('@/views/monitor/IlluminanceTrend.vue'),

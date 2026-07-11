@@ -234,7 +234,6 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator'],
     children: [
       { title: '实时监测', path: '/monitor/realtime', icon: 'Aim' },
-      { title: '传感器数据', path: '/monitor/sensor-data', icon: 'DataLine' },
       { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts' }
     ]
   },
