@@ -2,7 +2,7 @@
   <div class="page-container assistant-container">
     <div class="page-header">
       <h2 class="page-title">AI 智能运维助手</h2>
-      <el-button :icon="Refresh" :loading="historyLoading" @click="loadHistory">刷新历史</el-button>
+      <el-button :icon="Refresh" :loading="chatStore.historyLoading" @click="chatStore.loadHistory">刷新历史</el-button>
     </div>
 
     <div class="chat-layout">
@@ -15,7 +15,7 @@
         </div>
         <div class="session-id">ID：{{ shortSessionId }}</div>
         <div class="session-tip">
-          单会话模式，历史记录通过 sessionId 持久化于本地，便于后端缺失时回看。
+          与 AI 悬浮球共享消息，两端发送的内容会实时同步。
         </div>
       </div>
 
@@ -36,12 +36,12 @@
         <!-- 消息区 -->
         <div ref="messageRef" class="message-area">
           <el-empty
-            v-if="messages.length === 0"
+            v-if="chatStore.messages.length === 0"
             description="暂无对话，输入问题或点击快捷提问开始"
             :image-size="100"
           />
           <div
-            v-for="(msg, idx) in messages"
+            v-for="(msg, idx) in chatStore.messages"
             :key="idx"
             class="msg-row"
             :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'"
@@ -73,7 +73,7 @@
           <el-button
             type="primary"
             :icon="Promotion"
-            :loading="sending"
+            :loading="chatStore.sending"
             :disabled="!inputText.trim()"
             @click="onSend"
           >发送</el-button>
@@ -85,28 +85,18 @@
 
 <script setup>
 defineOptions({ name: 'AiAssistant' })
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { Refresh, Promotion, ChatDotRound, User, Loading } from '@element-plus/icons-vue'
-import { sendChatMessage, getChatHistory } from '@/api/assistant'
+import { useChatStore } from '@/store/chat'
 import { marked } from 'marked'
 
-// 配置marked
-marked.setOptions({
-  breaks: true,
-  gfm: true
-})
+marked.setOptions({ breaks: true, gfm: true })
 
-const SESSION_KEY = 'smartlight_ai_session'
-const HISTORY_KEY = 'smartlight_ai_history'
-
-const sessionId = ref(getOrCreateSession())
+const chatStore = useChatStore()
 const inputText = ref('')
-const sending = ref(false)
-const historyLoading = ref(false)
-const messages = ref([])
 const messageRef = ref()
 
-const shortSessionId = computed(() => sessionId.value.slice(-8))
+const shortSessionId = computed(() => chatStore.sessionId.slice(-8))
 
 const quickQuestions = [
   { label: '故障排查', text: '路灯离线或调光失败，如何排查？' },
@@ -115,107 +105,30 @@ const quickQuestions = [
   { label: '操作指引', text: '如何通过系统远程开关灯和调节亮度？' }
 ]
 
-function getOrCreateSession() {
-  let sid = localStorage.getItem(SESSION_KEY)
-  if (!sid) {
-    sid = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
-    localStorage.setItem(SESSION_KEY, sid)
-  }
-  return sid
-}
-
-function parseHistoryList(raw) {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  if (Array.isArray(raw.records)) return raw.records
-  return []
-}
-
-async function loadHistory() {
-  historyLoading.value = true
-  try {
-    const res = await getChatHistory(sessionId.value)
-    const list = parseHistoryList(res?.data)
-    messages.value = list.map((it) => ({
-      role: it.role || (it.from === 'user' ? 'user' : 'ai'),
-      content: it.content || it.message || it.reply || '',
-      loading: false
-    }))
-    cacheLocal()
-    await nextTick()
-    scrollToBottom()
-  } catch (e) {
-    // 后端缺失：尝试读取本地缓存
-    const cached = localStorage.getItem(HISTORY_KEY)
-    if (cached) {
-      try {
-        messages.value = JSON.parse(cached)
-      } catch (err) {
-        messages.value = []
-      }
-    } else {
-      messages.value = []
-    }
-  } finally {
-    historyLoading.value = false
-  }
-}
+// 监听消息变化，自动滚动到底部
+watch(() => chatStore.messages.length, () => {
+  nextTick(() => scrollToBottom())
+})
 
 function onEnter(e) {
-  if (e.shiftKey) return // Shift+Enter 换行
+  if (e.shiftKey) return
   e.preventDefault()
   onSend()
 }
 
 async function onSend() {
   const text = inputText.value.trim()
-  if (!text || sending.value) return
+  if (!text) return
 
-  messages.value.push({ role: 'user', content: text, loading: false })
   inputText.value = ''
-  await nextTick()
-  scrollToBottom()
-
-  messages.value.push({ role: 'ai', content: '', loading: true })
-  const aiIdx = messages.value.length - 1
-  sending.value = true
-  await nextTick()
-  scrollToBottom()
-
-  try {
-    const res = await sendChatMessage({ sessionId: sessionId.value, message: text })
-    const d = res?.data
-    let reply = ''
-    if (typeof d === 'string') {
-      reply = d
-    } else if (d && typeof d === 'object') {
-      reply = d.reply || d.content || d.message || d.answer || ''
-    }
-    messages.value[aiIdx].content = reply || '(空回复)'
-    messages.value[aiIdx].loading = false
-  } catch (e) {
-    messages.value[aiIdx].content = 'AI 服务暂未接入，请稍后再试。'
-    messages.value[aiIdx].loading = false
-  } finally {
-    sending.value = false
-    cacheLocal()
-    await nextTick()
-    scrollToBottom()
-  }
+  await chatStore.sendMessage(text)
+  nextTick(() => scrollToBottom())
 }
 
 function onQuick(text) {
-  if (sending.value) return
+  if (chatStore.sending) return
   inputText.value = text
   onSend()
-}
-
-function cacheLocal() {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.value))
-  } catch (e) {
-    // ignore quota errors
-  }
 }
 
 function scrollToBottom() {
@@ -229,7 +142,7 @@ function renderMarkdown(text) {
   return marked.parse(text)
 }
 
-onMounted(loadHistory)
+onMounted(() => chatStore.loadHistory())
 </script>
 
 <style scoped>
@@ -286,7 +199,7 @@ onMounted(loadHistory)
   margin-top: 12px;
   padding: 8px;
   font-size: 12px;
-  color: #c0c4cc;
+  color: #909399;
   line-height: 1.5;
 }
 

@@ -29,12 +29,12 @@
 
             <div ref="messageRef" class="panel-messages">
               <el-empty
-                v-if="messages.length === 0"
+                v-if="chatStore.messages.length === 0"
                 description="请输入问题开始对话"
                 :image-size="60"
               />
               <div
-                v-for="(msg, idx) in messages"
+                v-for="(msg, idx) in chatStore.messages"
                 :key="idx"
                 class="msg-row"
                 :class="msg.role === 'user' ? 'msg-user' : 'msg-ai'"
@@ -59,7 +59,7 @@
               <el-button
                 type="primary"
                 size="small"
-                :loading="sending"
+                :loading="chatStore.sending"
                 :disabled="!inputText.trim()"
                 @click="onSend"
               >发送</el-button>
@@ -87,7 +87,7 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { MagicStick, Close, Loading } from '@element-plus/icons-vue'
-import { sendChatMessage } from '@/api/assistant'
+import { useChatStore } from '@/store/chat'
 import { marked } from 'marked'
 
 marked.setOptions({ breaks: true, gfm: true })
@@ -100,14 +100,10 @@ const props = defineProps({
 })
 
 const route = useRoute()
+const chatStore = useChatStore()
 const expanded = ref(false)
 const inputText = ref('')
-const sending = ref(false)
-const messages = ref([])
 const messageRef = ref()
-
-const SESSION_KEY = 'smartlight_ai_float_session'
-const HISTORY_KEY = 'smartlight_ai_float_history'
 
 const position = reactive({
   x: 0,
@@ -123,32 +119,26 @@ let startX = 0
 let startY = 0
 let ballWidth = 56
 let ballHeight = 56
+let historyLoaded = false
 
-function getSessionId() {
-  let sid = localStorage.getItem(SESSION_KEY)
-  if (!sid) {
-    sid = 'float_sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8)
-    localStorage.setItem(SESSION_KEY, sid)
-  }
-  return sid
+// 监听消息变化，自动滚动到底部
+watch(() => chatStore.messages.length, () => {
+  nextTick(() => scrollToBottom())
+})
+
+async function onSend() {
+  const text = inputText.value.trim()
+  if (!text || chatStore.sending) return
+
+  inputText.value = ''
+  await chatStore.sendMessage(text)
+  nextTick(() => scrollToBottom())
 }
 
-function loadHistory() {
-  const cached = localStorage.getItem(HISTORY_KEY)
-  if (cached) {
-    try {
-      messages.value = JSON.parse(cached)
-      nextTick(() => scrollToBottom())
-    } catch (e) {
-      messages.value = []
-    }
-  }
-}
-
-function cacheLocal() {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.value))
-  } catch (e) {}
+function onQuick(text) {
+  if (chatStore.sending) return
+  inputText.value = text
+  onSend()
 }
 
 function scrollToBottom() {
@@ -160,49 +150,6 @@ function scrollToBottom() {
 function renderMarkdown(text) {
   if (!text) return ''
   return marked.parse(text)
-}
-
-async function onSend() {
-  const text = inputText.value.trim()
-  if (!text || sending.value) return
-
-  messages.value.push({ role: 'user', content: text, loading: false })
-  inputText.value = ''
-  await nextTick()
-  scrollToBottom()
-
-  messages.value.push({ role: 'ai', content: '', loading: true })
-  const aiIdx = messages.value.length - 1
-  sending.value = true
-  await nextTick()
-  scrollToBottom()
-
-  try {
-    const res = await sendChatMessage({ sessionId: getSessionId(), message: text })
-    const d = res?.data
-    let reply = ''
-    if (typeof d === 'string') {
-      reply = d
-    } else if (d && typeof d === 'object') {
-      reply = d.reply || d.content || d.message || d.answer || ''
-    }
-    messages.value[aiIdx].content = reply || '(空回复)'
-    messages.value[aiIdx].loading = false
-  } catch (e) {
-    messages.value[aiIdx].content = 'AI 服务暂未接入，请稍后再试。'
-    messages.value[aiIdx].loading = false
-  } finally {
-    sending.value = false
-    cacheLocal()
-    await nextTick()
-    scrollToBottom()
-  }
-}
-
-function onQuick(text) {
-  if (sending.value) return
-  inputText.value = text
-  onSend()
 }
 
 function clampPosition() {
@@ -246,8 +193,9 @@ function onMouseUp() {
 
   if (!isDragging) {
     expanded.value = !expanded.value
-    if (expanded.value && messages.value.length === 0) {
-      loadHistory()
+    if (expanded.value && !historyLoaded) {
+      historyLoaded = true
+      chatStore.loadHistory().then(() => nextTick(() => scrollToBottom()))
     }
   }
   isDragging = false
@@ -286,8 +234,9 @@ function onTouchEnd() {
 
   if (!isDragging) {
     expanded.value = !expanded.value
-    if (expanded.value && messages.value.length === 0) {
-      loadHistory()
+    if (expanded.value && !historyLoaded) {
+      historyLoaded = true
+      chatStore.loadHistory().then(() => nextTick(() => scrollToBottom()))
     }
   }
   isDragging = false
@@ -312,7 +261,6 @@ function onPanelMouseUp() {
   document.removeEventListener('mousemove', onMouseMove)
   document.removeEventListener('mouseup', onPanelMouseUp)
   document.removeEventListener('mouseleave', onPanelMouseUp)
-  // 拖动 header 不触发展开/收起，仅结束拖动
   isDragging = false
 }
 
@@ -331,7 +279,6 @@ function onPanelTouchStart(e) {
 function onPanelTouchEnd() {
   document.removeEventListener('touchmove', onTouchMove)
   document.removeEventListener('touchend', onPanelTouchEnd)
-  // 拖动 header 不触发展开/收起，仅结束拖动
   isDragging = false
 }
 
