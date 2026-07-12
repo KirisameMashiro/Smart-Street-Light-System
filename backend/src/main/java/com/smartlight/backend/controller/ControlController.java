@@ -68,11 +68,7 @@ public class ControlController {
      */
     @GetMapping("/strategies/enabled")
     public Result<List<TimedStrategy>> getEnabledStrategies() {
-        List<TimedStrategy> all = timedStrategyService.listAll();
-        List<TimedStrategy> enabled = all.stream()
-                .filter(s -> s.getEnabled() != null && s.getEnabled())
-                .toList();
-        return Result.success(enabled);
+        return Result.success(timedStrategyService.listEnabled());
     }
 
     /**

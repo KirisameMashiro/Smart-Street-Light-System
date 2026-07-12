@@ -13,14 +13,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -52,6 +51,13 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     }
 
     @Override
+    public List<TimedStrategy> listEnabled() {
+        return timedStrategyMapper.selectList(
+            new LambdaQueryWrapper<TimedStrategy>().eq(TimedStrategy::getEnabled, true)
+        );
+    }
+
+    @Override
     public TimedStrategy getById(Long id) {
         return timedStrategyMapper.selectById(id);
     }
@@ -61,7 +67,12 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     public boolean save(TimedStrategy strategy) {
         strategy.setName(generateUniqueName(strategy.getName(), null));
         validateStrategy(strategy);
-        return timedStrategyMapper.insert(strategy) > 0;
+        try {
+            return timedStrategyMapper.insert(strategy) > 0;
+        } catch (DuplicateKeyException e) {
+            strategy.setName(generateUniqueName(strategy.getName(), null));
+            return timedStrategyMapper.insert(strategy) > 0;
+        }
     }
 
     @Override
@@ -69,7 +80,17 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     public boolean update(TimedStrategy strategy) {
         strategy.setName(generateUniqueName(strategy.getName(), strategy.getId()));
         validateStrategy(strategy);
-        return timedStrategyMapper.updateById(strategy) > 0;
+        boolean updated;
+        try {
+            updated = timedStrategyMapper.updateById(strategy) > 0;
+        } catch (DuplicateKeyException e) {
+            strategy.setName(generateUniqueName(strategy.getName(), strategy.getId()));
+            updated = timedStrategyMapper.updateById(strategy) > 0;
+        }
+        if (updated && Boolean.TRUE.equals(strategy.getEnabled())) {
+            applyStrategyImmediately(strategy);
+        }
+        return updated;
     }
 
     private String generateUniqueName(String originalName, Long excludeId) {
@@ -89,7 +110,8 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         }
 
         int suffix = 1;
-        while (true) {
+        int maxAttempts = 1000;
+        while (suffix <= maxAttempts) {
             String candidate = baseName + "-" + suffix;
             final String finalCandidate = candidate;
             if (existing.stream().noneMatch(s -> finalCandidate.equals(s.getName()))) {
@@ -97,11 +119,17 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             }
             suffix++;
         }
+        // 极端情况：回退到时间戳
+        return baseName + "-" + System.currentTimeMillis();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean delete(Long id) {
+        TimedStrategy strategy = getById(id);
+        if (strategy != null && Boolean.TRUE.equals(strategy.getEnabled())) {
+            turnOffLightsForStrategy(strategy);
+        }
         return timedStrategyMapper.deleteById(id) > 0;
     }
 
@@ -136,17 +164,21 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             log.info("策略「{}」未匹配到路灯", strategy.getName());
             return;
         }
-        
+
+        int count = 0;
         for (Light light : lights) {
-            if (light.getStatus() == 2) continue; // 故障灯跳过
-            light.setStatus(1);
-            light.setBrightness(strategy.getBrightness());
-            lightMapper.updateById(light);
-            // MQTT发布组合命令
-            mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
+            if (Integer.valueOf(2).equals(light.getStatus())) continue; // 故障灯跳过
+            if (Boolean.TRUE.equals(light.getManualControl())) continue; // 手动控制灯跳过
+            if (!Integer.valueOf(1).equals(light.getStatus()) || !strategy.getBrightness().equals(light.getBrightness())) {
+                light.setStatus(1);
+                light.setBrightness(strategy.getBrightness());
+                lightMapper.updateById(light);
+                mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
+                count++;
+            }
         }
 
-        log.info("策略「{}」已立即执行，调整了 {} 盏路灯", strategy.getName(), lights.size());
+        log.info("策略「{}」已立即执行，实际调整了 {} 盏路灯", strategy.getName(), count);
     }
 
     private void turnOffLightsForStrategy(TimedStrategy strategy) {
@@ -154,11 +186,37 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         if (lights.isEmpty()) {
             return;
         }
-        
+
+        // 查询所有其他已启用的策略，用于保护检查
+        List<TimedStrategy> otherActiveStrategies = timedStrategyMapper.selectList(
+                new LambdaQueryWrapper<TimedStrategy>()
+                        .eq(TimedStrategy::getEnabled, true)
+                        .ne(TimedStrategy::getId, strategy.getId())
+        );
+        // 过滤出当前时间处于活跃时段的其他策略
+        LocalDateTime now = LocalDateTime.now();
+        List<TimedStrategy> activeOthers = otherActiveStrategies.stream()
+                .filter(s -> isStrategyActive(now, s))
+                .collect(Collectors.toList());
+
         int count = 0;
         for (Light light : lights) {
-            if (light.getStatus() == 2) continue; // 故障灯跳过
-            if (light.getStatus() != 0) {
+            if (Integer.valueOf(2).equals(light.getStatus())) continue; // 故障灯跳过
+            if (Boolean.TRUE.equals(light.getManualControl())) continue; // 手动控制灯跳过
+
+            // 检查是否有其他活跃策略保护这盏灯
+            boolean protectedByOther = false;
+            for (TimedStrategy active : activeOthers) {
+                if (strategyCoversLight(active, light)) {
+                    protectedByOther = true;
+                    break;
+                }
+            }
+            if (protectedByOther) {
+                continue; // 有其他活跃策略在管理这盏灯，不关
+            }
+
+            if (!Integer.valueOf(0).equals(light.getStatus())) {
                 light.setStatus(0);
                 light.setBrightness(0);
                 lightMapper.updateById(light);
@@ -169,12 +227,32 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         }
 
         if (count > 0) {
-            log.info("策略「{}」已停用，关闭了 {} 盏路灯", strategy.getName(), count);
+            log.info("策略「{}」已停用，关闭了 {} 盏路灯（无其他活跃策略保护）", strategy.getName(), count);
         }
     }
 
+    /**
+     * 判断某策略是否覆盖指定的路灯
+     */
+    private boolean strategyCoversLight(TimedStrategy strategy, Light light) {
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups == null || groups.isEmpty()) {
+            return true;
+        }
+        for (TimedStrategy.RegionGroup group : groups) {
+            boolean districtMatch = group.getDistrict() == null || group.getDistrict().isEmpty()
+                    || group.getDistrict().equals(light.getDistrict());
+            boolean roadMatch = group.getRoads() == null || group.getRoads().isEmpty()
+                    || (light.getRoad() != null && group.getRoads().contains(light.getRoad()));
+            if (districtMatch && roadMatch) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isStrategyActive(LocalDateTime now, TimedStrategy strategy) {
-        if (!strategy.getEnabled()) {
+        if (!Boolean.TRUE.equals(strategy.getEnabled())) {
             return false;
         }
         
@@ -194,6 +272,9 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         }
         
         if ("timed".equals(strategy.getType())) {
+            if (strategy.getStartDate() == null || strategy.getEndDate() == null) {
+                return false;
+            }
             LocalDate currentDate = now.toLocalDate();
             return !currentDate.isBefore(strategy.getStartDate()) && !currentDate.isAfter(strategy.getEndDate());
         }
@@ -212,14 +293,50 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
 
     private List<Light> getLightsForStrategy(TimedStrategy strategy) {
         LambdaQueryWrapper<Light> wrapper = new LambdaQueryWrapper<>();
-        
-        if (StringUtils.hasText(strategy.getDistrict())) {
-            wrapper.eq(Light::getDistrict, strategy.getDistrict());
+
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups != null && !groups.isEmpty()) {
+            // 过滤掉 district 和 roads 均为空的无意义分组
+            List<TimedStrategy.RegionGroup> validGroups = groups.stream()
+                .filter(g -> (g.getDistrict() != null && !g.getDistrict().isEmpty())
+                          || (g.getRoads() != null && !g.getRoads().isEmpty()))
+                .toList();
+            if (!validGroups.isEmpty()) {
+                wrapper.and(w -> {
+                    boolean first = true;
+                    for (TimedStrategy.RegionGroup group : validGroups) {
+                        String district = group.getDistrict();
+                        List<String> roads = group.getRoads();
+                        boolean hasDistrict = district != null && !district.isEmpty();
+                        boolean hasRoads = roads != null && !roads.isEmpty();
+
+                        if (hasDistrict && hasRoads) {
+                            if (first) {
+                                w.eq(Light::getDistrict, district).in(Light::getRoad, roads);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.eq(Light::getDistrict, district).in(Light::getRoad, roads));
+                            }
+                        } else if (hasDistrict) {
+                            if (first) {
+                                w.eq(Light::getDistrict, district);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.eq(Light::getDistrict, district));
+                            }
+                        } else if (hasRoads) {
+                            if (first) {
+                                w.in(Light::getRoad, roads);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.in(Light::getRoad, roads));
+                            }
+                        }
+                    }
+                });
+            }
         }
-        if (strategy.getRoads() != null && !strategy.getRoads().isEmpty()) {
-            wrapper.in(Light::getRoad, strategy.getRoads());
-        }
-        
+
         return lightMapper.selectList(wrapper);
     }
 
@@ -229,6 +346,9 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
         }
         if (strategy.getType() == null || strategy.getType().isEmpty()) {
             throw new IllegalArgumentException("策略类型不能为空");
+        }
+        if (!"default".equals(strategy.getType()) && !"timed".equals(strategy.getType())) {
+            throw new IllegalArgumentException("策略类型必须为 'default' 或 'timed'");
         }
         if (strategy.getStartTime() == null) {
             throw new IllegalArgumentException("开始时间不能为空");
@@ -259,9 +379,9 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             }
         }
 
+        // 查询所有已启用的策略，不限类型（跨类型也应检测冲突）
         List<TimedStrategy> existing = timedStrategyMapper.selectList(
                 new LambdaQueryWrapper<TimedStrategy>()
-                        .eq(TimedStrategy::getType, strategy.getType())
                         .eq(TimedStrategy::getEnabled, true)
         );
 
@@ -280,23 +400,39 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     }
 
     private boolean isTimeConflict(TimedStrategy a, TimedStrategy b) {
-        LocalTime aStart = a.getStartTime();
-        LocalTime aEnd = a.getEndTime();
-        LocalTime bStart = b.getStartTime();
-        LocalTime bEnd = b.getEndTime();
+        int DAY_MINUTES = 24 * 60;
 
-        boolean dailyOverlap;
-        if (aStart.isBefore(aEnd)) {
-            if (bStart.isBefore(bEnd)) {
-                dailyOverlap = aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
-            } else {
-                dailyOverlap = aStart.isBefore(bEnd) || !aEnd.isBefore(bStart);
-            }
+        int aStart = a.getStartTime().toSecondOfDay() / 60;
+        int aEnd   = a.getEndTime().toSecondOfDay() / 60;
+        int bStart = b.getStartTime().toSecondOfDay() / 60;
+        int bEnd   = b.getEndTime().toSecondOfDay() / 60;
+
+        // 转为 0–1440 分钟段列表（跨天拆为两段：[start, 1440) 和 [0, end)）
+        List<int[]> segsA = new ArrayList<>();
+        if (aStart >= aEnd) {
+            segsA.add(new int[]{aStart, DAY_MINUTES});
+            segsA.add(new int[]{0, aEnd});
         } else {
-            if (bStart.isBefore(bEnd)) {
-                dailyOverlap = bStart.isBefore(aEnd) || !bEnd.isBefore(aStart);
-            } else {
-                dailyOverlap = true;
+            segsA.add(new int[]{aStart, aEnd});
+        }
+
+        List<int[]> segsB = new ArrayList<>();
+        if (bStart >= bEnd) {
+            segsB.add(new int[]{bStart, DAY_MINUTES});
+            segsB.add(new int[]{0, bEnd});
+        } else {
+            segsB.add(new int[]{bStart, bEnd});
+        }
+
+        // 判断任一段有交集
+        boolean dailyOverlap = false;
+        outer:
+        for (int[] sa : segsA) {
+            for (int[] sb : segsB) {
+                if (sa[0] < sb[1] && sb[0] < sa[1]) {
+                    dailyOverlap = true;
+                    break outer;
+                }
             }
         }
         if (!dailyOverlap) {
@@ -313,41 +449,65 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             return !a.getEndDate().isBefore(b.getStartDate()) && !b.getEndDate().isBefore(a.getStartDate());
         }
 
-        return true;
+        // 跨类型：default(星期) vs timed(日期范围) → 检查日期范围内是否包含default的任意星期
+        TimedStrategy defaultOne = "default".equals(a.getType()) ? a : b;
+        TimedStrategy timedOne = "default".equals(a.getType()) ? b : a;
+        return isDefaultTimedDateOverlap(defaultOne, timedOne);
+    }
+
+    /**
+     * 判断 default 策略的星期与 timed 策略的日期范围是否有交集
+     */
+    private boolean isDefaultTimedDateOverlap(TimedStrategy defaultStrategy, TimedStrategy timedStrategy) {
+        List<Integer> weekdays = defaultStrategy.getWeekdays();
+        if (weekdays == null || weekdays.isEmpty()) return true;
+        LocalDate start = timedStrategy.getStartDate();
+        LocalDate end = timedStrategy.getEndDate();
+        if (start == null || end == null) return true;
+        LocalDate d = start;
+        while (!d.isAfter(end)) {
+            if (weekdays.contains(d.getDayOfWeek().getValue())) {
+                return true;
+            }
+            d = d.plusDays(1);
+        }
+        return false;
     }
 
     private boolean isRegionConflict(TimedStrategy a, TimedStrategy b) {
-        String aDistrict = StringUtils.hasText(a.getDistrict()) ? a.getDistrict() : "";
-        String bDistrict = StringUtils.hasText(b.getDistrict()) ? b.getDistrict() : "";
-        List<String> aRoads = a.getRoads() == null ? List.of() : a.getRoads();
-        List<String> bRoads = b.getRoads() == null ? List.of() : b.getRoads();
+        List<TimedStrategy.RegionGroup> aGroups = a.getGroups();
+        List<TimedStrategy.RegionGroup> bGroups = b.getGroups();
 
-        if (aDistrict.isEmpty() && bDistrict.isEmpty() && aRoads.isEmpty() && bRoads.isEmpty()) {
+        // 都没有区域限制 → 全区域冲突
+        if ((aGroups == null || aGroups.isEmpty()) && (bGroups == null || bGroups.isEmpty())) {
+            return true;
+        }
+        // 一方无区域限制 → 冲突
+        if (aGroups == null || aGroups.isEmpty() || bGroups == null || bGroups.isEmpty()) {
             return true;
         }
 
-        if (aDistrict.isEmpty() && aRoads.isEmpty()) {
-            return true;
-        }
-        if (bDistrict.isEmpty() && bRoads.isEmpty()) {
-            return true;
-        }
+        // 逐组检查是否有重叠
+        for (TimedStrategy.RegionGroup ag : aGroups) {
+            for (TimedStrategy.RegionGroup bg : bGroups) {
+                // 行政区重叠判断
+                String ad = ag.getDistrict() == null ? "" : ag.getDistrict();
+                String bd = bg.getDistrict() == null ? "" : bg.getDistrict();
+                if (!ad.isEmpty() && !bd.isEmpty() && !ad.equals(bd)) {
+                    continue; // 行政区不同，跳过
+                }
 
-        boolean sameDistrict = !aDistrict.isEmpty() && aDistrict.equals(bDistrict);
-        boolean aHasRoads = !aRoads.isEmpty();
-        boolean bHasRoads = !bRoads.isEmpty();
-
-        if (sameDistrict) {
-            if (!aHasRoads || !bHasRoads) {
-                return true;
+                // 路段重叠判断
+                List<String> ar = ag.getRoads() == null ? List.of() : ag.getRoads();
+                List<String> br = bg.getRoads() == null ? List.of() : bg.getRoads();
+                if (ar.isEmpty() || br.isEmpty()) {
+                    return true; // 至少一方无路段限制 → 冲突
+                }
+                if (ar.stream().anyMatch(br::contains)) {
+                    return true;
+                }
             }
-            return aRoads.stream().anyMatch(bRoads::contains);
         }
-
-        if (aHasRoads && bHasRoads) {
-            return aRoads.stream().anyMatch(bRoads::contains);
-        }
-
         return false;
     }
 }

@@ -10,13 +10,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
+import jakarta.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -26,6 +28,12 @@ public class TimedStrategyScheduler {
     private final TimedStrategyMapper timedStrategyMapper;
     private final LightMapper lightMapper;
     private final MqttPublishService mqttPublishService;
+
+    @PostConstruct
+    public void onStartup() {
+        log.info("系统启动，异步执行定时策略检查...");
+        CompletableFuture.runAsync(this::executeStrategies);
+    }
 
     @Scheduled(cron = "0 * * * * ?")
     public void executeStrategies() {
@@ -52,7 +60,8 @@ public class TimedStrategyScheduler {
             }
         }
 
-        // Step 2: 先执行所有活跃策略（开灯）
+        // Step 2: 按优先级排序（timed 高于 default），然后执行所有活跃策略（开灯）
+        activeStrategies.sort(Comparator.comparingInt(s -> "timed".equals(s.getType()) ? 1 : 0));
         for (TimedStrategy strategy : activeStrategies) {
             try {
                 applyStrategyOn(strategy);
@@ -115,10 +124,13 @@ public class TimedStrategyScheduler {
 
         int count = 0;
         for (Light light : lights) {
-            if (light.getStatus() == 2) {
+            if (Integer.valueOf(2).equals(light.getStatus())) {
                 continue;
             }
-            if (light.getStatus() != 1 || !strategy.getBrightness().equals(light.getBrightness())) {
+            if (Boolean.TRUE.equals(light.getManualControl())) {
+                continue;
+            }
+            if (!Integer.valueOf(1).equals(light.getStatus()) || !strategy.getBrightness().equals(light.getBrightness())) {
                 light.setStatus(1);
                 light.setBrightness(strategy.getBrightness());
                 lightMapper.updateById(light);
@@ -143,7 +155,7 @@ public class TimedStrategyScheduler {
 
         int count = 0;
         for (Light light : lights) {
-            if (light.getStatus() == 2) {
+            if (Integer.valueOf(2).equals(light.getStatus())) {
                 continue;
             }
             if (Boolean.TRUE.equals(light.getManualControl())) {
@@ -163,7 +175,7 @@ public class TimedStrategyScheduler {
                 continue; // 有其他活跃策略在管理这盏灯，不关
             }
 
-            if (light.getStatus() != 0) {
+            if (!Integer.valueOf(0).equals(light.getStatus())) {
                 light.setStatus(0);
                 light.setBrightness(0);
                 lightMapper.updateById(light);
@@ -181,25 +193,66 @@ public class TimedStrategyScheduler {
      * 判断某策略是否覆盖指定的路灯
      */
     private boolean strategyCoversLight(TimedStrategy strategy, Light light) {
-        if (StringUtils.hasText(strategy.getDistrict()) && !strategy.getDistrict().equals(light.getDistrict())) {
-            return false;
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups == null || groups.isEmpty()) {
+            return true;
         }
-        if (strategy.getRoads() != null && !strategy.getRoads().isEmpty()) {
-            if (light.getRoad() == null || !strategy.getRoads().contains(light.getRoad())) {
-                return false;
+        for (TimedStrategy.RegionGroup group : groups) {
+            boolean districtMatch = group.getDistrict() == null || group.getDistrict().isEmpty()
+                    || group.getDistrict().equals(light.getDistrict());
+            boolean roadMatch = group.getRoads() == null || group.getRoads().isEmpty()
+                    || (light.getRoad() != null && group.getRoads().contains(light.getRoad()));
+            if (districtMatch && roadMatch) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     private List<Light> getLightsForStrategy(TimedStrategy strategy) {
         LambdaQueryWrapper<Light> wrapper = new LambdaQueryWrapper<>();
 
-        if (StringUtils.hasText(strategy.getDistrict())) {
-            wrapper.eq(Light::getDistrict, strategy.getDistrict());
-        }
-        if (strategy.getRoads() != null && !strategy.getRoads().isEmpty()) {
-            wrapper.in(Light::getRoad, strategy.getRoads());
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups != null && !groups.isEmpty()) {
+            // 过滤掉 district 和 roads 均为空的无意义分组
+            List<TimedStrategy.RegionGroup> validGroups = groups.stream()
+                .filter(g -> (g.getDistrict() != null && !g.getDistrict().isEmpty())
+                          || (g.getRoads() != null && !g.getRoads().isEmpty()))
+                .toList();
+            if (!validGroups.isEmpty()) {
+                wrapper.and(w -> {
+                    boolean first = true;
+                    for (TimedStrategy.RegionGroup group : validGroups) {
+                        String district = group.getDistrict();
+                        List<String> roads = group.getRoads();
+                        boolean hasDistrict = district != null && !district.isEmpty();
+                        boolean hasRoads = roads != null && !roads.isEmpty();
+
+                        if (hasDistrict && hasRoads) {
+                            if (first) {
+                                w.eq(Light::getDistrict, district).in(Light::getRoad, roads);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.eq(Light::getDistrict, district).in(Light::getRoad, roads));
+                            }
+                        } else if (hasDistrict) {
+                            if (first) {
+                                w.eq(Light::getDistrict, district);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.eq(Light::getDistrict, district));
+                            }
+                        } else if (hasRoads) {
+                            if (first) {
+                                w.in(Light::getRoad, roads);
+                                first = false;
+                            } else {
+                                w.or(sub -> sub.in(Light::getRoad, roads));
+                            }
+                        }
+                    }
+                });
+            }
         }
 
         return lightMapper.selectList(wrapper);

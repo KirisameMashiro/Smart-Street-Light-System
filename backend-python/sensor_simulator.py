@@ -11,6 +11,7 @@ import time
 import threading
 import configparser
 import os
+import hashlib
 import urllib.request
 import urllib.error
 import socket
@@ -80,16 +81,22 @@ def generate_sensor_data(light):
     brightness = light['brightness']
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+    # 基于路灯 ID 的稳定偏移系数，让每盏灯功耗天然不同（±7%）
+    seed = int(hashlib.md5(str(light['id']).encode()).hexdigest()[:8], 16)
+    factor = 0.93 + (seed % 140) / 1000.0  # 0.93 ~ 1.07
+
     if status == 0:
         illuminance = random.randint(0, 50)
-        power = round(random.uniform(0.5, 5.0), 2)
-        current = round(random.uniform(0.01, 0.05), 3)
+        power = round(random.uniform(0.3, 2.0) * factor, 2)
+        current = round(random.uniform(0.001, 0.01) * factor, 3)
         voltage = round(random.uniform(215, 225), 1)
     else:
         ratio = brightness / 100.0
         illuminance = int(200 + ratio * 1600)
-        power = round(50 + ratio * 100, 2)
-        current = round(0.3 + ratio * 0.5, 3)
+        base_power = (50 + ratio * 100) * factor
+        power = round(base_power + random.uniform(-3, 3), 2)
+        base_current = (0.3 + ratio * 0.5) * factor
+        current = round(base_current + random.uniform(-0.01, 0.01), 3)
         voltage = round(random.uniform(215, 225), 1)
 
     temperature = round(random.uniform(25, 40), 1)

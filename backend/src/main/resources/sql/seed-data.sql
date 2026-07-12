@@ -22,8 +22,6 @@ TRUNCATE TABLE `timed_strategy`;
 TRUNCATE TABLE `knowledge`;
 TRUNCATE TABLE `light`;
 TRUNCATE TABLE `user`;
-TRUNCATE TABLE `timed_strategy`;
-TRUNCATE TABLE `threshold_control`;
 TRUNCATE TABLE `brightness_recommendation`;
 
 SET FOREIGN_KEY_CHECKS = 1;
@@ -72,17 +70,7 @@ INSERT INTO `light` (`light_code`, `light_name`, `location`, `longitude`, `latit
 ('L-CY-001', '创业路路灯001', '创业路北段',          118.190000, 36.190000, 1, 70, 'LED-100W', 100.00, '高新区', '创业路');
 
 -- ============================================================
--- 3. 系统配置
--- ============================================================
-INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
-('energy_baseline_power', '250', '传统钠灯基准功率(W)'),
-('energy_baseline_hours', '12', '日均照明时长(h)'),
-('co2_factor', '0.997', '碳排放因子(kg CO2/kWh)'),
-('alert_push_interval', '60', '告警推送合并周期(秒)')
-ON DUPLICATE KEY UPDATE `config_value` = VALUES(`config_value`);
-
--- ============================================================
--- 4. 告警规则（阈值与传感器模拟数据匹配）
+-- 3. 告警规则（阈值与传感器模拟数据匹配）
 -- ============================================================
 INSERT INTO `alert_rule` (`rule_type`, `rule_name`, `threshold`, `enabled`, `description`) VALUES
 ('low_brightness',  '照度偏低预警',    '照度<50lux',            1, '路灯照度低于 50lux 时触发'),
@@ -180,13 +168,13 @@ INSERT INTO `alert_rule` (`rule_type`, `rule_name`, `threshold`, `enabled`, `des
 --
 -- ============================================================
 -- 9. 定时策略表 (timed_strategy)
--- 字段: name, type, weekdays, start_date, end_date, start_time, end_time, brightness, district, roads, enabled
--- roads: JSON数组，支持多路段选择
+-- 字段: name, type, weekdays, start_date, end_date, start_time, end_time, brightness, groups, enabled
+-- groups: JSON数组 [{"district":"xx","roads":["yy"]}]，支持多行政区-路段配对分组
 -- ============================================================
-INSERT INTO `timed_strategy` (`name`, `type`, `weekdays`, `start_date`, `end_date`, `start_time`, `end_time`, `brightness`, `district`, `roads`, `enabled`, `create_time`, `update_time`) VALUES
-('工作日晚间照明',       'default', '[1,2,3,4,5]', NULL, NULL, '18:00:00', '06:00:00', 80, '黄浦区', '["人民路","南京路"]', 1, '2026-06-01 10:00:00', '2026-06-01 10:00:00'),
-('周末景观照明',         'default', '[6,7]',       NULL, NULL, '19:00:00', '23:00:00', 90, NULL,    '["滨江路"]',            1, '2026-06-01 10:00:00', '2026-06-01 10:00:00'),
-('国庆节特别照明',       'timed',  NULL,           '2026-10-01', '2026-10-07', '18:00:00', '23:59:00', 100, NULL,   NULL,                    0, '2026-06-15 14:00:00', '2026-06-15 14:00:00');
+INSERT INTO `timed_strategy` (`name`, `type`, `weekdays`, `start_date`, `end_date`, `start_time`, `end_time`, `brightness`, `region_groups`, `enabled`, `create_time`, `update_time`) VALUES
+('工作日晚间照明',       'default', '[1,2,3,4,5]', NULL, NULL, '18:00:00', '06:00:00', 80, '[{"district":"中心区","roads":["人民路","解放路"]},{"district":"城东区","roads":["南京路"]}]', 1, '2026-06-01 10:00:00', '2026-06-01 10:00:00'),
+('周末景观照明',         'default', '[6,7]',       NULL, NULL, '19:00:00', '23:00:00', 90, '[{"district":"滨海区","roads":["渤海路","黄河路"]}]', 1, '2026-06-01 10:00:00', '2026-06-01 10:00:00'),
+('国庆节特别照明',       'timed',  NULL,           '2026-10-01', '2026-10-07', '18:00:00', '23:59:00', 100, NULL,       0, '2026-06-15 14:00:00', '2026-06-15 14:00:00');
 
 -- ============================================================
 -- 10. 阈值联动配置 (threshold_control) - 已在 schema.sql 中有默认值

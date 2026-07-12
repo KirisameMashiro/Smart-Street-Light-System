@@ -11,6 +11,8 @@ public interface TimedStrategyService {
 
     List<TimedStrategy> listAll();
 
+    List<TimedStrategy> listEnabled();
+
     TimedStrategy getById(Long id);
 
     boolean save(TimedStrategy strategy);

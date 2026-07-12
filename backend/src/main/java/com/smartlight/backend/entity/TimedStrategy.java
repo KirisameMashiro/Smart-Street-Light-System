@@ -1,7 +1,10 @@
 package com.smartlight.backend.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -13,6 +16,8 @@ import java.util.List;
 @Data
 @TableName(value = "timed_strategy", autoResultMap = true)
 public class TimedStrategy {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -35,11 +40,9 @@ public class TimedStrategy {
 
     private Integer brightness;
 
-    private String district;
-
-    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
-    @JsonProperty("roads")
-    private List<String> roads;
+    @TableField(value = "region_groups")
+    @JsonIgnore
+    private String regionGroupsJson;
 
     private Boolean enabled;
 
@@ -48,4 +51,36 @@ public class TimedStrategy {
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    @JsonProperty("groups")
+    public List<RegionGroup> getGroups() {
+        if (regionGroupsJson == null || regionGroupsJson.isEmpty()) {
+            return null;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(regionGroupsJson, new TypeReference<List<RegionGroup>>() {});
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @JsonProperty("groups")
+    public void setGroups(List<RegionGroup> groups) {
+        if (groups == null || groups.isEmpty()) {
+            this.regionGroupsJson = null;
+        } else {
+            try {
+                this.regionGroupsJson = OBJECT_MAPPER.writeValueAsString(groups);
+            } catch (Exception e) {
+                this.regionGroupsJson = null;
+            }
+        }
+    }
+
+    @Data
+    @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RegionGroup {
+        private String district;
+        private List<String> roads;
+    }
 }

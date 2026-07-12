@@ -214,12 +214,12 @@ CREATE TABLE IF NOT EXISTS `timed_strategy` (
     `start_time` TIME NOT NULL COMMENT '开始时间',
     `end_time` TIME NOT NULL COMMENT '结束时间',
     `brightness` INT NOT NULL DEFAULT 80 COMMENT '目标亮度 0-100',
-    `district` VARCHAR(50) DEFAULT NULL COMMENT '行政区',
-    `roads` JSON DEFAULT NULL COMMENT '路段列表，JSON数组',
+    `region_groups` JSON DEFAULT NULL COMMENT '适用区域分组 [{district, roads}]',
     `enabled` TINYINT DEFAULT 1 COMMENT '是否启用 0-禁用 1-启用',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_name` (`name`),
     KEY `idx_type` (`type`),
     KEY `idx_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='定时策略表';

@@ -52,6 +52,7 @@
               <div class="time-daily" v-if="row.startTime && row.endTime">
                 <el-icon><Clock /></el-icon>
                 {{ row.startTime }} ~ {{ row.endTime }}
+                <el-tag v-if="isCrossDay(row.startTime, row.endTime)" size="small" type="warning" style="margin-left:4px">次日</el-tag>
               </div>
             </template>
           </template>
@@ -61,11 +62,15 @@
         </el-table-column>
         <el-table-column label="适用区域" width="180">
           <template #default="{ row }">
-            <template v-if="row.district || row.roads?.length || row.road">
-              <span v-if="row.district">{{ row.district }}</span>
-              <span v-if="row.district && (row.roads?.length || row.road)" class="text-muted">·</span>
-              <span v-if="row.roads?.length">{{ row.roads.join('、') }}</span>
-              <span v-else-if="row.road">{{ row.road }}</span>
+            <template v-if="row.groups?.length">
+              <template v-for="(g, i) in row.groups" :key="i">
+                <template v-if="g.district">{{ g.district }}</template>
+                <template v-if="g.roads?.length">
+                  <span v-if="g.district" class="text-muted"> · </span>
+                  {{ g.roads.join('、') }}
+                </template>
+                <template v-if="i < row.groups.length - 1">；</template>
+              </template>
             </template>
             <span v-else class="text-muted">-</span>
           </template>
@@ -340,12 +345,6 @@ const form = reactive({
 })
 
 function addApplyGroup() {
-  const usedDistricts = form.applyGroups.map(g => g.district).filter(Boolean)
-  const available = DISTRICT_OPTIONS.value.find(o => !usedDistricts.includes(o.value))
-  if (!available) {
-    ElMessage.warning('所有行政区已添加，无法重复添加')
-    return
-  }
   form.applyGroups.push({
     district: '',
     roads: []
@@ -372,18 +371,44 @@ function selectAllRoads(index) {
 
 const rules = {
   name: [{ required: true, message: '请输入策略名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择策略类型', trigger: 'change' }]
+  type: [{ required: true, message: '请选择策略类型', trigger: 'change' }],
+  startTime: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
+  endTime: [{ required: true, message: '请选择结束时间', trigger: 'change' }],
+  startDate: [{
+    validator: (rule, value, callback) => {
+      if (form.type === 'timed' && !value) callback(new Error('时间段策略必须选择开始日期'))
+      else callback()
+    }, trigger: 'change'
+  }],
+  endDate: [{
+    validator: (rule, value, callback) => {
+      if (form.type === 'timed' && !value) callback(new Error('时间段策略必须选择结束日期'))
+      else if (form.type === 'timed' && value && form.startDate && value < form.startDate) callback(new Error('结束日期不能早于开始日期'))
+      else callback()
+    }, trigger: 'change'
+  }],
+  brightness: [{
+    validator: (rule, value, callback) => {
+      if (value == null || value < 0 || value > 100) callback(new Error('亮度必须在0-100之间'))
+      else callback()
+    }, trigger: 'change'
+  }]
 }
 
 function openDialog(row) {
   isEdit.value = !!row
   if (row) {
     let applyGroups = []
-    if (row.district || row.roads?.length || row.road) {
-      applyGroups = [{
-        district: row.district || '',
-        roads: Array.isArray(row.roads) ? [...row.roads] : (row.road ? [row.road] : [])
-      }]
+    // 直接解析 groups 结构，完美保留行政区-路段配对
+    const groups = Array.isArray(row.groups) ? row.groups : []
+    groups.forEach(g => {
+      applyGroups.push({
+        district: g.district || '',
+        roads: Array.isArray(g.roads) ? [...g.roads] : []
+      })
+    })
+    if (applyGroups.length === 0) {
+      applyGroups.push({ district: '', roads: [] })
     }
     Object.assign(form, {
       id: row.id,
@@ -428,6 +453,12 @@ function parseTimeStr(t) {
   return parts[0] * 60 + parts[1]
 }
 
+/** 判断时间段是否跨天（start >= end 即视为跨天） */
+function isCrossDay(startTime, endTime) {
+  if (!startTime || !endTime) return false
+  return startTime >= endTime
+}
+
 function isTimeRangeOverlap(start1, end1, start2, end2) {
   const s1 = parseTimeStr(start1)
   const e1 = parseTimeStr(end1)
@@ -454,9 +485,6 @@ function isTimeRangeOverlap(start1, end1, start2, end2) {
   return false
 }
 
-function getFormAllRoads() {
-  return form.applyGroups.flatMap(g => g.roads || [])
-}
 
 function isGroupOverlap(group, otherDistrict, otherRoads) {
   const formDistrict = group.district || ''
@@ -470,6 +498,9 @@ function isGroupOverlap(group, otherDistrict, otherRoads) {
   }
 
   if (formRoads.length > 0 && otherRoads.length > 0) {
+    if (formDistrict && otherDistrict && formDistrict !== otherDistrict) {
+      return false
+    }
     return formRoads.some(r => otherRoads.includes(r))
   }
 
@@ -497,15 +528,22 @@ function isGroupOverlap(group, otherDistrict, otherRoads) {
 }
 
 function isRoadOverlap(other) {
-  const otherDistrict = other.district || ''
-  const otherRoads = other.roads || (other.road ? [other.road] : [])
+  const otherGroups = Array.isArray(other.groups) ? other.groups : []
 
   if (!form.applyGroups || form.applyGroups.length === 0) {
-    if (!otherDistrict && !otherRoads.length) return true
-    return false
+    return true
   }
 
-  return form.applyGroups.some(group => isGroupOverlap(group, otherDistrict, otherRoads))
+  if (otherGroups.length === 0) return true
+
+  for (const og of otherGroups) {
+    const oDistrict = og.district || ''
+    const oRoads = Array.isArray(og.roads) ? og.roads : []
+    for (const group of form.applyGroups) {
+      if (isGroupOverlap(group, oDistrict, oRoads)) return true
+    }
+  }
+  return false
 }
 
 function isDateOverlap(other) {
@@ -515,6 +553,7 @@ function isDateOverlap(other) {
   if (fType === 'default' && oType === 'default') {
     const fDays = form.weekdays || []
     const oDays = other.weekdays || []
+    if (fDays.length === 0 || oDays.length === 0) return true
     return fDays.some(d => oDays.includes(d))
   }
 
@@ -539,8 +578,12 @@ function isDateOverlap(other) {
 
 function getConflictDesc(other) {
   const parts = []
-  if (other.type === 'default' && other.weekdays?.length) {
-    parts.push(other.weekdays.map(d => weekdayLabel(d)).join('、'))
+  if (other.type === 'default') {
+    if (other.weekdays?.length) {
+      parts.push(other.weekdays.map(d => weekdayLabel(d)).join('、'))
+    } else {
+      parts.push('每天')
+    }
   }
   if (other.type === 'timed' && other.startDate && other.endDate) {
     parts.push(`${other.startDate} ~ ${other.endDate}`)
@@ -548,10 +591,14 @@ function getConflictDesc(other) {
   if (other.startTime && other.endTime) {
     parts.push(`${other.startTime} ~ ${other.endTime}`)
   }
-  if (other.district || other.road || other.roads?.length) {
-    const roads = other.roads?.length ? other.roads.join('、') : (other.road || '')
-    const group = other.district ? (roads ? `${other.district}·${roads}` : other.district) : roads
-    if (group) parts.push(group)
+  if (other.groups?.length) {
+    const groupDesc = other.groups.map(g => {
+      const items = []
+      if (g.district) items.push(g.district)
+      if (g.roads?.length) items.push(g.roads.join('、'))
+      return items.join(' · ')
+    }).join('；')
+    parts.push(groupDesc)
   }
   return parts.join('；')
 }
@@ -603,6 +650,7 @@ function checkConflict() {
 }
 
 async function onSubmit() {
+  if (!formRef.value) return
   try {
     await formRef.value.validate()
   } catch (e) {
@@ -629,12 +677,31 @@ async function onSubmit() {
 
   submitting.value = true
   try {
-    const firstGroup = form.applyGroups[0] || {}
-    const { applyGroups, road, ...payload } = {
-      ...form,
-      district: firstGroup.district || '',
-      roads: form.applyGroups.flatMap(g => g.roads || [])
+    const groups = form.applyGroups
+      .filter(g => g.district || (g.roads && g.roads.length > 0))
+      .map(g => ({
+        district: g.district || '',
+        roads: g.roads || []
+      }))
+
+    const basePayload = {
+      id: form.id,
+      name: form.name,
+      type: form.type,
+      startTime: form.startTime,
+      endTime: form.endTime,
+      brightness: form.brightness,
+      enabled: form.enabled,
+      groups
     }
+    if (form.type === 'default') {
+      basePayload.weekdays = form.weekdays || []
+    }
+    if (form.type === 'timed') {
+      basePayload.startDate = form.startDate || ''
+      basePayload.endDate = form.endDate || ''
+    }
+    const payload = basePayload
     if (isEdit.value) {
       await updateStrategy(payload)
       ElMessage.success('更新成功')
