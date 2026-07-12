@@ -204,7 +204,8 @@ CREATE TABLE IF NOT EXISTS `threshold_control` (
 -- ============================================================
 -- 11. 定时策略表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `timed_strategy` (
+DROP TABLE IF EXISTS `timed_strategy`;
+CREATE TABLE `timed_strategy` (
     `id` BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `name` VARCHAR(100) NOT NULL COMMENT '策略名称',
     `type` VARCHAR(20) NOT NULL COMMENT '策略类型：default/timed',
