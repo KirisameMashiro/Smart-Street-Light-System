@@ -1,5 +1,6 @@
 -- ============================================================
 -- 智慧路灯管理系统 - 数据库结构初始化脚本
+-- 可重复执行：每次执行会先删除所有表再重建
 -- ============================================================
 CREATE DATABASE IF NOT EXISTS smart_light
     DEFAULT CHARACTER SET utf8mb4
@@ -10,7 +11,8 @@ USE smart_light;
 -- ============================================================
 -- 1. 系统用户表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `user` (
+DROP TABLE IF EXISTS `user`;
+CREATE TABLE `user` (
     `id`          BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `username`    VARCHAR(50)  NOT NULL COMMENT '用户名',
     `password`    VARCHAR(200) NOT NULL COMMENT '密码(MD5加密)',
@@ -28,7 +30,8 @@ CREATE TABLE IF NOT EXISTS `user` (
 -- ============================================================
 -- 2. 路灯设备表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `light` (
+DROP TABLE IF EXISTS `light`;
+CREATE TABLE `light` (
     `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `light_code`    VARCHAR(50)  NOT NULL COMMENT '路灯编号',
     `light_name`    VARCHAR(100) DEFAULT NULL COMMENT '路灯名称',
@@ -55,7 +58,8 @@ CREATE TABLE IF NOT EXISTS `light` (
 -- 3. 传感器数据表（原始数据）
 --    方案①后不再写入，仅保留旧数据兼容查询
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `sensor_data` (
+DROP TABLE IF EXISTS `sensor_data`;
+CREATE TABLE `sensor_data` (
     `id`              BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `light_id`        BIGINT NOT NULL COMMENT '关联路灯ID',
     `illuminance`     DECIMAL(10,2) DEFAULT NULL COMMENT '光照强度 (lux)',
@@ -79,7 +83,8 @@ CREATE TABLE IF NOT EXISTS `sensor_data` (
 --    每盏灯每小时 1 行，写入量降低 99.9%
 --    碳排放计算、趋势图均从此表读取
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `sensor_data_hourly` (
+DROP TABLE IF EXISTS `sensor_data_hourly`;
+CREATE TABLE `sensor_data_hourly` (
     `id`              BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `light_id`        BIGINT NOT NULL COMMENT '关联路灯ID',
     `hour_start`      DATETIME NOT NULL COMMENT '统计小时起点（分钟秒归零）',
@@ -102,7 +107,8 @@ CREATE TABLE IF NOT EXISTS `sensor_data_hourly` (
 -- ============================================================
 -- 5. 报警信息表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `alert` (
+DROP TABLE IF EXISTS `alert`;
+CREATE TABLE `alert` (
     `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `light_id`      BIGINT NOT NULL COMMENT '关联路灯ID',
     `alert_type`    INT DEFAULT NULL COMMENT '报警类型: 1-过流, 2-过压, 3-欠压, 4-过热, 5-通讯故障, 6-其他',
@@ -123,7 +129,8 @@ CREATE TABLE IF NOT EXISTS `alert` (
 -- ============================================================
 -- 6. 告警规则表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `alert_rule` (
+DROP TABLE IF EXISTS `alert_rule`;
+CREATE TABLE `alert_rule` (
     `id`          BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `rule_type`   VARCHAR(50)  DEFAULT NULL COMMENT '规则类型',
     `rule_name`   VARCHAR(100) DEFAULT NULL COMMENT '规则名称',
@@ -138,7 +145,8 @@ CREATE TABLE IF NOT EXISTS `alert_rule` (
 -- ============================================================
 -- 7. 操作日志表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `operation_log` (
+DROP TABLE IF EXISTS `operation_log`;
+CREATE TABLE `operation_log` (
     `id`             BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `operator`       VARCHAR(50)  DEFAULT NULL COMMENT '操作人用户名',
     `operator_name`  VARCHAR(50)  DEFAULT NULL COMMENT '操作人姓名',
@@ -154,7 +162,8 @@ CREATE TABLE IF NOT EXISTS `operation_log` (
 -- ============================================================
 -- 8. 系统配置表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `system_config` (
+DROP TABLE IF EXISTS `system_config`;
+CREATE TABLE `system_config` (
     `id`           BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `config_key`   VARCHAR(100) NOT NULL UNIQUE COMMENT '配置键',
     `config_value` VARCHAR(500) DEFAULT NULL COMMENT '配置值',
@@ -166,7 +175,8 @@ CREATE TABLE IF NOT EXISTS `system_config` (
 -- ============================================================
 -- 9. 碳减排日统计数据表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `carbon_stats` (
+DROP TABLE IF EXISTS `carbon_stats`;
+CREATE TABLE `carbon_stats` (
     `id`             BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `stat_date`      DATE NOT NULL COMMENT '统计日期',
     `road`           VARCHAR(100) DEFAULT NULL COMMENT '路段（null=全路段汇总）',
@@ -186,7 +196,8 @@ CREATE TABLE IF NOT EXISTS `carbon_stats` (
 -- ============================================================
 -- 10. 阈值联动配置表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `threshold_control` (
+DROP TABLE IF EXISTS `threshold_control`;
+CREATE TABLE `threshold_control` (
     `id`                  BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `enabled`             TINYINT DEFAULT 0 COMMENT '是否启用: 0-禁用, 1-启用',
     `light_on_threshold`  DECIMAL(10,2) DEFAULT 30.00 COMMENT '开灯光照阈值(lux)',
@@ -228,7 +239,8 @@ CREATE TABLE `timed_strategy` (
 -- ============================================================
 -- 12. AI 知识库表
 -- ============================================================
-CREATE TABLE IF NOT EXISTS `knowledge` (
+DROP TABLE IF EXISTS `knowledge`;
+CREATE TABLE `knowledge` (
     `id`          BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `title`       VARCHAR(200) DEFAULT NULL COMMENT '知识标题',
     `content`     TEXT DEFAULT NULL COMMENT '知识内容',
@@ -241,7 +253,7 @@ CREATE TABLE IF NOT EXISTS `knowledge` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库表';
 
 -- ============================================================
--- 13. 亮度推荐记录表 (brightness_recommendation)
+-- 13. 亮度推荐记录表
 -- 每小时对每种道路等级计算一次推荐亮度并记录
 -- ============================================================
 DROP TABLE IF EXISTS `brightness_recommendation`;
