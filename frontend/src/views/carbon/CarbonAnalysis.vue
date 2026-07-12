@@ -72,15 +72,23 @@
     <!-- 图表区 -->
     <div class="chart-grid">
       <div class="chart-card">
-        <div class="chart-title">{{ trendLabel }}趋势</div>
-        <el-empty v-show="trendError || (!trendData.length && !loading)" description="趋势数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div ref="trendRef" class="chart-box"></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">{{ rangeType === 'monthly' ? '月度' : '年度' }}路段节电量对比 <span class="chart-subtitle">{{ dateValue }}</span></div>
-        <el-empty v-show="roadError || (!roadData.length && !loading)" description="路段对比数据暂不可用（后端接口缺失）" :image-size="80" />
-        <div ref="roadRef" class="chart-box"></div>
-      </div>
+          <div class="chart-title">{{ trendLabel }}趋势</div>
+          <el-empty 
+            v-show="trendApiError || (!trendData.length && !loading)" 
+            :description="trendApiError ? '获取趋势数据失败（后端接口异常）' : '暂无趋势数据'" 
+            :image-size="80" 
+          />
+          <div ref="trendRef" class="chart-box"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">{{ rangeType === 'monthly' ? '月度' : '年度' }}路段节电量对比 <span class="chart-subtitle">{{ dateValue }}</span></div>
+          <el-empty 
+            v-show="roadApiError || (!roadData.length && !loading)" 
+            :description="roadApiError ? '获取路段数据失败（后端接口异常）' : '暂无路段数据'" 
+            :image-size="80" 
+          />
+          <div ref="roadRef" class="chart-box"></div>
+        </div>
     </div>
 
     <!-- 能耗基准配置 -->
@@ -172,8 +180,8 @@ let roadChart = null
 
 const trendData = ref([])
 const roadData = ref([])
-const trendError = ref(false)
-const roadError = ref(false)
+const trendApiError = ref(false)
+const roadApiError = ref(false)
 
 // 能耗基准
 const baselineLoading = ref(false)
@@ -216,33 +224,26 @@ async function loadSummary() {
 }
 
 async function loadTrend() {
-  trendError.value = false
+  trendApiError.value = false
   try {
-    // 后端期望 type=month/year，前端使用 monthly/yearly
     const backendType = rangeType.value === 'monthly' ? 'month' : 'year'
     const res = await getCarbonTrend({ type: backendType, period: dateValue.value })
     trendData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
-    if (!trendData.value.length) {
-      trendError.value = true
-    }
   } catch (e) {
     trendData.value = []
-    trendError.value = true
+    trendApiError.value = true
   }
 }
 
 async function loadRoad() {
-  roadError.value = false
+  roadApiError.value = false
   try {
     const backendType = rangeType.value === 'monthly' ? 'month' : 'year'
     const res = await getCarbonRoadCompare({ type: backendType, period: dateValue.value })
     roadData.value = Array.isArray(res.data) ? res.data : res.data?.list || []
-    if (!roadData.value.length) {
-      roadError.value = true
-    }
   } catch (e) {
     roadData.value = []
-    roadError.value = true
+    roadApiError.value = true
   }
 }
 
@@ -265,7 +266,7 @@ function renderTrend() {
   if (!trendChart) {
     trendChart = echarts.init(trendRef.value)
   }
-  if (trendError.value) {
+  if (trendApiError.value) {
     trendChart.setOption({
       tooltip: {},
       legend: { show: false },
@@ -360,7 +361,7 @@ function renderRoad() {
   if (!roadChart) {
     roadChart = echarts.init(roadRef.value)
   }
-  if (roadError.value) {
+  if (roadApiError.value) {
     roadChart.setOption({
       tooltip: {},
       grid: { left: 0, right: 0, top: 0, bottom: 0 },

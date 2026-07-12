@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS `threshold_control` (
     `mid_brightness`      INT DEFAULT 60 COMMENT '中光照档亮度(%)',
     `high_brightness`     INT DEFAULT 30 COMMENT '高光照档亮度(%)',
     `detection_period`    INT DEFAULT 60 COMMENT '检测周期(秒)',
+    `segments`            TEXT DEFAULT NULL COMMENT '调光档位配置，JSON数组格式',
     `create_time`         DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`)

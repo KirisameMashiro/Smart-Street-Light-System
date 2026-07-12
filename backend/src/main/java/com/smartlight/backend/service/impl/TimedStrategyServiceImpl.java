@@ -59,6 +59,7 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean save(TimedStrategy strategy) {
+        strategy.setName(generateUniqueName(strategy.getName(), null));
         validateStrategy(strategy);
         return timedStrategyMapper.insert(strategy) > 0;
     }
@@ -66,8 +67,36 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean update(TimedStrategy strategy) {
+        strategy.setName(generateUniqueName(strategy.getName(), strategy.getId()));
         validateStrategy(strategy);
         return timedStrategyMapper.updateById(strategy) > 0;
+    }
+
+    private String generateUniqueName(String originalName, Long excludeId) {
+        if (originalName == null || originalName.trim().isEmpty()) {
+            return originalName;
+        }
+        String baseName = originalName.trim();
+        LambdaQueryWrapper<TimedStrategy> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(TimedStrategy::getName, baseName);
+        if (excludeId != null) {
+            wrapper.ne(TimedStrategy::getId, excludeId);
+        }
+        List<TimedStrategy> existing = timedStrategyMapper.selectList(wrapper);
+
+        if (existing.stream().noneMatch(s -> baseName.equals(s.getName()))) {
+            return baseName;
+        }
+
+        int suffix = 1;
+        while (true) {
+            String candidate = baseName + "-" + suffix;
+            final String finalCandidate = candidate;
+            if (existing.stream().noneMatch(s -> finalCandidate.equals(s.getName()))) {
+                return candidate;
+            }
+            suffix++;
+        }
     }
 
     @Override
@@ -216,31 +245,6 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             if (weekdays == null || weekdays.isEmpty()) {
                 throw new IllegalArgumentException("默认策略必须选择适用星期");
             }
-
-            List<TimedStrategy> existing = timedStrategyMapper.selectList(
-                    new LambdaQueryWrapper<TimedStrategy>()
-                            .eq(TimedStrategy::getType, "default")
-                            .eq(TimedStrategy::getEnabled, true)
-            );
-
-            for (TimedStrategy other : existing) {
-                if (other.getId() != null && other.getId().equals(strategy.getId())) {
-                    continue;
-                }
-
-                List<Integer> otherWeekdays = other.getWeekdays();
-                if (otherWeekdays == null) {
-                    otherWeekdays = List.of();
-                }
-
-                Set<Integer> conflict = weekdays.stream()
-                        .filter(otherWeekdays::contains)
-                        .collect(Collectors.toSet());
-
-                if (!conflict.isEmpty()) {
-                    throw new IllegalArgumentException("星期冲突：策略「" + other.getName() + "」已占用星期 " + conflict);
-                }
-            }
         }
 
         if ("timed".equals(strategy.getType())) {
@@ -254,5 +258,96 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
                 throw new IllegalArgumentException("结束日期不能早于开始日期");
             }
         }
+
+        List<TimedStrategy> existing = timedStrategyMapper.selectList(
+                new LambdaQueryWrapper<TimedStrategy>()
+                        .eq(TimedStrategy::getType, strategy.getType())
+                        .eq(TimedStrategy::getEnabled, true)
+        );
+
+        for (TimedStrategy other : existing) {
+            if (other.getId() != null && other.getId().equals(strategy.getId())) {
+                continue;
+            }
+            if (!isTimeConflict(strategy, other)) {
+                continue;
+            }
+            if (!isRegionConflict(strategy, other)) {
+                continue;
+            }
+            throw new IllegalArgumentException("策略冲突：策略「" + other.getName() + "」与当前策略的适用时间和区域均存在重叠");
+        }
+    }
+
+    private boolean isTimeConflict(TimedStrategy a, TimedStrategy b) {
+        LocalTime aStart = a.getStartTime();
+        LocalTime aEnd = a.getEndTime();
+        LocalTime bStart = b.getStartTime();
+        LocalTime bEnd = b.getEndTime();
+
+        boolean dailyOverlap;
+        if (aStart.isBefore(aEnd)) {
+            if (bStart.isBefore(bEnd)) {
+                dailyOverlap = aStart.isBefore(bEnd) && bStart.isBefore(aEnd);
+            } else {
+                dailyOverlap = aStart.isBefore(bEnd) || !aEnd.isBefore(bStart);
+            }
+        } else {
+            if (bStart.isBefore(bEnd)) {
+                dailyOverlap = bStart.isBefore(aEnd) || !bEnd.isBefore(aStart);
+            } else {
+                dailyOverlap = true;
+            }
+        }
+        if (!dailyOverlap) {
+            return false;
+        }
+
+        if ("default".equals(a.getType()) && "default".equals(b.getType())) {
+            List<Integer> aDays = a.getWeekdays() == null ? List.of() : a.getWeekdays();
+            List<Integer> bDays = b.getWeekdays() == null ? List.of() : b.getWeekdays();
+            return aDays.stream().anyMatch(bDays::contains);
+        }
+
+        if ("timed".equals(a.getType()) && "timed".equals(b.getType())) {
+            return !a.getEndDate().isBefore(b.getStartDate()) && !b.getEndDate().isBefore(a.getStartDate());
+        }
+
+        return true;
+    }
+
+    private boolean isRegionConflict(TimedStrategy a, TimedStrategy b) {
+        String aDistrict = StringUtils.hasText(a.getDistrict()) ? a.getDistrict() : "";
+        String bDistrict = StringUtils.hasText(b.getDistrict()) ? b.getDistrict() : "";
+        List<String> aRoads = a.getRoads() == null ? List.of() : a.getRoads();
+        List<String> bRoads = b.getRoads() == null ? List.of() : b.getRoads();
+
+        if (aDistrict.isEmpty() && bDistrict.isEmpty() && aRoads.isEmpty() && bRoads.isEmpty()) {
+            return true;
+        }
+
+        if (aDistrict.isEmpty() && aRoads.isEmpty()) {
+            return true;
+        }
+        if (bDistrict.isEmpty() && bRoads.isEmpty()) {
+            return true;
+        }
+
+        boolean sameDistrict = !aDistrict.isEmpty() && aDistrict.equals(bDistrict);
+        boolean aHasRoads = !aRoads.isEmpty();
+        boolean bHasRoads = !bRoads.isEmpty();
+
+        if (sameDistrict) {
+            if (!aHasRoads || !bHasRoads) {
+                return true;
+            }
+            return aRoads.stream().anyMatch(bRoads::contains);
+        }
+
+        if (aHasRoads && bHasRoads) {
+            return aRoads.stream().anyMatch(bRoads::contains);
+        }
+
+        return false;
     }
 }

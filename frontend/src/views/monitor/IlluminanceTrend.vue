@@ -391,7 +391,7 @@ function renderChart() {
     chartInstance.setOption({
       xAxis: { type: 'time', min: null, max: null, show: false },
       yAxis: { show: false },
-      series: [{ data: [] }]
+      series: [{ type: 'line', data: [] }]
     }, true)
     return
   }
