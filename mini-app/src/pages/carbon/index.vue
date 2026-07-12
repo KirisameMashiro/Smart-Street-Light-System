@@ -110,8 +110,8 @@ import {
   getCarbonTrend,
   getRoadCompare,
   type CarbonSummary,
-  type CarbonTrend,
-  type RoadCompare
+  type CarbonTrendItem,
+  type RoadCompareItem
 } from '@/api/light'
 
 const summary = ref<CarbonSummary>({
@@ -120,8 +120,8 @@ const summary = ref<CarbonSummary>({
   energySavingRate: 0
 })
 
-const trendData = ref<CarbonTrend[]>([])
-const roadData = ref<RoadCompare[]>([])
+const trendData = ref<CarbonTrendItem[]>([])
+const roadData = ref<RoadCompareItem[]>([])
 const currentType = ref('month')
 const maxBarValue = ref(0)
 
@@ -183,7 +183,7 @@ function getCurrentPeriod(): string {
   }
 }
 
-function normalizeTrendData(data: any[]): CarbonTrend[] {
+function normalizeTrendData(data: any[]): CarbonTrendItem[] {
   if (!data || data.length === 0) return []
   return data.map(item => {
     // 兼容后端不同字段名: period/date/month/statDate

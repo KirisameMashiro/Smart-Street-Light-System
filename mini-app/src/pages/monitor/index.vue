@@ -81,8 +81,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { getAllLights, getDistricts, getRoads, type Light } from '@/api/light'
+import { ref, computed, onMounted } from 'vue'
+import { getLightPage, getDistricts, getRoads, type Light } from '@/api/light'
 
 const searchText = ref('')
 const showFilter = ref(false)
@@ -95,23 +95,51 @@ const districtIndex = ref(0)
 const roadIndex = ref(0)
 const statusIndex = ref(0)
 const statusOptions = ['全部', '在线', '离线', '故障']
+const statusValues: (number | null)[] = [null, 1, 0, 2]
 
 const lights = ref<Light[]>([])
+const pageNum = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+
+const selectedDistrict = computed(() => districts.value[districtIndex.value] || '')
+const selectedRoad = computed(() => roads.value[roadIndex.value] || '')
+const selectedStatus = computed(() => statusValues[statusIndex.value])
 
 onMounted(() => {
   fetchData()
   fetchOptions()
 })
 
-async function fetchData() {
+async function fetchData(reset = true) {
   loading.value = true
   try {
-    const res = await getAllLights()
-    lights.value = res.data
-    hasMore.value = false
+    if (reset) {
+      pageNum.value = 1
+      lights.value = []
+    }
+    const params: any = {
+      pageNum: pageNum.value,
+      pageSize: pageSize.value
+    }
+    if (searchText.value) params.keyword = searchText.value
+    if (selectedDistrict.value) params.district = selectedDistrict.value
+    if (selectedRoad.value) params.road = selectedRoad.value
+    if (selectedStatus.value !== null) params.status = selectedStatus.value
+
+    const res = await getLightPage(params)
+    const records = res.data?.records || []
+    if (reset) {
+      lights.value = records
+    } else {
+      lights.value = lights.value.concat(records)
+    }
+    total.value = res.data?.total || 0
+    hasMore.value = lights.value.length < total.value
   } catch (e) {
     console.error('获取路灯数据失败', e)
     lights.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
   }
@@ -120,34 +148,31 @@ async function fetchData() {
 async function fetchOptions() {
   try {
     const [districtRes, roadRes] = await Promise.all([getDistricts(), getRoads()])
-    districts.value = districtRes.data || []
-    roads.value = roadRes.data || []
+    districts.value = [''].concat(districtRes.data || [])
+    roads.value = [''].concat(roadRes.data || [])
   } catch (e) {
     console.error('获取选项数据失败', e)
   }
 }
 
 function handleSearch() {
-  if (!searchText.value) {
-    fetchData()
-    return
-  }
-  lights.value = lights.value.filter(light => 
-    light.lightCode?.includes(searchText.value) || 
-    light.lightName?.includes(searchText.value)
-  )
+  fetchData()
 }
 
 function onDistrictChange(e: { detail: { value: number } }) {
   districtIndex.value = e.detail.value
+  roadIndex.value = 0
+  fetchData()
 }
 
 function onRoadChange(e: { detail: { value: number } }) {
   roadIndex.value = e.detail.value
+  fetchData()
 }
 
 function onStatusChange(e: { detail: { value: number } }) {
   statusIndex.value = e.detail.value
+  fetchData()
 }
 
 function getStatusClass(status: number) {
@@ -173,7 +198,12 @@ function goToDetail(id: number) {
 }
 
 function loadMore() {
-  uni.showToast({ title: '已加载全部数据', icon: 'none' })
+  if (hasMore.value && !loading.value) {
+    pageNum.value++
+    fetchData(false)
+  } else if (!hasMore.value) {
+    uni.showToast({ title: '已加载全部数据', icon: 'none' })
+  }
 }
 </script>
 

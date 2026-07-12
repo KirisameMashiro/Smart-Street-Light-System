@@ -107,20 +107,40 @@
     </view>
 
     <view v-if="currentTab === 'threshold'" class="tab-content">
-      <view class="threshold-list">
-        <view v-for="rule in thresholdRules" :key="rule.id" class="rule-item">
-          <view class="rule-header">
-            <text class="rule-name">{{ rule.name }}</text>
-            <view class="rule-status" :class="{ active: rule.enabled }">
-              {{ rule.enabled ? '启用' : '禁用' }}
-            </view>
+      <view v-if="thresholdLoading" class="loading-tip">
+        <text>加载中...</text>
+      </view>
+      <view v-else-if="thresholdConfig" class="threshold-summary">
+        <view class="threshold-header">
+          <view class="threshold-icon">📊</view>
+          <view class="threshold-info">
+            <text class="threshold-title">智能阈值联动</text>
+            <text class="threshold-desc">根据环境光照度自动调节路灯亮度</text>
           </view>
-          <view class="rule-detail">
-            <text>阈值条件：{{ rule.condition }}</text>
+          <view class="threshold-status" :class="{ active: thresholdConfig.enabled }">
+            {{ thresholdConfig.enabled ? '已启用' : '已禁用' }}
+          </view>
+        </view>
+        <view class="threshold-detail">
+          <view class="detail-row">
+            <text class="detail-label">关灯阈值</text>
+            <text class="detail-value">{{ thresholdConfig.lightOffThreshold || '-' }} lux</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">亮度档位</text>
+            <text class="detail-value">{{ (thresholdConfig.segments || []).length }} 档</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">检测周期</text>
+            <text class="detail-value">{{ thresholdConfig.detectionPeriod || '-' }} 秒</text>
           </view>
         </view>
       </view>
-      <button class="add-btn" @click="navigateToThreshold">+ 配置阈值</button>
+      <view v-else class="empty-tip">
+        <text class="empty-icon">📊</text>
+        <text class="empty-text">暂无阈值配置</text>
+      </view>
+      <button class="add-btn" @click="navigateToThreshold">配置阈值</button>
     </view>
 
     <view v-if="showAddStrategy" class="modal-overlay" @click="showAddStrategy = false">
@@ -208,7 +228,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getAllLights, batchSwitch as batchSwitchApi, getStrategyList, deleteStrategy, addStrategy as addStrategyApi, type Light, type TimedStrategy } from '@/api/light'
+import { getAllLights, batchSwitch as batchSwitchApi, getStrategyList, deleteStrategy, addStrategy as addStrategyApi, getThreshold, type Light, type TimedStrategy, type ThresholdControl } from '@/api/light'
 
 const currentTab = ref('remote')
 const searchText = ref('')
@@ -230,7 +250,7 @@ const weekdays = [
   { label: '周四', value: 4 },
   { label: '周五', value: 5 },
   { label: '周六', value: 6 },
-  { label: '周日', value: 0 }
+  { label: '周日', value: 7 }
 ]
 
 const showAddStrategy = ref(false)
@@ -251,10 +271,8 @@ const strategyForm = ref({
 
 const timedStrategies = ref<{ id?: number; name: string; timeRange: string; enabled: boolean; type?: string }[]>([])
 
-const thresholdRules = ref([
-  { id: 1, name: '亮度自动调节', condition: '光照度 < 30lux', enabled: true },
-  { id: 2, name: '温度保护', condition: '温度 > 60°C', enabled: false }
-])
+const thresholdConfig = ref<ThresholdControl | null>(null)
+const thresholdLoading = ref(false)
 
 const districtRoadMap: Record<string, string[]> = {}
 const roadDistrictMap: Record<string, string> = {}
@@ -298,6 +316,7 @@ const minStartDate = computed(() => {
 onMounted(() => {
   fetchLights()
   loadStrategies()
+  loadThresholdConfig()
 })
 
 async function fetchLights() {
@@ -495,6 +514,18 @@ async function onDeleteStrategy(id: number) {
 
 function navigateToThreshold() {
   uni.navigateTo({ url: '/pages/threshold/index' })
+}
+
+async function loadThresholdConfig() {
+  thresholdLoading.value = true
+  try {
+    const res = await getThreshold()
+    thresholdConfig.value = res.data
+  } catch (e: any) {
+    console.error('获取阈值配置失败', e)
+  } finally {
+    thresholdLoading.value = false
+  }
 }
 
 async function saveStrategy() {
@@ -798,10 +829,92 @@ async function saveStrategy() {
   }
 }
 
-.timed-list, .threshold-list {
+.timed-list, .threshold-summary {
   background: #fff;
   border-radius: 16rpx;
   overflow: hidden;
+}
+
+.threshold-summary {
+  padding: 24rpx;
+}
+
+.threshold-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 24rpx;
+  padding-bottom: 20rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.threshold-icon {
+  width: 80rpx;
+  height: 80rpx;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  border-radius: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  margin-right: 20rpx;
+}
+
+.threshold-info {
+  flex: 1;
+}
+
+.threshold-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #303133;
+  display: block;
+  margin-bottom: 6rpx;
+}
+
+.threshold-desc {
+  font-size: 24rpx;
+  color: #909399;
+}
+
+.threshold-status {
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+  background: rgba(144, 147, 153, 0.1);
+  color: #909399;
+
+  &.active {
+    background: rgba(103, 194, 58, 0.1);
+    color: #67c23a;
+  }
+}
+
+.threshold-detail {
+  background: #f8f9fa;
+  border-radius: 12rpx;
+  padding: 20rpx;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12rpx 0;
+
+  &:not(:last-child) {
+    border-bottom: 1rpx solid #ebeef5;
+  }
+}
+
+.detail-label {
+  font-size: 26rpx;
+  color: #909399;
+}
+
+.detail-value {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #303133;
 }
 
 .strategy-item, .rule-item {

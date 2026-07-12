@@ -76,7 +76,7 @@
           </view>
           <view class="info-row">
             <text class="info-icon">📍</text>
-            <text class="info-text">{{ item.district }} - {{ item.road }}</text>
+            <text class="info-text">{{ formatArea(item) }}</text>
           </view>
         </view>
         <view class="item-footer">
@@ -115,9 +115,7 @@ const weekdayMap: Record<number, string> = {
 
 const tabs = [
   { label: '全部', value: '' },
-  { label: '工作日', value: 'workday' },
-  { label: '每日', value: 'daily' },
-  { label: '节假日', value: 'holiday' },
+  { label: '默认', value: 'default' },
   { label: '时间段', value: 'timed' }
 ]
 
@@ -146,9 +144,7 @@ async function loadStrategies() {
 
 function getTypeText(type: string): string {
   const map: Record<string, string> = {
-    workday: '工作日',
-    daily: '每日',
-    holiday: '节假日',
+    default: '默认',
     timed: '时间段'
   }
   return map[type] || type
@@ -333,9 +329,7 @@ function onDelete(item: TimedStrategy) {
   padding: 4rpx 12rpx;
   border-radius: 12rpx;
 
-  &.workday { background: rgba(64, 158, 255, 0.1); color: #409eff; }
-  &.daily { background: rgba(103, 194, 58, 0.1); color: #67c23a; }
-  &.holiday { background: rgba(230, 162, 60, 0.1); color: #e6a23c; }
+  &.default { background: rgba(64, 158, 255, 0.1); color: #409eff; }
   &.timed { background: rgba(245, 108, 108, 0.1); color: #f56c6c; }
 }
 

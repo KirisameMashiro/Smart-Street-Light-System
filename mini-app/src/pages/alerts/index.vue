@@ -29,15 +29,13 @@
           {{ tab.label }}
         </view>
       </view>
-      <view class="search-wrap">
-        <text class="search-icon">🔍</text>
-        <input
-          v-model="searchText"
-          class="search-input"
-          placeholder="搜索告警内容"
-          @confirm="onSearch"
-        />
-        <text v-if="searchText" class="clear-btn" @click="clearSearch">✕</text>
+      <view class="type-filter">
+        <picker mode="selector" :range="typeOptions" @change="onTypeChange" :value="typeIndex">
+          <view class="type-picker">
+            <text>{{ typeOptions[typeIndex] }}</text>
+            <text class="picker-arrow">▼</text>
+          </view>
+        </picker>
       </view>
     </view>
 
@@ -54,15 +52,15 @@
         v-for="alert in alertList"
         :key="alert.id"
         class="alert-item"
-        :class="['level-' + (alert.alertLevel || 'INFO').toLowerCase()]"
+        :class="['level-' + getLevelClass(alert.alertLevel)]"
         @click="goDetail(alert)"
       >
         <view class="alert-header">
-          <view class="level-badge" :class="(alert.alertLevel || 'info').toLowerCase()">
+          <view class="level-badge" :class="getLevelClass(alert.alertLevel)">
             <text>{{ getLevelIcon(alert.alertLevel) }}</text>
           </view>
           <view class="alert-title">
-            <text class="title-text">{{ alert.alertMessage }}</text>
+            <text class="title-text">{{ alert.message }}</text>
             <text class="title-time">{{ formatTime(alert.createTime) }}</text>
           </view>
           <view v-if="alert.status === 0" class="status-dot unhandled"></view>
@@ -71,11 +69,11 @@
         <view class="alert-content">
           <view class="info-row">
             <text class="info-label">类型：</text>
-            <text class="info-value">{{ alert.alertType }}</text>
+            <text class="info-value">{{ getTypeText(alert.alertType) }}</text>
           </view>
           <view class="info-row">
-            <text class="info-label">路灯：</text>
-            <text class="info-value">{{ alert.lightCode || '-' }}</text>
+            <text class="info-label">路灯ID：</text>
+            <text class="info-value">{{ alert.lightId || '-' }}</text>
           </view>
           <view v-if="alert.handler" class="info-row">
             <text class="info-label">处理人：</text>
@@ -102,7 +100,7 @@
         <view class="modal-body">
           <view class="form-item">
             <text class="form-label">告警信息</text>
-            <text class="form-text">{{ currentAlert?.alertMessage }}</text>
+            <text class="form-text">{{ currentAlert?.message }}</text>
           </view>
           <view class="form-item">
             <text class="form-label">处理说明</text>
@@ -130,21 +128,25 @@ import { getAlertPage, handleAlert as handleAlertApi, type Alert } from '@/api/l
 
 const alertList = ref<Alert[]>([])
 const loading = ref(false)
-const searchText = ref('')
-const currentLevel = ref('')
+const currentLevel = ref<number | null>(null)
+const currentType = ref<number | null>(null)
 const currentStatus = ref(-1)
 const pageNum = ref(1)
 const pageSize = ref(20)
 const totalCount = ref(0)
 const unhandledCount = ref(0)
 const handledCount = ref(0)
+const typeIndex = ref(0)
 
 const tabs = [
-  { label: '全部', value: '' },
-  { label: '严重', value: 'CRITICAL' },
-  { label: '警告', value: 'WARNING' },
-  { label: '提示', value: 'INFO' }
+  { label: '全部', value: null },
+  { label: '紧急', value: 4 },
+  { label: '严重', value: 3 },
+  { label: '一般', value: 2 },
+  { label: '提示', value: 1 }
 ]
+
+const typeOptions = ['全部类型', '过流', '过压', '欠压', '过热', '通讯故障', '其他']
 
 const showHandleModal = ref(false)
 const currentAlert = ref<Alert | null>(null)
@@ -163,11 +165,9 @@ async function loadAlerts() {
       pageNum: pageNum.value,
       pageSize: pageSize.value
     }
-    if (currentLevel.value) params.alertLevel = currentLevel.value
+    if (currentLevel.value !== null) params.alertLevel = currentLevel.value
+    if (currentType.value !== null) params.alertType = currentType.value
     if (currentStatus.value >= 0) params.status = currentStatus.value
-    if (searchText.value) {
-      params.alertMessage = searchText.value
-    }
     const res = await getAlertPage(params)
     alertList.value = res.data?.records || []
     totalCount.value = res.data?.total || 0
@@ -197,29 +197,49 @@ function filterByStatus(status: number) {
   loadAlerts()
 }
 
-function onLevelChange(level: string) {
-  currentLevel.value = currentLevel.value === level ? '' : level
+function onLevelChange(level: number | null) {
+  currentLevel.value = currentLevel.value === level ? null : level
   pageNum.value = 1
   loadAlerts()
 }
 
-function onSearch() {
+function onTypeChange(e: { detail: { value: number } }) {
+  typeIndex.value = e.detail.value
+  currentType.value = e.detail.value === 0 ? null : e.detail.value
   pageNum.value = 1
   loadAlerts()
 }
 
-function clearSearch() {
-  searchText.value = ''
-  onSearch()
+function getLevelClass(level: number): string {
+  const map: Record<number, string> = {
+    1: 'info',
+    2: 'warning',
+    3: 'critical',
+    4: 'critical'
+  }
+  return map[level] || 'info'
 }
 
-function getLevelIcon(level: string): string {
-  const map: Record<string, string> = {
-    CRITICAL: '⚠',
-    WARNING: '⚡',
-    INFO: 'ℹ'
+function getLevelIcon(level: number): string {
+  const map: Record<number, string> = {
+    4: '🚨',
+    3: '⚠',
+    2: '⚡',
+    1: 'ℹ'
   }
   return map[level] || 'ℹ'
+}
+
+function getTypeText(type: number): string {
+  const map: Record<number, string> = {
+    1: '过流',
+    2: '过压',
+    3: '欠压',
+    4: '过热',
+    5: '通讯故障',
+    6: '其他'
+  }
+  return map[type] || '未知'
 }
 
 function formatTime(timeValue: any): string {

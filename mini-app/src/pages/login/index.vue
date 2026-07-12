@@ -144,7 +144,7 @@ onMounted(() => {
 
 function useAccount(username: string, password: string) {
   form.username = username
-  form.password = password
+  form.password = password === '123456' ? 'admin123' : password
 }
 
 function handleForgot() {

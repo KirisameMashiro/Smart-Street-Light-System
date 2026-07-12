@@ -41,22 +41,21 @@
         <view class="log-dot" :class="getTypeClass(log.type)"></view>
         <view class="log-content">
           <view class="log-header">
-            <text class="log-operator">{{ log.operator }}</text>
+            <text class="log-operator">{{ log.operatorName || log.operator }}</text>
             <text class="log-type" :class="getTypeClass(log.type)">
-              {{ getTypeText(log.type) }}
+              {{ log.type }}
             </text>
           </view>
           <view class="log-detail">
-            <text class="detail-label">对象：</text>
-            <text class="detail-value">{{ log.target }}</text>
+            <text class="detail-label">内容：</text>
+            <text class="detail-value">{{ log.content }}</text>
           </view>
           <view class="log-detail">
-            <text class="detail-label">详情：</text>
-            <text class="detail-value">{{ log.detail }}</text>
+            <text class="detail-label">结果：</text>
+            <text class="detail-value">{{ log.result }}</text>
           </view>
           <view class="log-footer">
             <text class="log-time">{{ formatFullTime(log.createTime) }}</text>
-            <text v-if="log.ip" class="log-ip">IP: {{ log.ip }}</text>
           </view>
         </view>
       </view>
@@ -125,14 +124,7 @@ const dateRange = ref({
   end: ''
 })
 
-const typeOptions = ['全部', '登录', '操作', '告警', '策略']
-const typeValueMap: Record<string, string> = {
-  '全部': '',
-  '登录': 'LOGIN',
-  '操作': 'OPERATE',
-  '告警': 'ALERT',
-  '策略': 'STRATEGY'
-}
+const typeOptions = ['全部类型']
 
 const currentTypeText = computed(() => {
   return currentType.value || '全部类型'
@@ -204,8 +196,7 @@ function clearSearch() {
 }
 
 function onTypeChange(e: any) {
-  const label = typeOptions[e.detail.value]
-  currentType.value = typeValueMap[label] || ''
+  // 后端类型不做具体枚举，简化处理
   pageNum.value = 1
   loadLogs()
 }
@@ -224,23 +215,7 @@ function resetDate() {
 }
 
 function getTypeClass(type: string): string {
-  const map: Record<string, string> = {
-    LOGIN: 'login',
-    OPERATE: 'operate',
-    ALERT: 'alert',
-    STRATEGY: 'strategy'
-  }
-  return map[type] || 'other'
-}
-
-function getTypeText(type: string): string {
-  const map: Record<string, string> = {
-    LOGIN: '登录',
-    OPERATE: '操作',
-    ALERT: '告警',
-    STRATEGY: '策略'
-  }
-  return map[type] || type
+  return 'other'
 }
 
 function formatFullTime(timeStr: string): string {

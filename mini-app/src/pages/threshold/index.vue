@@ -17,60 +17,92 @@
     <view class="form-card">
       <view class="form-item">
         <view class="form-row-header">
-          <text class="form-label">触发照度阈值</text>
-          <text class="form-value">{{ data.illuminanceThreshold }} lux</text>
+          <text class="form-label">关灯光照阈值</text>
+          <text class="form-value">{{ data.lightOffThreshold }} lux</text>
         </view>
         <slider
-          :value="data.illuminanceThreshold"
+          :value="data.lightOffThreshold"
           :min="0"
           :max="500"
           :step="10"
           :show-value="false"
-          activeColor="#409eff"
+          activeColor="#f56c6c"
           backgroundColor="#ebeef5"
-          block-color="#409eff"
+          block-color="#f56c6c"
           block-size="20"
-          @change="e => data.illuminanceThreshold = e.detail.value"
+          @change="e => data.lightOffThreshold = e.detail.value"
         />
         <view class="range-tip">
           <text>0 lux</text>
           <text>500 lux</text>
         </view>
-        <text class="form-tip">当环境照度低于该值时，自动开启路灯</text>
+        <text class="form-tip">当环境照度高于该值时，自动关闭路灯</text>
       </view>
+
+      <view class="divider"></view>
+
+      <view class="section-title">
+        <text class="section-title-text">开灯设置</text>
+        <text class="add-btn" @click="addSegment">+ 添加档位</text>
+      </view>
+
+      <view v-for="(seg, idx) in data.segments" :key="idx" class="segment-card">
+        <view class="segment-header">
+          <view class="segment-index">{{ idx + 1 }}</view>
+          <text class="segment-label">第 {{ idx + 1 }} 档</text>
+          <text v-if="data.segments!.length > 1" class="delete-btn" @click="removeSegment(idx)">删除</text>
+        </view>
+
+        <view class="segment-item">
+          <view class="form-row-header">
+            <text class="form-label">光照阈值</text>
+            <text class="form-value">{{ seg.threshold }} lux</text>
+          </view>
+          <slider
+            :value="seg.threshold"
+            :min="0"
+            :max="500"
+            :step="10"
+            :show-value="false"
+            activeColor="#409eff"
+            backgroundColor="#ebeef5"
+            block-color="#409eff"
+            block-size="20"
+            @change="e => seg.threshold = e.detail.value"
+          />
+          <text class="form-tip">低于此值开灯</text>
+        </view>
+
+        <view class="segment-item">
+          <view class="form-row-header">
+            <text class="form-label">亮度</text>
+            <text class="form-value">{{ seg.brightness }}%</text>
+          </view>
+          <slider
+            :value="seg.brightness"
+            :min="0"
+            :max="100"
+            :step="5"
+            :show-value="false"
+            activeColor="#67c23a"
+            backgroundColor="#ebeef5"
+            block-color="#67c23a"
+            block-size="20"
+            @change="e => seg.brightness = e.detail.value"
+          />
+        </view>
+      </view>
+
+      <view class="divider"></view>
 
       <view class="form-item">
         <view class="form-row-header">
-          <text class="form-label">目标亮度</text>
-          <text class="form-value">{{ data.targetBrightness }}%</text>
+          <text class="form-label">检测周期</text>
+          <text class="form-value">{{ data.detectionPeriod }} 秒</text>
         </view>
         <slider
-          :value="data.targetBrightness"
-          :min="0"
-          :max="100"
-          :step="5"
-          :show-value="false"
-          activeColor="#67c23a"
-          backgroundColor="#ebeef5"
-          block-color="#67c23a"
-          block-size="20"
-          @change="e => data.targetBrightness = e.detail.value"
-        />
-        <view class="range-tip">
-          <text>0%</text>
-          <text>100%</text>
-        </view>
-        <text class="form-tip">触发后路灯的亮度值</text>
-      </view>
-
-      <view class="form-item">
-        <view class="form-row-header">
-          <text class="form-label">触发延迟</text>
-          <text class="form-value">{{ data.triggerTime }} 秒</text>
-        </view>
-        <slider
-          :value="data.triggerTime"
-          :min="0"
+          :value="data.detectionPeriod"
+          :min="10"
           :max="300"
           :step="10"
           :show-value="false"
@@ -78,13 +110,13 @@
           backgroundColor="#ebeef5"
           block-color="#e6a23c"
           block-size="20"
-          @change="e => data.triggerTime = e.detail.value"
+          @change="e => data.detectionPeriod = e.detail.value"
         />
         <view class="range-tip">
-          <text>0 秒</text>
+          <text>10 秒</text>
           <text>300 秒</text>
         </view>
-        <text class="form-tip">照度低于阈值持续该时间后才触发</text>
+        <text class="form-tip">光照采样间隔时间</text>
       </view>
     </view>
 
@@ -92,9 +124,8 @@
       <text class="card-title">当前规则预览</text>
       <view class="preview-content">
         <text class="preview-text">
-          当环境照度低于 <text class="highlight">{{ data.illuminanceThreshold }}</text> lux
-          并持续 <text class="highlight">{{ data.triggerTime }}</text> 秒后，
-          路灯自动调节到 <text class="highlight">{{ data.targetBrightness }}%</text> 亮度
+          当光照高于 <text class="highlight">{{ data.lightOffThreshold }}</text> lux 时关灯；
+          低于阈值时自动匹配最高档位亮度
         </text>
       </view>
     </view>
@@ -107,13 +138,21 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { getThreshold, updateThreshold, toggleThreshold, type ThresholdControl } from '@/api/light'
+import { getThreshold, updateThreshold, toggleThreshold, type ThresholdControl, type SegmentConfig } from '@/api/light'
 
 const data = reactive<ThresholdControl>({
   enabled: false,
-  illuminanceThreshold: 100,
-  targetBrightness: 80,
-  triggerTime: 30
+  lightOnThreshold: 30,
+  lightOffThreshold: 100,
+  lowBrightness: 100,
+  midBrightness: 60,
+  highBrightness: 30,
+  detectionPeriod: 60,
+  segments: [
+    { threshold: 30, brightness: 100 },
+    { threshold: 60, brightness: 60 },
+    { threshold: 90, brightness: 30 }
+  ] as SegmentConfig[]
 })
 
 const saving = ref(false)
@@ -126,9 +165,35 @@ onMounted(() => {
 async function loadData() {
   try {
     const res = await getThreshold()
-    if (res.data) Object.assign(data, res.data)
+    if (res.data) {
+      Object.assign(data, res.data)
+      if (!data.segments || data.segments.length === 0) {
+        data.segments = [
+          { threshold: data.lightOnThreshold || 30, brightness: data.lowBrightness || 100 },
+          { threshold: 60, brightness: data.midBrightness || 60 },
+          { threshold: 90, brightness: data.highBrightness || 30 }
+        ]
+      }
+    }
   } catch (e) {
     console.error('加载阈值配置失败', e)
+  }
+}
+
+function addSegment() {
+  if (!data.segments) data.segments = []
+  const lastThreshold = data.segments.length > 0
+    ? data.segments[data.segments.length - 1].threshold
+    : 50
+  data.segments.push({
+    threshold: Math.min(lastThreshold + 20, 500),
+    brightness: 50
+  })
+}
+
+function removeSegment(idx: number) {
+  if (data.segments && data.segments.length > 1) {
+    data.segments.splice(idx, 1)
   }
 }
 
@@ -149,6 +214,9 @@ async function onToggle(e: any) {
 async function handleSave() {
   saving.value = true
   try {
+    if (data.segments) {
+      data.segments.sort((a: SegmentConfig, b: SegmentConfig) => a.threshold - b.threshold)
+    }
     await updateThreshold(data)
     uni.showToast({ title: '保存成功', icon: 'success' })
   } catch (e: any) {
@@ -256,6 +324,78 @@ async function handleSave() {
   color: #909399;
   margin-top: 12rpx;
   padding: 0 4rpx;
+}
+
+.divider {
+  height: 1rpx;
+  background: #f0f0f0;
+  margin: 32rpx 0;
+}
+
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.section-title-text {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #303133;
+}
+
+.add-btn {
+  font-size: 26rpx;
+  color: #409eff;
+}
+
+.segment-card {
+  background: #f9fafc;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  border: 2rpx solid #ebeef5;
+}
+
+.segment-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.segment-index {
+  width: 48rpx;
+  height: 48rpx;
+  background: linear-gradient(135deg, #409eff 0%, #67c23a 100%);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: bold;
+  margin-right: 16rpx;
+}
+
+.segment-label {
+  flex: 1;
+  font-size: 28rpx;
+  color: #303133;
+  font-weight: 500;
+}
+
+.delete-btn {
+  font-size: 24rpx;
+  color: #f56c6c;
+}
+
+.segment-item {
+  margin-bottom: 24rpx;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 }
 
 .preview-card {

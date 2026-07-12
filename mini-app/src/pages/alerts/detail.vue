@@ -7,7 +7,7 @@
       <text>告警信息不存在</text>
     </view>
     <view v-else class="content">
-      <view class="level-card" :class="(alert.alertLevel || 'info').toLowerCase()">
+      <view class="level-card" :class="getLevelClass(alert.alertLevel)">
         <view class="level-icon">
           <text>{{ getLevelIcon(alert.alertLevel) }}</text>
         </view>
@@ -22,22 +22,22 @@
         <view class="info-list">
           <view class="info-row">
             <text class="info-label">告警内容</text>
-            <text class="info-value">{{ alert.alertMessage }}</text>
+            <text class="info-value">{{ alert.message }}</text>
           </view>
           <view class="info-row">
             <text class="info-label">告警类型</text>
-            <text class="info-value">{{ alert.alertType }}</text>
+            <text class="info-value">{{ getTypeText(alert.alertType) }}</text>
           </view>
           <view class="info-row">
             <text class="info-label">告警等级</text>
-            <text class="info-value" :class="(alert.alertLevel || '').toLowerCase()">
+            <text class="info-value" :class="getLevelClass(alert.alertLevel)">
               {{ getLevelText(alert.alertLevel) }}
             </text>
           </view>
           <view class="info-row">
-            <text class="info-label">所属路灯</text>
+            <text class="info-label">路灯ID</text>
             <text class="info-value link" @click="goLight">
-              {{ alert.lightCode || '-' }} ›
+              {{ alert.lightId || '-' }} ›
             </text>
           </view>
           <view class="info-row">
@@ -133,22 +133,46 @@ async function loadDetail() {
   }
 }
 
-function getLevelIcon(level: string): string {
-  const map: Record<string, string> = {
-    CRITICAL: '⚠',
-    WARNING: '⚡',
-    INFO: 'ℹ'
+function getLevelClass(level: number): string {
+  const map: Record<number, string> = {
+    1: 'info',
+    2: 'warning',
+    3: 'critical',
+    4: 'critical'
+  }
+  return map[level] || 'info'
+}
+
+function getLevelIcon(level: number): string {
+  const map: Record<number, string> = {
+    4: '🚨',
+    3: '⚠',
+    2: '⚡',
+    1: 'ℹ'
   }
   return map[level] || 'ℹ'
 }
 
-function getLevelText(level: string): string {
-  const map: Record<string, string> = {
-    CRITICAL: '严重告警',
-    WARNING: '警告',
-    INFO: '提示'
+function getLevelText(level: number): string {
+  const map: Record<number, string> = {
+    4: '紧急告警',
+    3: '严重告警',
+    2: '一般告警',
+    1: '提示信息'
   }
-  return map[level] || level
+  return map[level] || '未知'
+}
+
+function getTypeText(type: number): string {
+  const map: Record<number, string> = {
+    1: '过流',
+    2: '过压',
+    3: '欠压',
+    4: '过热',
+    5: '通讯故障',
+    6: '其他'
+  }
+  return map[type] || '未知'
 }
 
 function formatFullTime(timeStr: string): string {

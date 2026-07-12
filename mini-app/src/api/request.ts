@@ -71,13 +71,28 @@ export async function request<T = any>(config: RequestConfig): Promise<ResponseD
         } else if (data.code === 401) {
           uni.removeStorageSync('user')
           uni.redirectTo({ url: '/pages/login/index' })
-          reject(new Error('登录过期'))
+          reject(new Error(data.message || '登录过期'))
+        } else if (data.code === 404) {
+          reject(new Error(data.message || '接口不存在或资源未找到'))
+        } else if (data.code === 400) {
+          reject(new Error(data.message || '参数错误'))
+        } else if (data.code === 500) {
+          reject(new Error(data.message || '服务器内部错误，请稍后重试'))
         } else {
           reject(new Error(data.message || '请求失败'))
         }
       },
       fail: (err) => {
-        reject(new Error(err.errMsg || '网络请求失败'))
+        let msg = '网络请求失败'
+        if (err.errMsg) {
+          if (err.errMsg.includes('timeout')) {
+            msg = '请求超时，请检查网络连接'
+          } else if (err.errMsg.includes('fail') || err.errMsg.includes('error')) {
+            msg = '网络连接失败，请检查后端服务是否启动'
+          }
+        }
+        console.error('请求失败:', config.url, err)
+        reject(new Error(msg))
       }
     })
   })

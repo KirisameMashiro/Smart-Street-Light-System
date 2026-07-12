@@ -27,7 +27,7 @@
         </view>
       </view>
 
-      <view v-if="form.type !== 'timed'" class="form-item">
+      <view v-if="form.type === 'default'" class="form-item">
         <text class="form-label required">适用星期</text>
         <view class="week-grid">
           <view
@@ -82,7 +82,7 @@
       </view>
 
       <view class="form-item">
-        <text class="form-label">亮度</text>
+        <text class="form-label">目标亮度</text>
         <view class="brightness-wrap">
           <slider
             :value="form.brightness"
@@ -113,14 +113,24 @@
 
       <view class="form-item">
         <text class="form-label">路段</text>
-        <picker mode="selector" :range="filteredRoads" @change="onRoadChange">
-          <view class="form-picker">
-            <text :class="{ placeholder: !form.roads || form.roads.length === 0 }">
-              {{ (form.roads && form.roads.length > 0) ? form.roads[0] : '请选择路段' }}
-            </text>
-            <text class="picker-arrow">›</text>
+        <view class="road-picker">
+          <picker mode="selector" :range="filteredRoads" @change="onRoadChange">
+            <view class="form-picker">
+              <text class="placeholder">点击选择路段</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+        <view v-if="form.roads && form.roads.length > 0" class="selected-roads">
+          <view
+            v-for="(road, idx) in form.roads"
+            :key="idx"
+            class="road-tag"
+          >
+            {{ road }}
+            <text class="tag-close" @click="removeRoad(idx)">×</text>
           </view>
-        </picker>
+        </view>
       </view>
 
       <view class="form-item">
@@ -158,7 +168,7 @@ import {
 
 const form = reactive<TimedStrategy>({
   name: '',
-  type: 'daily',
+  type: 'default',
   weekdays: [1, 2, 3, 4, 5],
   startTime: '',
   endTime: '',
@@ -184,9 +194,7 @@ const districtRoadMap: Record<string, string[]> = {}
 const roadDistrictMap: Record<string, string> = {}
 
 const typeOptions = [
-  { label: '工作日', value: 'workday', icon: '🏢' },
-  { label: '每日', value: 'daily', icon: '📅' },
-  { label: '节假日', value: 'holiday', icon: '🎉' },
+  { label: '默认', value: 'default', icon: '📅' },
   { label: '时间段', value: 'timed', icon: '⏳' }
 ]
 
@@ -227,7 +235,6 @@ async function loadRoads() {
   try {
     const res = await getRoads()
     roadOptions.value = res.data || []
-    // 同时加载所有路灯数据，建立行政区-路段映射关系
     const lightsRes = await getAllLights()
     const lights = lightsRes.data || []
     lights.forEach((l: any) => {
@@ -252,13 +259,17 @@ function onDistrictChange(e: { detail: { value: number } }) {
 
 function onRoadChange(e: { detail: { value: number } }) {
   const road = filteredRoads.value[e.detail.value]
-  form.roads = road ? [road] : []
-  if (road) {
+  if (road && !form.roads!.includes(road)) {
+    form.roads!.push(road)
     const district = roadDistrictMap[road]
-    if (district) {
+    if (district && !form.district) {
       form.district = district
     }
   }
+}
+
+function removeRoad(idx: number) {
+  form.roads!.splice(idx, 1)
 }
 
 async function loadStrategy() {
@@ -268,6 +279,7 @@ async function loadStrategy() {
     const found = list.find(s => s.id === editingId.value)
     if (found) {
       Object.assign(form, found)
+      if (!form.roads) form.roads = []
       if (found.startTime) {
         const [sh, sm] = found.startTime.split(':')
         startHour.value = sh
@@ -285,13 +297,11 @@ async function loadStrategy() {
 }
 
 function onTypeChange(type: string) {
-  form.type = type
-  if (type === 'workday') {
+  form.type = type as 'default' | 'timed'
+  if (type === 'default') {
     form.weekdays = [1, 2, 3, 4, 5]
-  } else if (type === 'daily') {
-    form.weekdays = [1, 2, 3, 4, 5, 6, 7]
-  } else if (type === 'holiday') {
-    form.weekdays = [6, 7]
+    form.startDate = ''
+    form.endDate = ''
   } else if (type === 'timed') {
     form.weekdays = []
   }
@@ -555,6 +565,29 @@ async function handleSubmit() {
   height: 88rpx;
   display: flex;
   align-items: center;
+}
+
+.selected-roads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.road-tag {
+  display: flex;
+  align-items: center;
+  background: rgba(64, 158, 255, 0.1);
+  color: #409eff;
+  border-radius: 24rpx;
+  padding: 8rpx 20rpx;
+  font-size: 24rpx;
+}
+
+.tag-close {
+  margin-left: 8rpx;
+  font-size: 28rpx;
+  cursor: pointer;
 }
 
 .switch-row {

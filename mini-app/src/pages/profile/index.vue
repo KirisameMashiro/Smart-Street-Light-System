@@ -152,7 +152,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores/user'
 import {
-  getUserProfile,
   getLightStats,
   getUnhandledAlertCount,
   getOperationLogs
@@ -183,20 +182,9 @@ const roleText = computed(() => {
 })
 
 onMounted(() => {
-  loadProfile()
+  userStore.loadUser()
   loadStats()
 })
-
-async function loadProfile() {
-  try {
-    const res = await getUserProfile()
-    if (res.data) {
-      userStore.setUser(res.data)
-    }
-  } catch (e) {
-    console.error('加载用户信息失败', e)
-  }
-}
 
 async function loadStats() {
   try {

@@ -10,10 +10,14 @@ export interface Light {
   latitude: number
   status: number
   brightness: number
+  manualControl?: boolean
   deviceType: string
   ratedPower: number
   district: string
-  roads: string[]
+  road: string
+  remark?: string
+  createTime?: string
+  updateTime?: string
 }
 
 export interface LightStats {
@@ -24,13 +28,17 @@ export interface LightStats {
 }
 
 export interface SensorData {
+  id?: number
+  lightId?: number
   illuminance: number
   power: number
   voltage: number
   current: number
   temperature: number
   humidity: number
-  samplingEnergy: number
+  samplingEnergy?: number
+  collectTime?: string
+  createTime?: string
 }
 
 export async function getLightStats() {
@@ -48,6 +56,7 @@ export async function getLightPage(params: {
   road?: string
   status?: number
   keyword?: string
+  deviceType?: string
 }) {
   return get('/api/lights/page', params)
 }
@@ -60,12 +69,21 @@ export async function getLatestSensorData(lightId: number) {
   return get<SensorData>(`/api/sensor-data/latest/${lightId}`)
 }
 
-export async function getAverageSensorData(lightId: number) {
-  return get<SensorData>(`/api/sensor-data/average/${lightId}`)
+export async function getAverageSensorData(lightId: number, startTime?: string, endTime?: string) {
+  return get<SensorData>(`/api/sensor-data/average/${lightId}`, { startTime, endTime })
+}
+
+export async function getSensorDataPage(params: {
+  pageNum?: number
+  pageSize?: number
+  lightId?: number
+  startTime?: string
+  endTime?: string
+}) {
+  return get('/api/sensor-data/page', params)
 }
 
 export async function switchLight(id: number, status: number) {
-  // 后端暂无单灯开关接口，使用批量开关接口兼容
   return post('/api/lights/batch-switch', { ids: [id], status })
 }
 
@@ -81,18 +99,21 @@ export async function getDistricts() {
   return get<string[]>('/api/lights/districts')
 }
 
-export async function getRoads() {
-  return get<string[]>('/api/lights/roads')
+export async function getRoads(district?: string) {
+  return get<string[]>('/api/lights/roads', district ? { district } : undefined)
+}
+
+export async function getDeviceTypes() {
+  return get<string[]>('/api/lights/device-types')
 }
 
 // ============ 告警相关接口 ============
 export interface Alert {
   id: number
   lightId: number
-  lightCode: string
-  alertType: string
-  alertLevel: string
-  alertMessage: string
+  alertType: number
+  alertLevel: number
+  message: string
   status: number
   createTime: string
   handleTime?: string
@@ -108,8 +129,8 @@ export async function getAlertPage(params: {
   pageNum?: number
   pageSize?: number
   lightId?: number
-  alertType?: string
-  alertLevel?: string
+  alertType?: number
+  alertLevel?: number
   status?: number
 }) {
   return get('/api/alerts/page', params)
@@ -159,16 +180,18 @@ export async function deleteAlertRule(id: number) {
 export interface TimedStrategy {
   id?: number
   name: string
-  type: string
+  type: 'default' | 'timed'
   startDate?: string
   endDate?: string
   startTime: string
   endTime: string
   weekdays?: number[]
-  district: string
-  road: string
+  district?: string
+  roads?: string[]
   brightness: number
   enabled: boolean
+  createTime?: string
+  updateTime?: string
 }
 
 export async function getStrategyList() {
@@ -205,12 +228,23 @@ export async function toggleStrategy(id: number, enabled: boolean) {
 }
 
 // ============ 阈值联动接口 ============
+export interface SegmentConfig {
+  threshold: number
+  brightness: number
+}
+
 export interface ThresholdControl {
   id?: number
   enabled: boolean
-  illuminanceThreshold: number
-  targetBrightness: number
-  triggerTime: number
+  lightOnThreshold?: number
+  lightOffThreshold?: number
+  lowBrightness?: number
+  midBrightness?: number
+  highBrightness?: number
+  detectionPeriod?: number
+  segments?: SegmentConfig[]
+  createTime?: string
+  updateTime?: string
 }
 
 export async function getThreshold() {
@@ -232,13 +266,14 @@ export interface CarbonSummary {
   energySavingRate: number
 }
 
-export interface CarbonTrend {
-  date: string
+export interface CarbonTrendItem {
+  date?: string
+  month?: string
   savedEnergy: number
   reducedCo2: number
 }
 
-export interface RoadCompare {
+export interface RoadCompareItem {
   road: string
   savedEnergy: number
   district?: string
@@ -248,22 +283,22 @@ export async function getCarbonSummary(type?: string, period?: string) {
   return get<CarbonSummary>('/api/carbon/summary', { type, period })
 }
 
-export async function getCarbonTrend(type: string = 'month', period?: string) {
-  return get<CarbonTrend[]>('/api/carbon/trend', { type, period })
+export async function getCarbonTrend(type: string = 'monthly', period?: string) {
+  return get<CarbonTrendItem[]>('/api/carbon/trend', { type, period })
 }
 
 export async function getRoadCompare(type?: string, period?: string) {
-  return get<RoadCompare[]>('/api/carbon/road-compare', { type, period })
+  return get<RoadCompareItem[]>('/api/carbon/road-compare', { type, period })
 }
 
 // ============ 操作日志接口 ============
 export interface OperationLog {
   id: number
   operator: string
+  operatorName?: string
   type: string
-  target: string
-  detail: string
-  ip: string
+  content: string
+  result: string
   createTime: string
 }
 

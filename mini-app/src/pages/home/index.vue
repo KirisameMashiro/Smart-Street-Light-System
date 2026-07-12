@@ -52,18 +52,6 @@
     <view class="quick-actions">
       <view class="section-title">快捷操作</view>
       <view class="action-grid">
-        <view class="action-item" @click="navigateTo('/pages/monitor/index')">
-          <view class="action-icon">
-            <text>📊</text>
-          </view>
-          <text class="action-text">实时监控</text>
-        </view>
-        <view class="action-item" @click="navigateTo('/pages/control/index')">
-          <view class="action-icon">
-            <text>⚡</text>
-          </view>
-          <text class="action-text">远程控制</text>
-        </view>
         <view class="action-item" @click="navigateTo('/pages/archive/index')">
           <view class="action-icon">
             <text>📋</text>
@@ -75,6 +63,18 @@
             <text>📈</text>
           </view>
           <text class="action-text">数据分析</text>
+        </view>
+        <view class="action-item" @click="navigateTo('/pages/alerts/index')">
+          <view class="action-icon">
+            <text>🔔</text>
+          </view>
+          <text class="action-text">告警管理</text>
+        </view>
+        <view class="action-item" @click="navigateTo('/pages/strategy/index')">
+          <view class="action-icon">
+            <text>⏰</text>
+          </view>
+          <text class="action-text">定时策略</text>
         </view>
       </view>
     </view>
@@ -136,8 +136,8 @@ async function fetchAlerts() {
     const records = res.data?.records || []
     recentAlerts.value = records.map((alert: Alert) => ({
       id: alert.id,
-      type: alert.alertType === 'FAULT' ? 'fault' : 'warning',
-      message: alert.alertMessage,
+      type: alert.alertLevel && alert.alertLevel >= 3 ? 'fault' : 'warning',
+      message: alert.message,
       time: formatTime(alert.createTime)
     }))
   } catch (e) {
