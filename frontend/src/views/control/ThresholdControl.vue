@@ -81,11 +81,6 @@
           </div>
         </div>
         <el-button type="primary" size="small" plain @click="addSegment">+ 添加档位</el-button>
-        <el-divider content-position="left">采集参数</el-divider>
-        <el-form-item label="检测周期(秒)">
-          <el-input-number v-model="config.detectionPeriod" :min="5" :step="5" controls-position="right" style="width: 220px" />
-          <span class="form-tip">光照采样间隔</span>
-        </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="saving" @click="onSave">保存配置</el-button>
           <el-button @click="loadConfig">重置为已保存</el-button>
@@ -117,8 +112,7 @@ const config = reactive({
   lightOffThreshold: 100,
   segments: [
     { threshold: 30, brightness: 100 }
-  ],
-  detectionPeriod: 60
+  ]
 })
 
 function addSegment() {
@@ -144,18 +138,11 @@ async function loadConfig() {
       const data = res.data
       config.enabled = !!data.enabled
       config.lightOffThreshold = data.lightOffThreshold ?? 100
-      config.detectionPeriod = data.detectionPeriod ?? 60
       if (Array.isArray(data.segments) && data.segments.length > 0) {
         config.segments = data.segments.map(s => ({
           threshold: s.threshold ?? 0,
           brightness: s.brightness ?? 100
         }))
-      } else if (data.lowBrightness != null || data.midBrightness != null || data.highBrightness != null) {
-        config.segments = [
-          { threshold: data.lightOnThreshold ?? 30, brightness: data.lowBrightness ?? 100 },
-          { threshold: (data.lightOnThreshold ?? 30) + 20, brightness: data.midBrightness ?? 60 },
-          { threshold: (data.lightOnThreshold ?? 30) + 40, brightness: data.highBrightness ?? 30 }
-        ]
       } else {
         config.segments = [{ threshold: 30, brightness: 100 }]
       }
@@ -189,8 +176,7 @@ async function onSave() {
     const payload = {
       enabled: config.enabled,
       lightOffThreshold: config.lightOffThreshold,
-      segments: config.segments,
-      detectionPeriod: config.detectionPeriod
+      segments: config.segments
     }
     await updateThresholdConfig(payload)
     ElMessage.success('阈值配置已保存')

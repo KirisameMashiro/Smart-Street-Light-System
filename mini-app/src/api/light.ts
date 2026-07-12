@@ -236,12 +236,7 @@ export interface SegmentConfig {
 export interface ThresholdControl {
   id?: number
   enabled: boolean
-  lightOnThreshold?: number
   lightOffThreshold?: number
-  lowBrightness?: number
-  midBrightness?: number
-  highBrightness?: number
-  detectionPeriod?: number
   segments?: SegmentConfig[]
   createTime?: string
   updateTime?: string

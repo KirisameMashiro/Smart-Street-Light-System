@@ -132,7 +132,7 @@
           </view>
           <view class="detail-row">
             <text class="detail-label">检测周期</text>
-            <text class="detail-value">{{ thresholdConfig.detectionPeriod || '-' }} 秒</text>
+            <text class="detail-value">60 秒</text>
           </view>
         </view>
       </view>

@@ -11,50 +11,33 @@
           <el-form
             ref="configFormRef"
             :model="configForm"
-            label-width="160px"
-            style="max-width: 640px; padding: 20px 16px"
+            label-width="200px"
+            style="max-width: 560px; padding: 20px 16px"
           >
-            <el-form-item label="系统名称">
-              <el-input v-model="configForm.systemName" placeholder="智慧路灯管理系统" />
-            </el-form-item>
-            <el-form-item label="区域碳排放因子">
+            <el-form-item label="阈值联动判定周期">
               <el-input-number
-                v-model="configForm.carbonFactor"
-                :min="0"
-                :step="0.1"
-                :precision="3"
-                controls-position="right"
-              />
-              <span class="form-unit">kgCO2/kWh</span>
-            </el-form-item>
-            <el-form-item label="默认调光亮度">
-              <el-input-number
-                v-model="configForm.defaultBrightness"
-                :min="0"
-                :max="100"
-                :step="5"
-                controls-position="right"
-              />
-              <span class="form-unit">%</span>
-            </el-form-item>
-            <el-form-item label="数据采集间隔">
-              <el-input-number
-                v-model="configForm.collectInterval"
-                :min="1"
+                v-model="configForm.thresholdCheckInterval"
+                :min="10"
+                :max="600"
                 :step="10"
                 controls-position="right"
               />
               <span class="form-unit">秒</span>
+              <span class="form-tip">每隔多少秒执行一次阈值联动判定</span>
             </el-form-item>
-            <el-form-item label="离线判定阈值">
+
+            <el-form-item label="失联判定故障时间">
               <el-input-number
-                v-model="configForm.offlineThreshold"
-                :min="1"
-                :step="1"
+                v-model="configForm.offlineFaultTimeout"
+                :min="60"
+                :max="3600"
+                :step="30"
                 controls-position="right"
               />
-              <span class="form-unit">分钟</span>
+              <span class="form-unit">秒</span>
+              <span class="form-tip">超过此时间未收到传感器数据视为失联故障</span>
             </el-form-item>
+
             <el-form-item>
               <el-button type="primary" :loading="configSaving" @click="onSaveConfig">
                 保存配置
@@ -276,19 +259,31 @@ const configLoading = ref(false)
 const configSaving = ref(false)
 const configFormRef = ref()
 const configForm = reactive({
-  systemName: '',
-  carbonFactor: 0.5,
-  defaultBrightness: 80,
-  collectInterval: 60,
-  offlineThreshold: 5
+  // 两个 system_config key 的配置值
+  thresholdCheckInterval: 60,
+  offlineFaultTimeout: 300
 })
+
+/** 保存 system_config 中每条配置的 { id, configKey } 映射，用于更新时传参 */
+const configKeyMeta = {}
 
 async function loadConfig() {
   configLoading.value = true
   try {
     const res = await getSystemConfig()
-    if (res.data) {
-      Object.assign(configForm, res.data)
+    if (res.data && Array.isArray(res.data)) {
+      // 将后端 key-value 列表映射到表单字段
+      for (const item of res.data) {
+        configKeyMeta[item.configKey] = { id: item.id, configKey: item.configKey }
+        switch (item.configKey) {
+          case 'threshold_check_interval':
+            configForm.thresholdCheckInterval = parseInt(item.configValue) || 60
+            break
+          case 'offline_fault_timeout':
+            configForm.offlineFaultTimeout = parseInt(item.configValue) || 300
+            break
+        }
+      }
     }
   } catch (e) {
   } finally {
@@ -299,8 +294,24 @@ async function loadConfig() {
 async function onSaveConfig() {
   configSaving.value = true
   try {
-    await updateSystemConfig({ ...configForm })
+    // 逐个 key 更新
+    const updates = [
+      { key: 'threshold_check_interval', value: String(configForm.thresholdCheckInterval) },
+      { key: 'offline_fault_timeout', value: String(configForm.offlineFaultTimeout) }
+    ]
+    for (const update of updates) {
+      const meta = configKeyMeta[update.key]
+      if (meta) {
+        await updateSystemConfig({
+          id: meta.id,
+          configKey: meta.configKey,
+          configValue: update.value
+        })
+      }
+    }
     ElMessage.success('保存成功')
+    // 重新加载以刷新元数据 id
+    await loadConfig()
     logOperation('config_update', '修改系统参数配置')
   } catch (e) {
   } finally {
@@ -308,7 +319,7 @@ async function onSaveConfig() {
   }
 }
 
-// ============ 告警规则 ============
+// ============ 告警规则（与之前相同） ============
 const ruleLoading = ref(false)
 const ruleSubmitting = ref(false)
 const rules = ref([])
@@ -325,8 +336,7 @@ async function loadRules() {
   }
 }
 
-// ============ 阈值表达式编辑器 ============
-// 后端正则: (电压|温度|电流|功率|照度|湿度|亮度|关闭时间)([><]=?|=)(额定值|\d+(\.\d+)?)([*×]\d+(\.\d+)?)?(V|°C|A|W|lux|%RH|%|h)?
+// 阈值表达式编辑器
 const FIELD_UNIT_MAP = THRESHOLD_FIELD_OPTIONS.reduce((m, f) => {
   m[f.value] = f.unit
   return m
@@ -360,22 +370,15 @@ function removeCondition(idx) {
   conditions.value.splice(idx, 1)
 }
 
-// 解析后端阈值字符串 → 结构化条件
 function parseThreshold(str) {
   if (!str) return { conditions: [makeEmptyCondition()], timeConstraint: '' }
-
-  // 提取时间约束
   let tc = ''
   if (str.includes('(白天)')) tc = '(白天)'
   else if (str.includes('(夜间)')) tc = '(夜间)'
-
-  // 移除时间约束后按"或"分割
   const cleanStr = str.replace(/\(白天\)|\(夜间\)/g, '').trim()
   const parts = cleanStr.split('或').map((s) => s.trim()).filter(Boolean)
-
   const conds = parts.map((part) => {
     const cond = makeEmptyCondition()
-    // 匹配: 字段名 + 运算符 + 值(额定值或数字) + 可选乘数 + 可选单位
     const m = part.match(
       /^(电压|温度|电流|功率|照度|湿度|亮度|关闭时间)([><]=?|=)(额定值|\d+(?:\.\d+)?)([*×]\d+(?:\.\d+)?)?(V|°C|A|W|lux|%RH|%|h)?$/
     )
@@ -393,14 +396,12 @@ function parseThreshold(str) {
     }
     return cond
   })
-
   return {
     conditions: conds.length > 0 ? conds : [makeEmptyCondition()],
     timeConstraint: tc
   }
 }
 
-// 结构化条件 → 后端阈值字符串
 function buildThreshold(conds, tc) {
   const parts = conds.map((c) => {
     const val = c.useRated
@@ -417,7 +418,7 @@ const thresholdPreview = computed(() => {
   return buildThreshold(valid, timeConstraint.value)
 })
 
-// ============ 新增/编辑弹窗 ============
+// 规则弹窗
 const ruleDialogVisible = ref(false)
 const ruleIsEdit = ref(false)
 const ruleFormRef = ref()
@@ -451,7 +452,6 @@ function resetRuleForm() {
 }
 
 function onRuleTypeChange(val) {
-  // 自动填充规则名称
   if (!ruleForm.ruleName && val) {
     ruleForm.ruleName = ALERT_RULE_TYPE_MAP[val]?.label || ''
   }
@@ -478,14 +478,12 @@ function openRuleDialog(row) {
 }
 
 async function onRuleSubmit() {
-  // 校验阈值条件
   const valid = conditions.value.filter((c) => c.field && c.operator)
   if (valid.length === 0) {
     ElMessage.warning('请至少添加一个阈值条件')
     return
   }
   ruleForm.threshold = buildThreshold(valid, timeConstraint.value)
-
   try {
     await ruleFormRef.value.validate()
   } catch (e) {
@@ -559,6 +557,12 @@ onMounted(() => {
   margin-left: 8px;
   color: #909399;
   font-size: 13px;
+}
+
+.form-tip {
+  margin-left: 12px;
+  color: #909399;
+  font-size: 12px;
 }
 
 .threshold-editor {

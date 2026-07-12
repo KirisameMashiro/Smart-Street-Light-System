@@ -19,17 +19,7 @@ public class ThresholdControl {
 
     private Boolean enabled;
 
-    private Double lightOnThreshold;
-
     private Double lightOffThreshold;
-
-    private Integer lowBrightness;
-
-    private Integer midBrightness;
-
-    private Integer highBrightness;
-
-    private Integer detectionPeriod;
 
     @TableField(exist = false)
     private List<SegmentConfig> segments;

@@ -83,30 +83,15 @@ INSERT INTO `alert_rule` (`rule_type`, `rule_name`, `threshold`, `enabled`, `des
 -- ============================================================
 -- 5. 阈值联动配置（默认关闭）
 -- ============================================================
-INSERT INTO `threshold_control` (`enabled`, `light_on_threshold`, `light_off_threshold`,
-                                  `low_brightness`, `mid_brightness`, `high_brightness`, `detection_period`)
-VALUES (0, 30.00, 100.00, 100, 60, 30, 60);
+INSERT INTO `threshold_control` (`enabled`, `light_off_threshold`)
+VALUES (0, 100.00);
 
 -- ============================================================
--- 6. AI 知识库
--- ============================================================
--- ============================================================
--- 6. 系统配置 (system_config)
+-- 6. 系统参数（阈值联动判定周期 + 失联判定故障时间）
 -- ============================================================
 INSERT INTO `system_config` (`config_key`, `config_value`, `description`, `update_time`) VALUES
-                                                                                             ('auto_dimming_enabled',         'true',       '是否启用自动调光',                                     '2025-06-01 10:00:00'),
-                                                                                             ('auto_dimming_threshold',       '50',         '自动调光触发照度阈值(lux)',                               '2026-07-03 08:15:00'),
-                                                                                             ('default_brightness',           '75',         '默认路灯亮度百分比',                                     '2025-06-01 10:00:00'),
-                                                                                             ('min_brightness',               '20',         '最低亮度百分比',                                        '2025-06-01 10:00:00'),
-                                                                                             ('max_brightness',               '100',        '最高亮度百分比',                                        '2025-06-01 10:00:00'),
-                                                                                             ('sensor_interval',              '300',        '传感器数据采集间隔(秒)',                                  '2025-06-01 10:00:00'),
-                                                                                             ('alert_check_interval',         '60',         '报警规则检查间隔(秒)',                                   '2025-06-01 10:00:00'),
-                                                                                             ('data_retention_days',          '90',         '传感器历史数据保留天数',                                  '2025-06-01 10:00:00'),
-                                                                                             ('mqtt_broker_url',              'tcp://localhost:1883', 'MQTT Broker地址',                        '2025-06-01 10:00:00'),
-                                                                                             ('mqtt_topic_prefix',            'smartlight/', 'MQTT主题前缀',                                      '2025-06-01 10:00:00'),
-                                                                                             ('energy_baseline_power',        '250',        '传统钠灯基准功率(W)',                                   '2025-06-01 10:00:00'),
-                                                                                             ('energy_baseline_hours',        '12',         '日均照明时长(h)',                                      '2025-06-01 10:00:00'),
-                                                                                             ('co2_factor',                   '0.997',      '碳排放因子(kg CO₂/kWh)',                               '2025-06-01 10:00:00');
+('threshold_check_interval', '60',   '阈值联动判定周期(秒)', '2026-07-12 00:00:00'),
+('offline_fault_timeout',    '300',  '失联判定故障时间(秒)', '2026-07-12 00:00:00');
 
 -- ============================================================
 -- 7. 知识库表 (knowledge)

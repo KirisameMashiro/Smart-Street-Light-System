@@ -93,32 +93,7 @@
         </view>
       </view>
 
-      <view class="divider"></view>
-
-      <view class="form-item">
-        <view class="form-row-header">
-          <text class="form-label">检测周期</text>
-          <text class="form-value">{{ data.detectionPeriod }} 秒</text>
-        </view>
-        <slider
-          :value="data.detectionPeriod"
-          :min="10"
-          :max="300"
-          :step="10"
-          :show-value="false"
-          activeColor="#e6a23c"
-          backgroundColor="#ebeef5"
-          block-color="#e6a23c"
-          block-size="20"
-          @change="e => data.detectionPeriod = e.detail.value"
-        />
-        <view class="range-tip">
-          <text>10 秒</text>
-          <text>300 秒</text>
-        </view>
-        <text class="form-tip">光照采样间隔时间</text>
       </view>
-    </view>
 
     <view class="preview-card">
       <text class="card-title">当前规则预览</text>
@@ -142,12 +117,7 @@ import { getThreshold, updateThreshold, toggleThreshold, type ThresholdControl, 
 
 const data = reactive<ThresholdControl>({
   enabled: false,
-  lightOnThreshold: 30,
   lightOffThreshold: 100,
-  lowBrightness: 100,
-  midBrightness: 60,
-  highBrightness: 30,
-  detectionPeriod: 60,
   segments: [
     { threshold: 30, brightness: 100 },
     { threshold: 60, brightness: 60 },
@@ -169,9 +139,9 @@ async function loadData() {
       Object.assign(data, res.data)
       if (!data.segments || data.segments.length === 0) {
         data.segments = [
-          { threshold: data.lightOnThreshold || 30, brightness: data.lowBrightness || 100 },
-          { threshold: 60, brightness: data.midBrightness || 60 },
-          { threshold: 90, brightness: data.highBrightness || 30 }
+          { threshold: 30, brightness: 100 },
+          { threshold: 60, brightness: 60 },
+          { threshold: 90, brightness: 30 }
         ]
       }
     }

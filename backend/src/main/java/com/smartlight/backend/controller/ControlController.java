@@ -32,7 +32,11 @@ public class ControlController {
      */
     @PutMapping("/threshold")
     public Result<Boolean> updateThreshold(@RequestBody ThresholdControl data) {
-        return Result.success(thresholdControlService.saveConfig(data));
+        try {
+            return Result.success(thresholdControlService.saveConfig(data));
+        } catch (IllegalArgumentException e) {
+            return Result.error(400, e.getMessage());
+        }
     }
 
     /**

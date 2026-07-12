@@ -200,12 +200,7 @@ DROP TABLE IF EXISTS `threshold_control`;
 CREATE TABLE `threshold_control` (
     `id`                  BIGINT AUTO_INCREMENT COMMENT '主键ID',
     `enabled`             TINYINT DEFAULT 0 COMMENT '是否启用: 0-禁用, 1-启用',
-    `light_on_threshold`  DECIMAL(10,2) DEFAULT 30.00 COMMENT '开灯光照阈值(lux)',
     `light_off_threshold` DECIMAL(10,2) DEFAULT 100.00 COMMENT '关灯光照阈值(lux)',
-    `low_brightness`      INT DEFAULT 100 COMMENT '低光照档亮度(%)',
-    `mid_brightness`      INT DEFAULT 60 COMMENT '中光照档亮度(%)',
-    `high_brightness`     INT DEFAULT 30 COMMENT '高光照档亮度(%)',
-    `detection_period`    INT DEFAULT 60 COMMENT '检测周期(秒)',
     `segments`            TEXT DEFAULT NULL COMMENT '调光档位配置，JSON数组格式',
     `create_time`         DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

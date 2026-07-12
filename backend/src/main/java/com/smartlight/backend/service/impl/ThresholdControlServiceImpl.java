@@ -1,21 +1,22 @@
 package com.smartlight.backend.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.smartlight.backend.entity.Light;
-import com.smartlight.backend.entity.SensorData;
 import com.smartlight.backend.entity.ThresholdControl;
 import com.smartlight.backend.mapper.LightMapper;
-import com.smartlight.backend.mapper.SensorDataMapper;
 import com.smartlight.backend.mapper.ThresholdControlMapper;
 import com.smartlight.backend.service.MqttPublishService;
+import com.smartlight.backend.service.SystemConfigService;
 import com.smartlight.backend.service.ThresholdControlService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -23,9 +24,15 @@ import java.util.List;
 public class ThresholdControlServiceImpl implements ThresholdControlService {
 
     private final ThresholdControlMapper thresholdControlMapper;
-    private final SensorDataMapper sensorDataMapper;
     private final LightMapper lightMapper;
     private final MqttPublishService mqttPublishService;
+    private final SystemConfigService systemConfigService;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
+
+    /** Redis Key 前缀：每盏路灯最新传感器数据 */
+    /** 上次阈值联动执行时间（毫秒时间戳，用于动态周期控制） */
+    private volatile long lastLinkageRunTime = 0;
+    private static final String KEY_SENSOR_LATEST_PREFIX = "sensor:latest:";
 
     @Override
     public ThresholdControl getConfig() {
@@ -33,34 +40,45 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
         if (list == null || list.isEmpty()) {
             ThresholdControl defaults = new ThresholdControl();
             defaults.setEnabled(false);
-            defaults.setLightOnThreshold(30.0);
             defaults.setLightOffThreshold(100.0);
-            defaults.setLowBrightness(100);
-            defaults.setMidBrightness(60);
-            defaults.setHighBrightness(30);
-            defaults.setDetectionPeriod(60);
-            defaults.setSegments(createSegments(30.0, 100, 60, 30));
+            defaults.setSegments(List.of(
+                    seg(30, 100),
+                    seg(60, 60),
+                    seg(90, 30)));
             return defaults;
         }
         return list.get(0);
     }
 
-    private List<ThresholdControl.SegmentConfig> createSegments(double baseThreshold, int lowB, int midB, int highB) {
-        ThresholdControl.SegmentConfig s1 = new ThresholdControl.SegmentConfig();
-        s1.setThreshold(baseThreshold);
-        s1.setBrightness(lowB);
-        ThresholdControl.SegmentConfig s2 = new ThresholdControl.SegmentConfig();
-        s2.setThreshold(baseThreshold + 20);
-        s2.setBrightness(midB);
-        ThresholdControl.SegmentConfig s3 = new ThresholdControl.SegmentConfig();
-        s3.setThreshold(baseThreshold + 40);
-        s3.setBrightness(highB);
-        return List.of(s1, s2, s3);
+    private static ThresholdControl.SegmentConfig seg(double threshold, int brightness) {
+        ThresholdControl.SegmentConfig s = new ThresholdControl.SegmentConfig();
+        s.setThreshold(threshold);
+        s.setBrightness(brightness);
+        return s;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean saveConfig(ThresholdControl config) {
+        // 验证 segments：光照阈值越小 → 亮度必须越高（越暗越亮）
+        List<ThresholdControl.SegmentConfig> segs = config.getSegments();
+        if (segs != null && segs.size() > 1) {
+            for (int i = 1; i < segs.size(); i++) {
+                ThresholdControl.SegmentConfig prev = segs.get(i - 1);
+                ThresholdControl.SegmentConfig curr = segs.get(i);
+                if (curr.getThreshold() > prev.getThreshold()
+                        && curr.getBrightness() != null && prev.getBrightness() != null
+                        && curr.getBrightness() > prev.getBrightness()) {
+                    throw new IllegalArgumentException(
+                            "调光档位不合法：光照阈值 " + curr.getThreshold()
+                                    + " > " + prev.getThreshold()
+                                    + "，但亮度 " + curr.getBrightness()
+                                    + "% > " + prev.getBrightness()
+                                    + "%。越暗应越亮，高阈值的亮度不应高于低阈值");
+                }
+            }
+        }
+
         List<ThresholdControl> list = thresholdControlMapper.selectList(null);
         if (list == null || list.isEmpty()) {
             config.setId(null);
@@ -85,11 +103,22 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
     }
 
     /**
-     * 定时执行光照联动控制（每 60 秒扫描一次）
-     * 读取光照传感器数据，根据阈值自动调节路灯亮度
+     * 定时执行光照联动控制（每 5 秒轮询一次，实际执行间隔由 system_config 动态控制）
+     * <p>
+     * 读取所有路灯的最新光照传感器数据，根据阈值配置自动调节每盏路灯的开关与亮度。
+     * {@code manualControl = true} 的路灯完全跳过，不受自动联动影响。
      */
-    @Scheduled(fixedDelay = 60000, initialDelay = 10000)
+    @Scheduled(fixedDelay = 5000, initialDelay = 10000)
     public void autoLinkageControl() {
+        // 从 system_config 读取配置的判定周期，默认 60 秒
+        String intervalStr = systemConfigService.getConfigValue("threshold_check_interval");
+        long intervalMillis = (intervalStr != null ? Long.parseLong(intervalStr) : 60) * 1000L;
+        long now = System.currentTimeMillis();
+        if (now - lastLinkageRunTime < intervalMillis) {
+            return;
+        }
+        lastLinkageRunTime = now;
+
         ThresholdControl config = getConfig();
         if (!config.getEnabled()) {
             return;
@@ -103,19 +132,27 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
             return;
         }
 
-        List<Light> lights = lightMapper.selectList(
-                new LambdaQueryWrapper<Light>().eq(Light::getStatus, 1));
+        List<Light> allLights = lightMapper.selectList(null);
 
         int adjustedCount = 0;
-        for (Light light : lights) {
-            SensorData latest = sensorDataMapper.selectLatestByLightId(light.getId());
-            if (latest == null || latest.getIlluminance() == null) {
+        for (Light light : allLights) {
+            // 手动控制的路灯完全跳过，不参与任何自动联动
+            if (Boolean.TRUE.equals(light.getManualControl())) {
                 continue;
             }
 
-            double illuminance = latest.getIlluminance();
-            Integer targetBrightness;
+            // 故障状态的路灯不应被阈值联动改变状态或调光
+            if (Integer.valueOf(2).equals(light.getStatus())) {
+                continue;
+            }
+
+            // 从 Redis 读取最新光照传感器数据（实时数据已缓存于 Redis，不再写入 sensor_data 表）
+            Double illuminance = getIlluminanceFromRedis(light.getId());
+            if (illuminance == null) {
+                continue;
+            }
             Integer targetStatus;
+            Integer targetBrightness;
 
             if (illuminance > lightOff) {
                 targetStatus = 0;
@@ -127,16 +164,10 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
 
             boolean changed = false;
             if (!Integer.valueOf(targetStatus).equals(light.getStatus())) {
-                if (targetStatus == 0 && Boolean.TRUE.equals(light.getManualControl())) {
-                    continue;
-                }
                 light.setStatus(targetStatus);
                 changed = true;
             }
             if (!targetBrightness.equals(light.getBrightness())) {
-                if (targetBrightness == 0 && Boolean.TRUE.equals(light.getManualControl())) {
-                    continue;
-                }
                 light.setBrightness(targetBrightness);
                 changed = true;
             }
@@ -159,25 +190,41 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
         ThresholdControl.SegmentConfig matched = null;
         for (ThresholdControl.SegmentConfig seg : segments) {
             if (illuminance <= seg.getThreshold()) {
-                if (matched == null || seg.getThreshold() > matched.getThreshold()) {
+                // 选 threshold 最小的档位（最严格匹配），即最暗场景对应最亮灯光
+                if (matched == null || seg.getThreshold() < matched.getThreshold()) {
                     matched = seg;
                 }
             }
         }
+        // 光照超出所有档位阈值 → 选 threshold 最大的档位（环境相对最亮，只需最低亮度）
         if (matched == null && !segments.isEmpty()) {
             matched = segments.stream()
-                    .min((a, b) -> Double.compare(a.getThreshold(), b.getThreshold()))
+                    .max((a, b) -> Double.compare(a.getThreshold(), b.getThreshold()))
                     .orElse(null);
         }
         return matched != null && matched.getBrightness() != null ? matched.getBrightness() : 100;
     }
 
     /**
-     * 供 @Scheduled 动态获取检测周期
+     * 从 Redis 读取某盏灯的最新光照值
+     * <p>
+     * 实时传感器数据通过 SensorDataIngestService 写入 Redis Hash
+     * {@code sensor:latest:{lightId}}，阈值为 {@code illuminance}。
      */
-    public long getDetectionPeriod() {
-        ThresholdControl config = getConfig();
-        Integer period = config.getDetectionPeriod();
-        return period != null && period > 0 ? period : 60;
+    private Double getIlluminanceFromRedis(Long lightId) {
+        if (stringRedisTemplate.isEmpty()) {
+            return null;
+        }
+        String key = KEY_SENSOR_LATEST_PREFIX + lightId;
+        Map<Object, Object> entries = stringRedisTemplate.get().opsForHash().entries(key);
+        if (entries.isEmpty()) return null;
+
+        Object val = entries.get("illuminance");
+        if (val == null) return null;
+        try {
+            return Double.parseDouble(val.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
