@@ -5,15 +5,23 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.smartlight.backend.entity.Alert;
+import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.mapper.AlertMapper;
+import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.service.AlertService;
+import com.smartlight.backend.service.MqttPublishService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
 @Service
+@RequiredArgsConstructor
 public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements AlertService {
+
+    private final LightMapper lightMapper;
+    private final MqttPublishService mqttPublishService;
 
     @Override
     public IPage<Alert> getPage(int pageNum, int pageSize, Long lightId,
@@ -49,7 +57,20 @@ public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements
         alert.setHandler(handler);
         alert.setHandleRemark(handleRemark);
         alert.setHandleTime(LocalDateTime.now());
-        return this.updateById(alert);
+        this.updateById(alert);
+
+        // 通讯故障(5)告警修复后，将路灯从故障(2)恢复为在线(1)并发送 MQTT 命令
+        if (Integer.valueOf(5).equals(alert.getAlertType()) && alert.getLightId() != null) {
+            Light light = lightMapper.selectById(alert.getLightId());
+            if (light != null && Integer.valueOf(2).equals(light.getStatus())) {
+                light.setStatus(1);
+                // 不设亮度，由阈值联动后续决定
+                lightMapper.updateById(light);
+                mqttPublishService.publishCombinedControl(light.getLightCode(), 1, light.getBrightness());
+            }
+        }
+
+        return true;
     }
 
     @Override
