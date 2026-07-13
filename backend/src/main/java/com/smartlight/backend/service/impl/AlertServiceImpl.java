@@ -11,6 +11,7 @@ import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.service.AlertService;
 import com.smartlight.backend.service.MqttPublishService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +22,7 @@ import java.time.LocalDateTime;
 public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements AlertService {
 
     private final LightMapper lightMapper;
-    private final MqttPublishService mqttPublishService;
+    private final @Lazy MqttPublishService mqttPublishService;
 
     @Override
     public IPage<Alert> getPage(int pageNum, int pageSize, Long lightId,
