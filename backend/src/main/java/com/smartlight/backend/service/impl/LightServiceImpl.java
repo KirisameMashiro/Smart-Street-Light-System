@@ -140,6 +140,8 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
         } else {
             light.setStatus(0);
         }
+        // 人为调光优先级最高，标记为手动控制
+        light.setManualControl(true);
         boolean result = this.updateById(light);
 
         // MQTT发布组合命令（含状态+亮度）
