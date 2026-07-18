@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +36,28 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements LightService {
+
+    /**
+     * 覆写 updateById，确保每次更新都刷新 updateTime
+     * （MyBatis-Plus 自动填充器可能因策略配置不生效）
+     */
+    @Override
+    public boolean updateById(Light entity) {
+        entity.setUpdateTime(LocalDateTime.now());
+        return super.updateById(entity);
+    }
+
+    /**
+     * 覆写 updateBatchById，批量更新同样刷新 updateTime
+     */
+    @Override
+    public boolean updateBatchById(Collection<Light> entityList) {
+        LocalDateTime now = LocalDateTime.now();
+        for (Light entity : entityList) {
+            entity.setUpdateTime(now);
+        }
+        return super.updateBatchById(entityList);
+    }
 
     private final MqttPublishService mqttPublishService;
     private final Optional<StringRedisTemplate> stringRedisTemplate;
