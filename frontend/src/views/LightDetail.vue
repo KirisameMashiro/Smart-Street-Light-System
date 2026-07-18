@@ -16,6 +16,9 @@
           <el-tag :type="LIGHT_STATUS_MAP[light.status]?.type" size="small" style="margin-left:8px">
             {{ LIGHT_STATUS_MAP[light.status]?.label }}
           </el-tag>
+          <el-tag v-if="light.manualControl" type="warning" size="small" style="margin-left:8px">
+            ⚠ 手动控制
+          </el-tag>
         </div>
         <span class="detail-code">{{ light.lightCode }}</span>
       </div>
@@ -40,6 +43,13 @@
         <el-descriptions-item label="更新时间">{{ formatDateTime(light.updateTime) }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ light.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
+      <div v-if="light.manualControl" class="manual-banner">
+        <el-icon><WarningFilled /></el-icon>
+        <span>该路灯当前为手动控制模式，定时策略和阈值联动已跳过</span>
+        <el-button size="small" type="primary" @click="releaseManualControl">
+          释放为自动控制
+        </el-button>
+      </div>
     </div>
 
     <!-- 最新传感器数据 -->
@@ -152,8 +162,8 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, Refresh, InfoFilled } from '@element-plus/icons-vue'
-import { getLightById, setLightBrightness } from '@/api/light'
+import { ArrowLeft, Refresh, InfoFilled, WarningFilled } from '@element-plus/icons-vue'
+import { getLightById, setLightBrightness, updateLight } from '@/api/light'
 import {
   getLatestSensorData,
   getAverageSensorData,
@@ -246,7 +256,7 @@ async function loadAll() {
   }
 }
 
-async function onBrightnessChange(val) {
+async function releaseManualControl() {\n  try {\n    await updateLight({ id: light.value.id, manualControl: false })\n    light.value.manualControl = false\n    ElMessage.success('已释放为自动控制模式')\n    appStore.notifyLightDataChanged()\n  } catch (e) {\n    ElMessage.error('释放失败')\n  }\n}\n\nasync function onBrightnessChange(val) {
   const oldVal = light.value.brightness
   try {
     await setLightBrightness(lightId, val)
@@ -402,6 +412,20 @@ onUnmounted(() => {
   color: #909399;
   margin-left: 4px;
   font-weight: 400;
+}
+
+.manual-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #fdf6ec;
+  border: 1px solid #e6a23c;
+  border-radius: 6px;
+  color: #e6a23c;
+  font-size: 14px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 640px) {

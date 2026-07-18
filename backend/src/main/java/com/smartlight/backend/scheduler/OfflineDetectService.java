@@ -51,7 +51,7 @@ public class OfflineDetectService {
         int restoreCount = 0;
 
         for (Light light : allLights) {
-            if (Boolean.TRUE.equals(light.getManualControl())) {
+            if (isUnderManualProtection(light)) {
                 continue;
             }
 
@@ -138,5 +138,29 @@ public class OfflineDetectService {
         if (val == null) return null;
         String str = val.toString();
         return str.isEmpty() ? null : str;
+    }
+
+    /**
+     * 判断路灯是否处于手动控制保护期内
+     * <p>
+     * manualControl=true 的路灯在 30 分钟内不被自动化任务调节，
+     * 超时后自动释放（清除 manualControl 标记），恢复自动控制。
+     */
+    private boolean isUnderManualProtection(Light light) {
+        if (!Boolean.TRUE.equals(light.getManualControl())) {
+            return false;
+        }
+        LocalDateTime updateTime = light.getUpdateTime();
+        if (updateTime == null) {
+            return true;
+        }
+        long elapsedMinutes = ChronoUnit.MINUTES.between(updateTime, LocalDateTime.now());
+        if (elapsedMinutes >= 30) {
+            light.setManualControl(false);
+            lightMapper.updateById(light);
+            log.info("手动控制超时释放: lightId={}, 已过 {} 分钟", light.getId(), elapsedMinutes);
+            return false;
+        }
+        return true;
     }
 }

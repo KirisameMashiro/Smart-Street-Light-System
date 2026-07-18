@@ -14,6 +14,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -136,8 +138,8 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
 
         int adjustedCount = 0;
         for (Light light : allLights) {
-            // 手动控制的路灯完全跳过，不参与任何自动联动
-            if (Boolean.TRUE.equals(light.getManualControl())) {
+            // 手动控制保护期内跳过（超时后自动释放）
+            if (isUnderManualProtection(light)) {
                 continue;
             }
 
@@ -184,6 +186,32 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
         if (adjustedCount > 0) {
             log.info("阈值联动: 已调节 {} 盏路灯", adjustedCount);
         }
+    }
+
+    /**
+     * 判断路灯是否处于手动控制保护期内
+     * <p>
+     * manualControl=true 的路灯在 30 分钟内不被自动化任务调节，
+     * 超时后自动释放（清除 manualControl 标记），恢复自动控制。
+     */
+    private boolean isUnderManualProtection(Light light) {
+        if (!Boolean.TRUE.equals(light.getManualControl())) {
+            return false;
+        }
+        LocalDateTime updateTime = light.getUpdateTime();
+        if (updateTime == null) {
+            // 无时间信息则保守跳过
+            return true;
+        }
+        long elapsedMinutes = ChronoUnit.MINUTES.between(updateTime, LocalDateTime.now());
+        if (elapsedMinutes >= 30) {
+            // 超时，自动释放
+            light.setManualControl(false);
+            lightMapper.updateById(light);
+            log.info("手动控制超时释放: lightId={}, 已过 {} 分钟", light.getId(), elapsedMinutes);
+            return false;
+        }
+        return true;
     }
 
     private Integer findMatchingBrightness(double illuminance, List<ThresholdControl.SegmentConfig> segments) {
