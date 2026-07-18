@@ -256,7 +256,18 @@ async function loadAll() {
   }
 }
 
-async function releaseManualControl() {\n  try {\n    await updateLight({ id: light.value.id, manualControl: false })\n    light.value.manualControl = false\n    ElMessage.success('已释放为自动控制模式')\n    appStore.notifyLightDataChanged()\n  } catch (e) {\n    ElMessage.error('释放失败')\n  }\n}\n\nasync function onBrightnessChange(val) {
+async function releaseManualControl() {
+  try {
+    await updateLight({ id: light.value.id, manualControl: false })
+    light.value.manualControl = false
+    ElMessage.success('已释放为自动控制模式')
+    appStore.notifyLightDataChanged()
+  } catch (e) {
+    ElMessage.error('释放失败')
+  }
+}
+
+async function onBrightnessChange(val) {
   const oldVal = light.value.brightness
   try {
     await setLightBrightness(lightId, val)
