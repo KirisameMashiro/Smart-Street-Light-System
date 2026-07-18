@@ -1,0 +1,12 @@
+# requirements.txt - 基于你实际安装的版本
+
+ultralytics==8.4.99
+opencv-python==5.0.0.93
+paho-mqtt==2.1.0
+torch==2.13.0
+torchvision==0.28.0
+numpy==2.5.1
+pillow==12.3.0
+matplotlib==3.11.0
+pyyaml==6.0.3
+dill>=0.3.0
