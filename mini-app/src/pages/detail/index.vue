@@ -135,9 +135,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { ref, onUnmounted } from 'vue'
+import { onLoad, onShow, onHide, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getLightById, getLatestSensorData, switchLight, setLightBrightness, type Light, type SensorData } from '@/api/light'
+
+let sensorTimer: ReturnType<typeof setInterval> | null = null
+const SENSOR_REFRESH_INTERVAL = 15000
 
 const lightId = ref(0)
 const loading = ref(true)
@@ -174,11 +177,49 @@ onLoad((options: any) => {
   if (lightId.value > 0) {
     fetchLightDetail()
     fetchSensorData()
+    startSensorTimer()
   } else {
     loading.value = false
     uni.showToast({ title: '无效的设备ID', icon: 'none' })
   }
 })
+
+onShow(() => {
+  if (lightId.value > 0) {
+    fetchLightDetail()
+    fetchSensorData()
+    startSensorTimer()
+  }
+})
+
+onHide(() => {
+  stopSensorTimer()
+})
+
+onUnmounted(() => {
+  stopSensorTimer()
+})
+
+onPullDownRefresh(async () => {
+  if (lightId.value > 0) {
+    await Promise.all([fetchLightDetail(), fetchSensorData()])
+  }
+  uni.stopPullDownRefresh()
+})
+
+function startSensorTimer() {
+  if (sensorTimer) return
+  sensorTimer = setInterval(() => {
+    fetchSensorData()
+  }, SENSOR_REFRESH_INTERVAL)
+}
+
+function stopSensorTimer() {
+  if (sensorTimer) {
+    clearInterval(sensorTimer)
+    sensorTimer = null
+  }
+}
 
 async function fetchLightDetail() {
   try {

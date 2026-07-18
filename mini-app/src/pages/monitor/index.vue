@@ -82,6 +82,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getLightPage, getDistricts, getRoads, type Light } from '@/api/light'
 
 const searchText = ref('')
@@ -109,6 +110,15 @@ const selectedStatus = computed(() => statusValues[statusIndex.value])
 onMounted(() => {
   fetchData()
   fetchOptions()
+})
+
+onShow(() => {
+  fetchData()
+})
+
+onPullDownRefresh(async () => {
+  await fetchData()
+  uni.stopPullDownRefresh()
 })
 
 async function fetchData(reset = true) {

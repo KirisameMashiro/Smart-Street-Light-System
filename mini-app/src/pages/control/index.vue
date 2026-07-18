@@ -228,6 +228,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getAllLights, batchSwitch as batchSwitchApi, getStrategyList, deleteStrategy, addStrategy as addStrategyApi, getThreshold, type Light, type TimedStrategy, type ThresholdControl } from '@/api/light'
 
 const currentTab = ref('remote')
@@ -317,6 +318,17 @@ onMounted(() => {
   fetchLights()
   loadStrategies()
   loadThresholdConfig()
+})
+
+onShow(() => {
+  fetchLights()
+  loadStrategies()
+  loadThresholdConfig()
+})
+
+onPullDownRefresh(async () => {
+  await Promise.all([fetchLights(), loadStrategies(), loadThresholdConfig()])
+  uni.stopPullDownRefresh()
 })
 
 async function fetchLights() {

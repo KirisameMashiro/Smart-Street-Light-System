@@ -133,8 +133,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="亮度" width="90">
-          <template #default="{ row }">{{ row.brightness ?? 0 }}%</template>
+        <el-table-column label="亮度" width="130">
+          <template #default="{ row }">
+            <div class="brightness-cell">
+              <span>{{ row.brightness ?? 0 }}%</span>
+              <el-tag
+                :type="row.manualControl ? 'warning' : 'success'"
+                size="small"
+                effect="plain"
+                style="margin-left: 6px"
+              >
+                {{ row.manualControl ? '手动' : '自动' }}
+              </el-tag>
+            </div>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right" class-name="table-ops">
           <template #default="{ row }">
@@ -152,13 +164,21 @@
         <div class="dim-light-info">
           <div class="dim-light-name">{{ currentDimLight.lightName || '-' }}</div>
           <div class="dim-light-code">{{ currentDimLight.lightCode }}</div>
-          <el-tag
-            :type="LIGHT_STATUS_MAP[currentDimLight.status]?.type"
-            size="small"
-            style="margin-top: 8px"
-          >
-            {{ LIGHT_STATUS_MAP[currentDimLight.status]?.label }}
-          </el-tag>
+          <div style="margin-top: 8px; display: flex; justify-content: center; gap: 8px">
+            <el-tag
+              :type="LIGHT_STATUS_MAP[currentDimLight.status]?.type"
+              size="small"
+            >
+              {{ LIGHT_STATUS_MAP[currentDimLight.status]?.label }}
+            </el-tag>
+            <el-tag
+              :type="currentDimLight.manualControl ? 'warning' : 'success'"
+              size="small"
+              effect="plain"
+            >
+              {{ currentDimLight.manualControl ? '手动控制' : '自动控制' }}
+            </el-tag>
+          </div>
         </div>
         <el-alert
           v-if="currentDimLight.status === 2"
@@ -168,6 +188,24 @@
           style="margin-bottom: 16px"
         >
           <template #title>该路灯处于故障状态，无法进行调光操作。请前往「故障处理」页面进行修复。</template>
+        </el-alert>
+        <el-alert
+          v-else-if="!currentDimLight.manualControl"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #title>当前为自动调光模式，亮度由定时策略或阈值联动自动调节。手动下发亮度后将切换为手动控制模式，定时策略将不再自动调节此路灯。</template>
+        </el-alert>
+        <el-alert
+          v-else
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        >
+          <template #title>当前为手动控制模式，定时策略不会自动调节此路灯的亮度和开关状态。</template>
         </el-alert>
         <div class="dim-slider-row">
           <span class="dim-label">亮度</span>
@@ -533,5 +571,9 @@ onMounted(loadData)
 }
 .group-name {
   font-weight: 500;
+}
+.brightness-cell {
+  display: flex;
+  align-items: center;
 }
 </style>

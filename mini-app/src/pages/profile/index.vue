@@ -150,6 +150,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import {
   getLightStats,
@@ -184,6 +185,17 @@ const roleText = computed(() => {
 onMounted(() => {
   userStore.loadUser()
   loadStats()
+})
+
+onShow(() => {
+  userStore.loadUser()
+  loadStats()
+})
+
+onPullDownRefresh(async () => {
+  userStore.loadUser()
+  await loadStats()
+  uni.stopPullDownRefresh()
 })
 
 async function loadStats() {

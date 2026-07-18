@@ -1,12 +1,22 @@
 :root {
-  --primary: #409eff;
-  --primary-dark: #2b7fd6;
-  --success: #67c23a;
-  --warning: #e6a23c;
-  --danger: #f56c6c;
-  --info: #909399;
-  --bg: #f0f2f5;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  /* 动物园森林绿主题 */
+  --primary: #2e7d32;
+  --primary-dark: #1b5e20;
+  --primary-light: #4caf50;
+  --success: #66bb6a;
+  --warning: #ffb74d;
+  --danger: #ef5350;
+  --info: #78909c;
+  --bg: #f5f7f0;
+  --card-shadow: 0 2px 8px rgba(46, 125, 50, 0.1);
+
+  /* 动物园特色色 */
+  --forest-dark: #1b5e20;
+  --forest-main: #2e7d32;
+  --forest-light: #4caf50;
+  --tree-bark: #795548;
+  --earth-brown: #8d6e63;
+  --leaf-yellow: #cddc39;
 }
 
 * {

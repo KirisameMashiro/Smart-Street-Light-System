@@ -124,7 +124,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { getAlertPage, handleAlert as handleAlertApi, type Alert } from '@/api/light'
+
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+const REFRESH_INTERVAL = 30000
 
 const alertList = ref<Alert[]>([])
 const loading = ref(false)
@@ -156,7 +160,34 @@ const handleLoading = ref(false)
 onMounted(() => {
   loadAlerts()
   loadStats()
+  startRefreshTimer()
 })
+
+onShow(() => {
+  loadAlerts()
+  loadStats()
+  startRefreshTimer()
+})
+
+onPullDownRefresh(async () => {
+  await Promise.all([loadAlerts(), loadStats()])
+  uni.stopPullDownRefresh()
+})
+
+function startRefreshTimer() {
+  if (refreshTimer) return
+  refreshTimer = setInterval(() => {
+    loadAlerts()
+    loadStats()
+  }, REFRESH_INTERVAL)
+}
+
+function stopRefreshTimer() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
 
 async function loadAlerts() {
   loading.value = true

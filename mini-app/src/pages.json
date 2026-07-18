@@ -12,7 +12,9 @@
       "style": {
         "navigationBarTitleText": "智慧路灯",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {
@@ -20,7 +22,9 @@
       "style": {
         "navigationBarTitleText": "实时监控",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {
@@ -28,7 +32,9 @@
       "style": {
         "navigationBarTitleText": "设备详情",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {
@@ -36,7 +42,9 @@
       "style": {
         "navigationBarTitleText": "远程控制",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {
@@ -44,7 +52,9 @@
       "style": {
         "navigationBarTitleText": "告警管理",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {
@@ -108,7 +118,9 @@
       "style": {
         "navigationBarTitleText": "个人中心",
         "navigationBarBackgroundColor": "#0a1628",
-        "navigationBarTextStyle": "white"
+        "navigationBarTextStyle": "white",
+        "enablePullDownRefresh": true,
+        "backgroundTextStyle": "light"
       }
     },
     {

@@ -257,5 +257,5 @@ def main():
         print("\n[Info] Stopping...")
 
 
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()

@@ -10,7 +10,6 @@ import com.smartlight.backend.mapper.AlertMapper;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.service.AlertService;
 import com.smartlight.backend.service.MqttPublishService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +20,11 @@ import java.time.LocalDateTime;
 public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements AlertService {
 
     private final LightMapper lightMapper;
+    private final MqttPublishService mqttPublishService;
 
-    @Autowired
-    @Lazy
-    private MqttPublishService mqttPublishService;
-
-    public AlertServiceImpl(LightMapper lightMapper) {
+    public AlertServiceImpl(LightMapper lightMapper, @Lazy MqttPublishService mqttPublishService) {
         this.lightMapper = lightMapper;
+        this.mqttPublishService = mqttPublishService;
     }
 
     @Override

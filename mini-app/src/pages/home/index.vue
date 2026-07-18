@@ -100,7 +100,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { getLightStats, getRecentAlerts, type Alert } from '@/api/light'
 
@@ -115,11 +116,43 @@ const stats = ref({
 })
 
 const recentAlerts = ref<any[]>([])
+let timer: ReturnType<typeof setInterval> | null = null
+const POLL_INTERVAL = 30000
 
 onMounted(() => {
   fetchStats()
   fetchAlerts()
+  startPolling()
 })
+
+onUnmounted(() => {
+  stopPolling()
+})
+
+onShow(() => {
+  fetchStats()
+  fetchAlerts()
+})
+
+onPullDownRefresh(async () => {
+  await Promise.all([fetchStats(), fetchAlerts()])
+  uni.stopPullDownRefresh()
+})
+
+function startPolling() {
+  if (timer) return
+  timer = setInterval(() => {
+    fetchStats()
+    fetchAlerts()
+  }, POLL_INTERVAL)
+}
+
+function stopPolling() {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
 
 async function fetchStats() {
   try {

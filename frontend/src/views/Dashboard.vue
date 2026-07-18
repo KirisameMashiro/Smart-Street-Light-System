@@ -25,7 +25,7 @@
         :value="stats.total"
         unit=" 盏"
         icon="Sunny"
-        color="#409eff"
+        color="#2e7d32"
         desc="全部在册设备"
       />
       <StatCard
@@ -33,7 +33,7 @@
         :value="stats.online"
         unit=" 盏"
         icon="Lightning"
-        color="#67c23a"
+        color="#43a047"
         :desc="`占比 ${onlineRate}%`"
       />
       <StatCard
@@ -41,14 +41,14 @@
         :value="stats.offline"
         unit=" 盏"
         icon="TurnOff"
-        color="#909399"
+        color="#78909c"
       />
       <StatCard
         label="设备故障"
         :value="stats.fault"
         unit=" 盏"
         icon="WarningFilled"
-        color="#f56c6c"
+        color="#ef5350"
         :desc="stats.fault > 0 ? '需及时处理' : '运行良好'"
       />
       <StatCard
@@ -56,7 +56,7 @@
         :value="unhandled"
         unit=" 条"
         icon="BellFilled"
-        color="#e6a23c"
+        color="#ffb74d"
       />
     </div>
 
@@ -243,7 +243,7 @@ function renderCharts() {
     pieChart.setOption({
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
       legend: { bottom: 0 },
-      color: [STATUS_COLORS.on, STATUS_COLORS.off, STATUS_COLORS.fault],
+      color: ['#43a047', '#78909c', '#ef5350'],
       series: [
         {
           name: '路灯状态',
@@ -289,8 +289,8 @@ function renderCharts() {
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#409eff' },
-              { offset: 1, color: '#79bbff' }
+              { offset: 0, color: '#2e7d32' },
+              { offset: 1, color: '#66bb6a' }
             ])
           }
         }
@@ -320,8 +320,8 @@ function renderCharts() {
           itemStyle: {
             borderRadius: [4, 4, 0, 0],
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: '#67c23a' },
-              { offset: 1, color: '#95d475' }
+              { offset: 0, color: '#43a047' },
+              { offset: 1, color: '#81c784' }
             ])
           }
         }

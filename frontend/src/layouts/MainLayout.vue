@@ -7,17 +7,17 @@
       :class="{ 'is-collapsed': collapsed }"
     >
       <div class="logo">
-        <el-icon class="logo-icon"><Sunny /></el-icon>
-        <span v-show="!collapsed" class="logo-text">智慧路灯</span>
+        <span class="logo-icon">🌿</span>
+        <span v-show="!collapsed" class="logo-text">动物园照明</span>
       </div>
       <el-menu
         :default-active="activeMenu"
         :collapse="collapsed"
         :collapse-transition="false"
         :default-openeds="openedMenus"
-        background-color="#001529"
-        text-color="#b7c0cd"
-        active-text-color="#fff"
+        background-color="transparent"
+        text-color="rgba(255, 255, 255, 0.7)"
+        active-text-color="#a5d6a7"
         router
         unique-opened
       >
@@ -53,14 +53,14 @@
     >
       <div class="mobile-drawer" @click.stop>
         <div class="logo">
-          <el-icon class="logo-icon"><Sunny /></el-icon>
-          <span class="logo-text">智慧路灯</span>
+          <span class="logo-icon">🌿</span>
+          <span class="logo-text">动物园照明</span>
         </div>
         <el-menu
           :default-active="activeMenu"
-          background-color="#001529"
-          text-color="#b7c0cd"
-          active-text-color="#fff"
+          background-color="transparent"
+          text-color="rgba(255, 255, 255, 0.7)"
+          active-text-color="#a5d6a7"
           router
           @select="mobileMenuOpen = false"
         >
@@ -116,7 +116,7 @@
             <el-breadcrumb-item>{{ currentGroup }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
           </el-breadcrumb>
-          <span v-else class="mobile-page-title">{{ currentTitle || '智慧路灯' }}</span>
+          <span v-else class="mobile-page-title">{{ currentTitle || '动物园照明' }}</span>
         </div>
         <div class="header-right">
           <el-badge :value="unhandledCount" :hidden="unhandledCount === 0" :max="99">
@@ -411,7 +411,7 @@ onUnmounted(() => {
 }
 
 .aside {
-  background-color: #001529;
+  background: linear-gradient(180deg, #1b5e20 0%, #2e7d32 100%);
   transition: width 0.25s;
   overflow-x: hidden;
   overflow-y: auto;
@@ -431,11 +431,11 @@ onUnmounted(() => {
   color: #fff;
   overflow: hidden;
   white-space: nowrap;
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .logo-icon {
   font-size: 26px;
-  color: #f5a623;
 }
 
 .logo-text {
@@ -445,15 +445,29 @@ onUnmounted(() => {
 
 .aside :deep(.el-menu) {
   border-right: none;
+  background-color: transparent;
 }
 
 .aside :deep(.el-sub-menu__title:hover),
 .aside :deep(.el-menu-item:hover) {
-  background-color: #1d2b3f !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .aside :deep(.el-menu-item.is-active) {
-  background-color: var(--primary) !important;
+  background-color: rgba(76, 175, 80, 0.3) !important;
+  color: #a5d6a7 !important;
+}
+
+.aside :deep(.el-sub-menu__title) {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.aside :deep(.el-menu-item) {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.aside :deep(.el-menu-item:hover) {
+  color: #fff !important;
 }
 
 .header {
@@ -461,7 +475,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   padding: 0 16px;
   flex-shrink: 0;
 }
@@ -510,7 +524,7 @@ onUnmounted(() => {
 }
 
 .avatar {
-  background-color: var(--primary);
+  background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%);
   color: #fff;
   font-size: 14px;
 }
@@ -572,7 +586,7 @@ onUnmounted(() => {
   left: 0;
   width: 260px;
   height: 100%;
-  background-color: #001529;
+  background: linear-gradient(180deg, #1b5e20 0%, #2e7d32 100%);
   transform: translateX(-100%);
   transition: transform 0.3s ease;
   overflow-y: auto;
@@ -584,6 +598,12 @@ onUnmounted(() => {
 
 .mobile-drawer :deep(.el-menu) {
   border-right: none;
+  background-color: transparent;
+}
+
+.mobile-drawer :deep(.el-sub-menu__title),
+.mobile-drawer :deep(.el-menu-item) {
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* 移动端顶部栏紧凑 */
