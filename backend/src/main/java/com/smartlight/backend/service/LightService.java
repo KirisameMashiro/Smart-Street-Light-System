@@ -47,4 +47,14 @@ public interface LightService extends IService<Light> {
      * 获取全量路灯列表（优先从 Redis 缓存读取）
      */
     List<Light> getCachedList();
+
+    /**
+     * 释放手动控制，恢复自动控制
+     */
+    boolean releaseManualControl(Long id);
+
+    /**
+     * 批量释放手动控制，恢复自动控制
+     */
+    boolean releaseManualControlBatch(List<Long> ids);
 }

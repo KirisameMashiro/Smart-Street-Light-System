@@ -61,6 +61,16 @@ export function setLightBrightness(id, brightness) {
   })
 }
 
+// 释放手动控制，恢复自动控制
+export function releaseManualControl(id) {
+  return request.put(`/lights/${id}/release-manual`)
+}
+
+// 批量释放手动控制，恢复自动控制
+export function releaseManualControlBatch(ids) {
+  return request.put('/lights/release-manual-batch', ids)
+}
+
 // 路灯状态统计（总数、在线/离线/故障）
 export function getLightStats() {
   return request.get('/lights/stats')

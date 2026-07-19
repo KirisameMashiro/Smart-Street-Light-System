@@ -88,6 +88,16 @@ public class LightController {
         return Result.success(lightService.setBrightness(id, brightness));
     }
 
+    @PutMapping("/{id}/release-manual")
+    public Result<Boolean> releaseManualControl(@PathVariable Long id) {
+        return Result.success(lightService.releaseManualControl(id));
+    }
+
+    @PutMapping("/release-manual-batch")
+    public Result<Boolean> releaseManualControlBatch(@RequestBody List<Long> ids) {
+        return Result.success(lightService.releaseManualControlBatch(ids));
+    }
+
     @GetMapping("/stats")
     public Result<?> getStats() {
         long online = lightService.countByStatus(1);

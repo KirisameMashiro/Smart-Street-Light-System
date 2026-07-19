@@ -261,4 +261,31 @@ public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements
             log.warn("路灯缓存失效失败: {}", e.getMessage());
         }
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean releaseManualControl(Long id) {
+        Light light = this.getById(id);
+        if (light == null) {
+            return false;
+        }
+        light.setManualControl(false);
+        boolean result = this.updateById(light);
+        evictCache();
+        log.info("路灯 {} 已释放手动控制，恢复自动控制", light.getLightCode());
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean releaseManualControlBatch(List<Long> ids) {
+        List<Light> lights = this.listByIds(ids);
+        for (Light light : lights) {
+            light.setManualControl(false);
+        }
+        boolean result = this.updateBatchById(lights);
+        evictCache();
+        log.info("已批量释放 {} 盏路灯的手动控制", lights.size());
+        return result;
+    }
 }

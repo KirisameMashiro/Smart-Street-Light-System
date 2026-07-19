@@ -15,6 +15,11 @@
           :disabled="selection.length === 0"
           @click="onBatchSwitch(0)"
         >批量关灯</el-button>
+        <el-button
+          type="warning"
+          :disabled="selection.length === 0"
+          @click="onBatchReleaseManual"
+        >批量取消手动</el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
       </div>
     </div>
@@ -62,6 +67,12 @@
                 :disabled="g.faultCount === g.count"
                 @click="onGroupSwitch(g, 0)"
               >全部关灯</el-button>
+              <el-button
+                size="small"
+                type="warning"
+                :disabled="g.faultCount === g.count"
+                @click="onGroupReleaseManual(g)"
+              >全部取消手动</el-button>
             </div>
           </div>
         </div>
@@ -148,11 +159,18 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right" class-name="table-ops">
+        <el-table-column label="操作" width="260" fixed="right" class-name="table-ops">
           <template #default="{ row }">
             <el-button link type="success" :disabled="row.status === 2" @click="onSingleSwitch(row, 1)">开灯</el-button>
             <el-button link type="info" :disabled="row.status === 2" @click="onSingleSwitch(row, 0)">关灯</el-button>
             <el-button link type="primary" :disabled="row.status === 2" @click="onSelectSingle(row)">调光</el-button>
+            <el-button
+              v-if="row.manualControl"
+              link
+              type="warning"
+              :disabled="row.status === 2"
+              @click="onReleaseManual(row)"
+            >取消手动</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -245,7 +263,7 @@ import {
   Sunny,
   Operation
 } from '@element-plus/icons-vue'
-import { getAllLights, batchSwitchLight, setLightBrightness, getDistricts, getRoads } from '@/api/light'
+import { getAllLights, batchSwitchLight, setLightBrightness, getDistricts, getRoads, releaseManualControl, releaseManualControlBatch } from '@/api/light'
 import {
   DEVICE_TYPE_OPTIONS,
   GROUP_BY_OPTIONS,
@@ -470,6 +488,99 @@ async function onSingleSwitch(row, status) {
     broadcastLightUpdate()
   } catch (e) {
     await logOperation(status === 1 ? 'switch_on' : 'switch_off', `${text}「${name}」`, '失败')
+  }
+}
+
+// 取消手动控制
+async function onReleaseManual(row) {
+  const name = row.lightName || row.lightCode
+  try {
+    await releaseManualControl(row.id)
+    ElMessage.success(`已取消「${name}」的手动控制，恢复自动控制`)
+    await logOperation('release_manual', `取消「${name}」手动控制`, '成功')
+    loadData()
+    broadcastLightUpdate()
+  } catch (e) {
+    await logOperation('release_manual', `取消「${name}」手动控制`, '失败')
+  }
+}
+
+// 批量取消手动控制（基于勾选）
+async function onBatchReleaseManual() {
+  const manualIds = selection.value.filter((r) => r.manualControl && r.status !== 2).map((r) => r.id)
+  const faultCount = selection.value.filter((r) => r.status === 2).length
+  const notManualCount = selection.value.filter((r) => !r.manualControl && r.status !== 2).length
+  if (!manualIds.length) {
+    let msg = ''
+    if (faultCount > 0 && notManualCount > 0) {
+      msg = `选中的 ${selection.value.length} 盏路灯中，${faultCount} 盏故障，${notManualCount} 盏已为自动控制，无可取消手动控制的路灯`
+    } else if (faultCount > 0) {
+      msg = `选中的 ${selection.value.length} 盏路灯均为故障状态，无法取消手动控制`
+    } else {
+      msg = `选中的 ${selection.value.length} 盏路灯均为自动控制，无需取消手动控制`
+    }
+    ElMessage.warning(msg)
+    return
+  }
+  const confirmText = faultCount > 0 || notManualCount > 0
+    ? `确定要取消选中的 ${manualIds.length} 盏路灯的手动控制吗？（${faultCount} 盏故障路灯和 ${notManualCount} 盏自动控制路灯将被跳过）`
+    : `确定要取消选中的 ${manualIds.length} 盏路灯的手动控制吗？`
+  try {
+    await ElMessageBox.confirm(confirmText, '批量操作', { type: 'warning' })
+  } catch (e) {
+    return
+  }
+  try {
+    await releaseManualControlBatch(manualIds)
+    const message = faultCount > 0 || notManualCount > 0
+      ? `已取消 ${manualIds.length} 盏路灯的手动控制（${faultCount} 盏故障和 ${notManualCount} 盏自动控制路灯已跳过）`
+      : `已取消 ${manualIds.length} 盏路灯的手动控制`
+    ElMessage.success(message)
+    await logOperation('batch_release_manual', `批量取消 ${manualIds.length} 盏路灯手动控制`, '成功')
+    loadData()
+    broadcastLightUpdate()
+  } catch (e) {
+    await logOperation('batch_release_manual', `批量取消 ${manualIds.length} 盏路灯手动控制`, '失败')
+  }
+}
+
+// 分组取消手动控制
+async function onGroupReleaseManual(group) {
+  const groupData = filteredData.value.filter((d) => d[groupBy.value] === group.key)
+  const manualIds = groupData.filter((d) => d.manualControl && d.status !== 2).map((d) => d.id)
+  const faultCount = groupData.filter((d) => d.status === 2).length
+  const notManualCount = groupData.filter((d) => !d.manualControl && d.status !== 2).length
+  if (!manualIds.length) {
+    let msg = ''
+    if (faultCount > 0 && notManualCount > 0) {
+      msg = `「${group.label}」分组下的 ${group.count} 盏路灯中，${faultCount} 盏故障，${notManualCount} 盏已为自动控制，无可取消手动控制的路灯`
+    } else if (faultCount > 0) {
+      msg = `「${group.label}」分组下的 ${group.count} 盏路灯均为故障状态，无法取消手动控制`
+    } else {
+      msg = `「${group.label}」分组下的 ${group.count} 盏路灯均为自动控制，无需取消手动控制`
+    }
+    ElMessage.warning(msg)
+    return
+  }
+  const confirmText = faultCount > 0 || notManualCount > 0
+    ? `确定要取消「${group.label}」分组下的 ${manualIds.length} 盏路灯的手动控制吗？（${faultCount} 盏故障路灯和 ${notManualCount} 盏自动控制路灯将被跳过）`
+    : `确定要取消「${group.label}」分组下的 ${manualIds.length} 盏路灯的手动控制吗？`
+  try {
+    await ElMessageBox.confirm(confirmText, '分组操作', { type: 'warning' })
+  } catch (e) {
+    return
+  }
+  try {
+    await releaseManualControlBatch(manualIds)
+    const message = faultCount > 0 || notManualCount > 0
+      ? `已取消「${group.label}」 ${manualIds.length} 盏路灯的手动控制（${faultCount} 盏故障和 ${notManualCount} 盏自动控制路灯已跳过）`
+      : `已取消「${group.label}」 ${manualIds.length} 盏路灯的手动控制`
+    ElMessage.success(message)
+    await logOperation('batch_release_manual', `分组取消「${group.label}」${manualIds.length} 盏路灯手动控制`, '成功')
+    loadData()
+    broadcastLightUpdate()
+  } catch (e) {
+    await logOperation('batch_release_manual', `分组取消「${group.label}」${manualIds.length} 盏路灯手动控制`, '失败')
   }
 }
 
