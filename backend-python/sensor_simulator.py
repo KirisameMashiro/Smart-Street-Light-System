@@ -135,6 +135,8 @@ def on_message(client, userdata, msg):
     topic = msg.topic
     payload = msg.payload.decode('utf-8')
 
+    print(f"[MQTT RECV] Topic: {topic}, Payload: {payload}")
+
     parts = topic.split('/')
     if len(parts) < 3:
         return

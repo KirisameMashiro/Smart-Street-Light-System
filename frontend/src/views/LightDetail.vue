@@ -163,7 +163,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Refresh, InfoFilled, WarningFilled } from '@element-plus/icons-vue'
-import { getLightById, setLightBrightness, updateLight } from '@/api/light'
+import { getLightById, setLightBrightness, updateLight, releaseManualControl as releaseManualControlApi } from '@/api/light'
 import {
   getLatestSensorData,
   getAverageSensorData,
@@ -258,7 +258,7 @@ async function loadAll() {
 
 async function releaseManualControl() {
   try {
-    await updateLight({ id: light.value.id, manualControl: false })
+    await releaseManualControlApi(lightId)
     light.value.manualControl = false
     ElMessage.success('已释放为自动控制模式')
     appStore.notifyLightDataChanged()
