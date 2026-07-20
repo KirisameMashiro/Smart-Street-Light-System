@@ -278,23 +278,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="监控" prop="hasCamera">
-              <el-select v-model="form.hasCamera" placeholder="请选择" clearable style="width:100%">
-                <el-option :value="true" label="有监控" />
-                <el-option :value="false" label="无监控" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="广播" prop="hasSpeaker">
-              <el-select v-model="form.hasSpeaker" placeholder="请选择" clearable style="width:100%">
-                <el-option :value="true" label="有广播" />
-                <el-option :value="false" label="无广播" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
+                    <el-col :span="12">
             <el-form-item label="额定功率(W)" prop="ratedPower">
               <el-input-number v-model="form.ratedPower" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
