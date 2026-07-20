@@ -203,6 +203,10 @@ def publish_sensor_data(client):
             continue
 
         for light in snapshot:
+            if light['id'] == 30:  # 跳过 ID 为 30 的路灯
+                print(f"[Skip] Light ID 30 skipped")
+                continue
+            
             data = generate_sensor_data(light)
             topic = f"smartlight/sensor/{light['id']}"
             payload = json.dumps(data)
