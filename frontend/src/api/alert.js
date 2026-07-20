@@ -15,6 +15,11 @@ export function handleAlert(id, data) {
   return request.put(`/alerts/${id}/handle`, data)
 }
 
+// 批量处理报警
+export function handleAlertBatch(data) {
+  return request.put('/alerts/handle-batch', data)
+}
+
 // 获取未处理报警数量
 export function getUnhandledCount() {
   return request.get('/alerts/unhandled-count')

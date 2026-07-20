@@ -261,12 +261,6 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator']
   },
   {
-    title: '碳减排分析',
-    path: '/carbon',
-    icon: 'TrendCharts',
-    roles: ['admin', 'municipal']
-  },
-  {
     title: '智能中心',
     icon: 'MagicStick',
     roles: ['admin', 'municipal', 'operator'],

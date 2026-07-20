@@ -9,6 +9,8 @@ import com.smartlight.backend.service.AlertService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * 报警信息管理 API
  */
@@ -53,6 +55,18 @@ public class AlertController {
     @PutMapping("/{id}/handle")
     public Result<Boolean> handle(@PathVariable Long id, @RequestBody AlertHandleDTO handleDTO) {
         return Result.success(alertService.handleAlert(id, handleDTO.getHandler(), handleDTO.getHandleRemark()));
+    }
+
+    /**
+     * 批量处理报警
+     */
+    @PutMapping("/handle-batch")
+    public Result<Integer> handleBatch(@RequestBody AlertHandleDTO handleDTO) {
+        return Result.success(alertService.handleAlertBatch(
+                handleDTO.getIds(),
+                handleDTO.getHandler(),
+                handleDTO.getHandleRemark()
+        ));
     }
 
     /**

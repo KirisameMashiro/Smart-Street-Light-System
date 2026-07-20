@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.smartlight.backend.entity.Alert;
 
+import java.util.List;
+
 public interface AlertService extends IService<Alert> {
 
     /**
@@ -16,6 +18,11 @@ public interface AlertService extends IService<Alert> {
      * 处理报警
      */
     boolean handleAlert(Long id, String handler, String handleRemark);
+
+    /**
+     * 批量处理报警
+     */
+    int handleAlertBatch(List<Long> ids, String handler, String handleRemark);
 
     /**
      * 统计未处理的报警数量

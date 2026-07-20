@@ -20,6 +20,11 @@
         />
         <span class="text-muted">秒</span>
         <el-button :icon="Refresh" :loading="loading" @click="loadAll">刷新</el-button>
+        <el-button
+          type="warning"
+          :disabled="selectedRows.length === 0"
+          @click="openBatchHandle"
+        >批量处理 ({{ selectedRows.length }})</el-button>
       </div>
     </div>
 
@@ -66,7 +71,13 @@
     <!-- 表格 -->
     <div class="table-card">
       <div class="table-wrapper">
-        <el-table :data="tableData" stripe>
+        <el-table
+          ref="tableRef"
+          :data="tableData"
+          stripe
+          @selection-change="onSelectionChange"
+        >
+        <el-table-column type="selection" width="50" :selectable="canSelect" />
         <el-table-column type="index" label="#" width="60" />
         <el-table-column label="所属路灯" width="170">
           <template #default="{ row }">
@@ -152,6 +163,27 @@
       </template>
     </el-dialog>
 
+    <!-- 批量处理弹窗 -->
+    <el-dialog v-model="batchHandleVisible" title="批量处理报警" width="520px">
+      <el-alert type="info" :closable="false" style="margin-bottom: 16px">
+        <template #title>
+          已选择 <strong>{{ selectedRows.length }}</strong> 条未处理报警
+        </template>
+      </el-alert>
+      <el-form :model="batchHandleForm" label-width="80px">
+        <el-form-item label="处理人">
+          <el-input v-model="batchHandleForm.handler" placeholder="处理人" />
+        </el-form-item>
+        <el-form-item label="处理备注">
+          <el-input v-model="batchHandleForm.handleRemark" type="textarea" :rows="3" placeholder="处理说明" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchHandleVisible = false">取消</el-button>
+        <el-button type="primary" :loading="batchSubmitting" @click="onSubmitBatchHandle">确认处理</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 详情弹窗 -->
     <el-dialog v-model="detailVisible" title="报警详情" width="520px">
       <el-descriptions :column="1" border size="small">
@@ -182,7 +214,7 @@ defineOptions({ name: 'Alerts' })
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh } from '@element-plus/icons-vue'
-import { getAlertPage, handleAlert, getUnhandledCount, connectAlertSocket } from '@/api/alert'
+import { getAlertPage, handleAlert, handleAlertBatch, getUnhandledCount, connectAlertSocket } from '@/api/alert'
 import { getAllLights } from '@/api/light'
 import { useUserStore } from '@/store/user'
 import { ALERT_TYPE_MAP, ALERT_LEVEL_MAP, ALERT_STATUS_MAP } from '@/utils/constants'
@@ -193,10 +225,13 @@ const loading = ref(false)
 const autoRefresh = ref(false)
 const interval = ref(5)
 const submitting = ref(false)
+const batchSubmitting = ref(false)
 const tableData = ref([])
 const total = ref(0)
 const unhandled = ref(0)
 const lightOptions = ref([])
+const selectedRows = ref([])
+const tableRef = ref()
 let timer = null
 
 const query = reactive({
@@ -207,6 +242,14 @@ const query = reactive({
   alertLevel: undefined,
   status: undefined
 })
+
+function canSelect(row) {
+  return row.status === 0
+}
+
+function onSelectionChange(rows) {
+  selectedRows.value = rows
+}
 
 function lightNameOf(id) {
   const l = lightOptions.value.find((x) => x.id === id)
@@ -224,6 +267,8 @@ async function loadData() {
     const res = await getAlertPage(query)
     tableData.value = res.data?.records || []
     total.value = res.data?.total || 0
+    // 清空选择
+    selectedRows.value = []
   } finally {
     loading.value = false
   }
@@ -287,6 +332,41 @@ async function onSubmitHandle() {
     loadAll()
   } finally {
     submitting.value = false
+  }
+}
+
+// 批量处理报警
+const batchHandleVisible = ref(false)
+const batchHandleForm = reactive({ handler: '', handleRemark: '' })
+
+function openBatchHandle() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请选择要处理的报警')
+    return
+  }
+  batchHandleForm.handler = userStore.user?.realName || userStore.user?.username || ''
+  batchHandleForm.handleRemark = ''
+  batchHandleVisible.value = true
+}
+
+async function onSubmitBatchHandle() {
+  if (!batchHandleForm.handler) {
+    ElMessage.warning('请输入处理人')
+    return
+  }
+  batchSubmitting.value = true
+  try {
+    const ids = selectedRows.value.map((row) => row.id)
+    const res = await handleAlertBatch({
+      ids,
+      handler: batchHandleForm.handler,
+      handleRemark: batchHandleForm.handleRemark
+    })
+    ElMessage.success(`成功处理 ${res.data || ids.length} 条报警`)
+    batchHandleVisible.value = false
+    loadAll()
+  } finally {
+    batchSubmitting.value = false
   }
 }
 

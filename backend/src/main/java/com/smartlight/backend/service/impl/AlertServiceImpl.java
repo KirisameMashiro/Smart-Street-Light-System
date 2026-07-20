@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements AlertService {
@@ -82,5 +84,37 @@ public class AlertServiceImpl extends ServiceImpl<AlertMapper, Alert> implements
         LambdaQueryWrapper<Alert> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Alert::getStatus, 0);
         return this.count(wrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int handleAlertBatch(List<Long> ids, String handler, String handleRemark) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+
+        LambdaQueryWrapper<Alert> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Alert::getId, ids).eq(Alert::getStatus, 0);
+        List<Alert> alerts = this.list(wrapper);
+
+        int count = 0;
+        for (Alert alert : alerts) {
+            alert.setStatus(1);
+            alert.setHandler(handler);
+            alert.setHandleRemark(handleRemark);
+            alert.setHandleTime(LocalDateTime.now());
+            this.updateById(alert);
+
+            if (Integer.valueOf(5).equals(alert.getAlertType()) && alert.getLightId() != null) {
+                Light light = lightMapper.selectById(alert.getLightId());
+                if (light != null && Integer.valueOf(2).equals(light.getStatus())) {
+                    light.setStatus(1);
+                    lightMapper.updateById(light);
+                    mqttPublishService.publishCombinedControl(light.getLightCode(), 1, light.getBrightness());
+                }
+            }
+            count++;
+        }
+        return count;
     }
 }
