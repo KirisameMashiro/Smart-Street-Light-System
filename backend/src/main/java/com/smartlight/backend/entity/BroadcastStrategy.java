@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.smartlight.backend.handler.IntegerListTypeHandler;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -11,7 +12,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 @Data
-@TableName("broadcast_strategy")
+@TableName(value = "broadcast_strategy", autoResultMap = true)
 public class BroadcastStrategy {
 
     @TableId(type = IdType.AUTO)
@@ -31,7 +32,7 @@ public class BroadcastStrategy {
     @TableField(value = "repeat_type")
     private String repeatType;
 
-    @TableField(value = "custom_days")
+    @TableField(value = "custom_days", typeHandler = IntegerListTypeHandler.class)
     private List<Integer> customDays;
 
     private Integer enabled;

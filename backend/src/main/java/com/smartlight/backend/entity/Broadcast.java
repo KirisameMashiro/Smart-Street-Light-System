@@ -4,13 +4,14 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.smartlight.backend.handler.LongListTypeHandler;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@TableName("broadcast")
+@TableName(value = "broadcast", autoResultMap = true)
 public class Broadcast {
 
     @TableId(type = IdType.AUTO)
@@ -20,7 +21,7 @@ public class Broadcast {
 
     private String content;
 
-    @TableField(value = "light_ids")
+    @TableField(value = "light_ids", typeHandler = LongListTypeHandler.class)
     private List<Long> lightIds;
 
     @TableField(value = "light_codes")

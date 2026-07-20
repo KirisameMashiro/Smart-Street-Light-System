@@ -76,11 +76,18 @@ const routes = [
         component: () => import('@/views/control/OperationLog.vue'),
         meta: { title: '操作日志', keepAlive: true }
       },
+      // ===== 广播管理 =====
       {
-        path: 'control/broadcast',
-        name: 'BroadcastManagement',
-        component: () => import('@/views/BroadcastManagement.vue'),
-        meta: { title: '广播管理', keepAlive: true }
+        path: 'broadcast/design',
+        name: 'BroadcastDesign',
+        component: () => import('@/views/broadcast/BroadcastDesign.vue'),
+        meta: { title: '广播设计', keepAlive: true }
+      },
+      {
+        path: 'broadcast/strategy',
+        name: 'BroadcastStrategy',
+        component: () => import('@/views/broadcast/BroadcastStrategy.vue'),
+        meta: { title: '广播策略', keepAlive: true }
       },
       // ===== 告警管理 =====
       {

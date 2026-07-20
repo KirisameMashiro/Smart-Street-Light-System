@@ -245,8 +245,16 @@ const menuConfig = [
       { title: '远程控制', path: '/control/remote', icon: 'SetUp' },
       { title: '定时策略', path: '/control/strategy', icon: 'Clock' },
       { title: '阈值联动', path: '/control/threshold', icon: 'Connection' },
-      { title: '广播管理', path: '/control/broadcast', icon: 'Speaker' },
       { title: '操作日志', path: '/control/log', icon: 'List' }
+    ]
+  },
+  {
+    title: '广播管理',
+    icon: 'Speaker',
+    roles: ['admin', 'municipal', 'operator'],
+    children: [
+      { title: '广播设计', path: '/broadcast/design', icon: 'Microphone' },
+      { title: '广播策略', path: '/broadcast/strategy', icon: 'Timer' }
     ]
   },
   {
@@ -309,6 +317,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/devices')) return route.path
   if (route.path.startsWith('/monitor')) return route.path
   if (route.path.startsWith('/control')) return route.path
+  if (route.path.startsWith('/broadcast')) return route.path
   if (route.path.startsWith('/system')) return route.path
   if (route.path.startsWith('/ai')) return route.path
   return route.path
