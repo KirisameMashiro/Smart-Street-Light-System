@@ -263,7 +263,8 @@ import {
   Sunny,
   Operation
 } from '@element-plus/icons-vue'
-import { getAllLights, batchSwitchLight, setLightBrightness, getDistricts, getRoads, releaseManualControl, releaseManualControlBatch } from '@/api/light'
+import { getAllLights, batchSwitchLight, setLightBrightness, releaseManualControl, releaseManualControlBatch } from '@/api/light'
+import { getSystemDistricts, getSystemRoads } from '@/api/system'
 import {
   DEVICE_TYPE_OPTIONS,
   GROUP_BY_OPTIONS,
@@ -349,13 +350,13 @@ async function loadData() {
   try {
     const [lightsRes, districtsRes, roadsRes] = await Promise.all([
       getAllLights(),
-      getDistricts(),
-      getRoads()
+      getSystemDistricts(),
+      getSystemRoads()
     ])
     allData.value = lightsRes.data || []
-    districtOptions.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
-    roadOptions.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
-    buildDistrictRoadMap()
+    districtOptions.value = (districtsRes.data || []).map(d => ({ value: d.districtName, label: d.districtName }))
+    roadOptions.value = (roadsRes.data || []).map(r => ({ value: r.roadName, label: r.roadName }))
+    buildDistrictRoadMap(roadsRes.data || [])
   } catch (e) {
     allData.value = []
   } finally {
@@ -363,20 +364,18 @@ async function loadData() {
   }
 }
 
-function buildDistrictRoadMap() {
+function buildDistrictRoadMap(roads) {
   districtRoadMap.value = {}
   roadDistrictMap.value = {}
-  allData.value.forEach(light => {
-    const district = light.district
-    const road = light.road
-    if (district && road) {
-      if (!districtRoadMap.value[district]) {
-        districtRoadMap.value[district] = []
+  roads.forEach(road => {
+    if (road.districtName && road.roadName) {
+      if (!districtRoadMap.value[road.districtName]) {
+        districtRoadMap.value[road.districtName] = []
       }
-      if (!districtRoadMap.value[district].includes(road)) {
-        districtRoadMap.value[district].push(road)
+      if (!districtRoadMap.value[road.districtName].includes(road.roadName)) {
+        districtRoadMap.value[road.districtName].push(road.roadName)
       }
-      roadDistrictMap.value[road] = district
+      roadDistrictMap.value[road.roadName] = road.districtName
     }
   })
 }

@@ -64,10 +64,10 @@ INSERT INTO `road` (`road_name`, `district_id`, `sort_order`, `description`) VAL
 -- ============================================================
 -- 4. 基础数据：设备类型
 -- ============================================================
-INSERT INTO `device_type` (`type_name`, `type_code`, `rated_power`, `description`) VALUES
-('LED-100W', 'LED-100', 100.00, '100W LED 路灯'),
-('LED-150W', 'LED-150', 150.00, '150W LED 路灯'),
-('LED-200W', 'LED-200', 200.00, '200W LED 路灯');
+INSERT INTO `device_type` (`type_name`, `type_code`, `rated_power`, `has_camera`, `has_speaker`, `description`) VALUES
+('LED-100W', 'LED-100', 100.00, 0, 0, '100W LED 路灯 — 基础型'),
+('LED-150W', 'LED-150', 150.00, 1, 0, '150W LED 路灯 — 含监控'),
+('LED-200W', 'LED-200', 200.00, 1, 1, '200W LED 路灯 — 含监控+广播');
 
 -- ============================================================
 -- 5. 路灯设备（29 盏，覆盖多个行政区/路段）

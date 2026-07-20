@@ -46,6 +46,14 @@ public class Light {
     /** 额定功率 (W) */
     private Double ratedPower;
 
+    /** 是否有监控 */
+    @TableField("has_camera")
+    private Boolean hasCamera;
+
+    /** 是否有广播 */
+    @TableField("has_speaker")
+    private Boolean hasSpeaker;
+
     /** 备注 */
     private String remark;
 

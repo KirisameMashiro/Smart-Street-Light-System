@@ -28,6 +28,14 @@
         <el-descriptions-item label="纬度">{{ light.latitude ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="设备类型">{{ light.deviceType || '-' }}</el-descriptions-item>
         <el-descriptions-item label="额定功率(W)">{{ light.ratedPower ?? '-' }}</el-descriptions-item>
+        <el-descriptions-item label="监控">
+          <el-tag v-if="light.hasCamera" type="success" size="small">有</el-tag>
+          <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="广播">
+          <el-tag v-if="light.hasSpeaker" type="success" size="small">有</el-tag>
+          <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="当前亮度(%)">
           <el-slider
             v-model="light.brightness"

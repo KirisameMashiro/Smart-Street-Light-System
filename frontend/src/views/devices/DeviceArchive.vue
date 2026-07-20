@@ -117,6 +117,18 @@
         <el-table-column label="投用日期" width="120">
           <template #default="{ row }">{{ formatDate(row.commissionDate) }}</template>
         </el-table-column>
+        <el-table-column label="监控" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.hasCamera" type="success" size="small">有</el-tag>
+            <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="广播" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.hasSpeaker" type="success" size="small">有</el-tag>
+            <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="额定功率(W)" width="110">
           <template #default="{ row }">{{ row.ratedPower ?? '-' }}</template>
         </el-table-column>
@@ -255,6 +267,7 @@
                 clearable
                 filterable
                 style="width:100%"
+                @change="onFormDeviceTypeChange"
               >
                 <el-option
                   v-for="o in deviceTypeOptions"
@@ -265,7 +278,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+                    <el-col :span="12">
             <el-form-item label="额定功率(W)" prop="ratedPower">
               <el-input-number v-model="form.ratedPower" :min="0" :precision="2" style="width:100%" />
             </el-form-item>
@@ -314,11 +327,9 @@ import {
   updateLight,
   deleteLight,
   batchSwitchLight,
-  getDistricts,
-  getRoads,
-  getDeviceTypes,
   getAllLights
 } from '@/api/light'
+import { getSystemDistricts, getSystemRoads, getSystemDeviceTypes } from '@/api/system'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
@@ -349,6 +360,7 @@ const query = reactive({
 const districtOptions = ref([])
 const roadOptions = ref([])
 const deviceTypeOptions = ref([])
+const deviceTypeMap = ref({})
 const districtRoadMap = ref({})
 
 const filteredRoadOptions = computed(() => {
@@ -366,24 +378,31 @@ const formFilteredRoadOptions = computed(() => {
 async function loadOptions() {
   try {
     const [dRes, rRes, tRes, lightsRes] = await Promise.all([
-      getDistricts(),
-      getRoads(),
-      getDeviceTypes(),
+      getSystemDistricts(),
+      getSystemRoads(),
+      getSystemDeviceTypes(),
       getAllLights()
     ])
-    districtOptions.value = (dRes.data || []).map((v) => ({ value: v, label: v }))
-    roadOptions.value = (rRes.data || []).map((v) => ({ value: v, label: v }))
-    deviceTypeOptions.value = (tRes.data || []).map((v) => ({ value: v, label: v }))
-    
+    districtOptions.value = (dRes.data || []).map((d) => ({ value: d.districtName, label: d.districtName }))
+    roadOptions.value = (rRes.data || []).map((r) => ({ value: r.roadName, label: r.roadName }))
+    const deviceTypes = tRes.data || []
+    deviceTypeOptions.value = deviceTypes.map((t) => ({ value: t.typeName, label: t.typeName }))
+    deviceTypeMap.value = {}
+    deviceTypes.forEach((t) => {
+      if (t.typeName) {
+        deviceTypeMap.value[t.typeName] = { hasCamera: !!t.hasCamera, hasSpeaker: !!t.hasSpeaker, ratedPower: t.ratedPower }
+      }
+    })
+
     const map = {}
-    const lights = lightsRes.data || []
-    lights.forEach(light => {
-      if (light.district && light.road) {
-        if (!map[light.district]) {
-          map[light.district] = []
+    const roads = rRes.data || []
+    roads.forEach(road => {
+      if (road.districtName && road.roadName) {
+        if (!map[road.districtName]) {
+          map[road.districtName] = []
         }
-        if (!map[light.district].includes(light.road)) {
-          map[light.district].push(light.road)
+        if (!map[road.districtName].includes(road.roadName)) {
+          map[road.districtName].push(road.roadName)
         }
       }
     })
@@ -404,6 +423,15 @@ async function loadData() {
     total.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+function onFormDeviceTypeChange(val) {
+  const info = deviceTypeMap.value[val]
+  if (info) {
+    form.hasCamera = info.hasCamera
+    form.hasSpeaker = info.hasSpeaker
+    form.ratedPower = info.ratedPower
   }
 }
 
@@ -540,6 +568,8 @@ const form = reactive({
   brightness: 0,
   deviceType: undefined,
   ratedPower: undefined,
+  hasCamera: false,
+  hasSpeaker: false,
   commissionDate: undefined,
   remark: ''
 })
@@ -575,6 +605,8 @@ function resetForm() {
     brightness: 0,
     deviceType: undefined,
     ratedPower: undefined,
+    hasCamera: false,
+    hasSpeaker: false,
     commissionDate: undefined,
     remark: ''
   })
