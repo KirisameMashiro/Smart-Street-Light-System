@@ -390,7 +390,7 @@ async function loadOptions() {
     deviceTypeMap.value = {}
     deviceTypes.forEach((t) => {
       if (t.typeName) {
-        deviceTypeMap.value[t.typeName] = { hasCamera: !!t.hasCamera, hasSpeaker: !!t.hasSpeaker }
+        deviceTypeMap.value[t.typeName] = { hasCamera: !!t.hasCamera, hasSpeaker: !!t.hasSpeaker, ratedPower: t.ratedPower }
       }
     })
 
@@ -431,6 +431,7 @@ function onFormDeviceTypeChange(val) {
   if (info) {
     form.hasCamera = info.hasCamera
     form.hasSpeaker = info.hasSpeaker
+    form.ratedPower = info.ratedPower
   }
 }
 
