@@ -76,6 +76,12 @@ const routes = [
         component: () => import('@/views/control/OperationLog.vue'),
         meta: { title: '操作日志', keepAlive: true }
       },
+      {
+        path: 'control/broadcast',
+        name: 'BroadcastManagement',
+        component: () => import('@/views/BroadcastManagement.vue'),
+        meta: { title: '广播管理', keepAlive: true }
+      },
       // ===== 告警管理 =====
       {
         path: 'alerts',

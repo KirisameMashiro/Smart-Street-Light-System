@@ -245,6 +245,7 @@ const menuConfig = [
       { title: '远程控制', path: '/control/remote', icon: 'SetUp' },
       { title: '定时策略', path: '/control/strategy', icon: 'Clock' },
       { title: '阈值联动', path: '/control/threshold', icon: 'Connection' },
+      { title: '广播管理', path: '/control/broadcast', icon: 'Speaker' },
       { title: '操作日志', path: '/control/log', icon: 'List' }
     ]
   },

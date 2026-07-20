@@ -327,4 +327,45 @@ CREATE TABLE `device_type` (
     UNIQUE KEY `uk_type_name` (`type_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备类型基础表';
 
+-- ============================================================
+-- 17. 广播设计表
+-- ============================================================
+DROP TABLE IF EXISTS `broadcast`;
+CREATE TABLE `broadcast` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `title`         VARCHAR(200) NOT NULL COMMENT '广播主题',
+    `content`       TEXT DEFAULT NULL COMMENT '广播内容',
+    `light_ids`     JSON DEFAULT NULL COMMENT '关联路灯ID列表',
+    `light_codes`   VARCHAR(1000) DEFAULT NULL COMMENT '关联路灯编号（逗号分隔）',
+    `enabled`       TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_enabled` (`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='广播设计表';
+
+-- ============================================================
+-- 18. 广播策略表
+-- ============================================================
+DROP TABLE IF EXISTS `broadcast_strategy`;
+CREATE TABLE `broadcast_strategy` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `name`          VARCHAR(100) NOT NULL COMMENT '策略名称',
+    `broadcast_id`  BIGINT NOT NULL COMMENT '关联广播ID',
+    `start_time`    TIME NOT NULL COMMENT '开始时间',
+    `end_time`      TIME NOT NULL COMMENT '结束时间',
+    `repeat_type`   VARCHAR(20) DEFAULT 'daily' COMMENT '重复类型: daily-每天, weekdays-工作日, weekend-周末, custom-自定义',
+    `custom_days`   JSON DEFAULT NULL COMMENT '自定义星期 [1,2,3,4,5,6,7]',
+    `enabled`       TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_strategy_name` (`name`),
+    KEY `idx_broadcast_id` (`broadcast_id`),
+    KEY `idx_enabled` (`enabled`),
+    CONSTRAINT `fk_strategy_broadcast` FOREIGN KEY (`broadcast_id`) REFERENCES `broadcast` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='广播策略表';
+
 SET FOREIGN_KEY_CHECKS = 1;
