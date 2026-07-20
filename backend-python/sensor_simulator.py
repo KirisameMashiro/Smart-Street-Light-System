@@ -86,13 +86,19 @@ def generate_sensor_data(light):
     factor = 0.93 + (seed % 140) / 1000.0  # 0.93 ~ 1.07
 
     if status == 0:
-        illuminance = random.randint(0, 50)
+        illuminance = random.randint(5, 50)
         power = round(random.uniform(0.3, 2.0) * factor, 2)
         current = round(random.uniform(0.001, 0.01) * factor, 3)
         voltage = round(random.uniform(215, 225), 1)
     else:
+        # 开灯状态：照度随亮度变化，范围 300~450
         ratio = brightness / 100.0
-        illuminance = int(200 + ratio * 1600)
+        # 照度在 300~450 之间随亮度线性变化，并加入少量随机波动
+        base_illuminance = 300 + ratio * 150
+        illuminance = int(base_illuminance + random.randint(-20, 20))
+        # 确保在范围内
+        illuminance = max(300, min(450, illuminance))
+        
         base_power = (50 + ratio * 100) * factor
         power = round(base_power + random.uniform(-3, 3), 2)
         base_current = (0.3 + ratio * 0.5) * factor

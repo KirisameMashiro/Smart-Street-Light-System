@@ -1,6 +1,7 @@
 package com.smartlight.backend.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -9,6 +10,7 @@ import java.time.LocalDateTime;
  */
 @Data
 @TableName("light")
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Light {
 
     @TableId(type = IdType.AUTO)
