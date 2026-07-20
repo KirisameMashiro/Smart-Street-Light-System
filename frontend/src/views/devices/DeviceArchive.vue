@@ -314,11 +314,9 @@ import {
   updateLight,
   deleteLight,
   batchSwitchLight,
-  getDistricts,
-  getRoads,
-  getDeviceTypes,
   getAllLights
 } from '@/api/light'
+import { getSystemDistricts, getSystemRoads, getSystemDeviceTypes } from '@/api/system'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { formatDate } from '@/utils/format'
 import { logOperation } from '@/utils/log'
@@ -366,24 +364,24 @@ const formFilteredRoadOptions = computed(() => {
 async function loadOptions() {
   try {
     const [dRes, rRes, tRes, lightsRes] = await Promise.all([
-      getDistricts(),
-      getRoads(),
-      getDeviceTypes(),
+      getSystemDistricts(),
+      getSystemRoads(),
+      getSystemDeviceTypes(),
       getAllLights()
     ])
-    districtOptions.value = (dRes.data || []).map((v) => ({ value: v, label: v }))
-    roadOptions.value = (rRes.data || []).map((v) => ({ value: v, label: v }))
-    deviceTypeOptions.value = (tRes.data || []).map((v) => ({ value: v, label: v }))
-    
+    districtOptions.value = (dRes.data || []).map((d) => ({ value: d.districtName, label: d.districtName }))
+    roadOptions.value = (rRes.data || []).map((r) => ({ value: r.roadName, label: r.roadName }))
+    deviceTypeOptions.value = (tRes.data || []).map((t) => ({ value: t.typeName, label: t.typeName }))
+
     const map = {}
-    const lights = lightsRes.data || []
-    lights.forEach(light => {
-      if (light.district && light.road) {
-        if (!map[light.district]) {
-          map[light.district] = []
+    const roads = rRes.data || []
+    roads.forEach(road => {
+      if (road.districtName && road.roadName) {
+        if (!map[road.districtName]) {
+          map[road.districtName] = []
         }
-        if (!map[light.district].includes(light.road)) {
-          map[light.district].push(light.road)
+        if (!map[road.districtName].includes(road.roadName)) {
+          map[road.districtName].push(road.roadName)
         }
       }
     })
