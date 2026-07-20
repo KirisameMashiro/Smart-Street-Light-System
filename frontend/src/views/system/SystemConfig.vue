@@ -163,6 +163,18 @@
             <el-table-column prop="typeName" label="类型名称" width="200" show-overflow-tooltip />
             <el-table-column prop="typeCode" label="类型编码" width="160" show-overflow-tooltip />
             <el-table-column prop="ratedPower" label="额定功率(W)" width="140" />
+            <el-table-column label="监控" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.hasCamera" type="success" size="small">有</el-tag>
+                <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="广播" width="80" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.hasSpeaker" type="success" size="small">有</el-tag>
+                <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+              </template>
+            </el-table-column>
             <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
             <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
               <template #default="{ row }">
@@ -389,6 +401,18 @@
         <el-form-item label="额定功率">
           <el-input-number v-model="deviceTypeForm.ratedPower" :min="0" :step="10" controls-position="right" />
           <span style="margin-left: 8px; color: #909399">W</span>
+        </el-form-item>
+        <el-form-item label="监控">
+          <el-select v-model="deviceTypeForm.hasCamera" placeholder="请选择" style="width:100%">
+            <el-option :value="true" label="有监控" />
+            <el-option :value="false" label="无监控" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="广播">
+          <el-select v-model="deviceTypeForm.hasSpeaker" placeholder="请选择" style="width:100%">
+            <el-option :value="true" label="有广播" />
+            <el-option :value="false" label="无广播" />
+          </el-select>
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="deviceTypeForm.description" type="textarea" :rows="3" placeholder="描述信息（可选）" />
@@ -955,6 +979,8 @@ const deviceTypeForm = reactive({
   typeName: '',
   typeCode: '',
   ratedPower: 0,
+  hasCamera: false,
+  hasSpeaker: false,
   description: ''
 })
 
@@ -969,6 +995,8 @@ function resetDeviceTypeForm() {
     typeName: '',
     typeCode: '',
     ratedPower: 0,
+    hasCamera: false,
+    hasSpeaker: false,
     description: ''
   })
   deviceTypeFormRef.value?.clearValidate()
@@ -994,6 +1022,8 @@ function openDeviceTypeDialog(row) {
       typeName: row.typeName || '',
       typeCode: row.typeCode || '',
       ratedPower: row.ratedPower || 0,
+      hasCamera: !!row.hasCamera,
+      hasSpeaker: !!row.hasSpeaker,
       description: row.description || ''
     })
   } else {

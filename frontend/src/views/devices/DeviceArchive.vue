@@ -267,6 +267,7 @@
                 clearable
                 filterable
                 style="width:100%"
+                @change="onFormDeviceTypeChange"
               >
                 <el-option
                   v-for="o in deviceTypeOptions"
@@ -375,6 +376,7 @@ const query = reactive({
 const districtOptions = ref([])
 const roadOptions = ref([])
 const deviceTypeOptions = ref([])
+const deviceTypeMap = ref({})
 const districtRoadMap = ref({})
 
 const filteredRoadOptions = computed(() => {
@@ -399,7 +401,14 @@ async function loadOptions() {
     ])
     districtOptions.value = (dRes.data || []).map((d) => ({ value: d.districtName, label: d.districtName }))
     roadOptions.value = (rRes.data || []).map((r) => ({ value: r.roadName, label: r.roadName }))
-    deviceTypeOptions.value = (tRes.data || []).map((t) => ({ value: t.typeName, label: t.typeName }))
+    const deviceTypes = tRes.data || []
+    deviceTypeOptions.value = deviceTypes.map((t) => ({ value: t.typeName, label: t.typeName }))
+    deviceTypeMap.value = {}
+    deviceTypes.forEach((t) => {
+      if (t.typeName) {
+        deviceTypeMap.value[t.typeName] = { hasCamera: !!t.hasCamera, hasSpeaker: !!t.hasSpeaker }
+      }
+    })
 
     const map = {}
     const roads = rRes.data || []
@@ -430,6 +439,14 @@ async function loadData() {
     total.value = 0
   } finally {
     loading.value = false
+  }
+}
+
+function onFormDeviceTypeChange(val) {
+  const info = deviceTypeMap.value[val]
+  if (info) {
+    form.hasCamera = info.hasCamera
+    form.hasSpeaker = info.hasSpeaker
   }
 }
 
