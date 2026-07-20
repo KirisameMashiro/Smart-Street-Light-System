@@ -322,6 +322,8 @@ CREATE TABLE `device_type` (
     `type_name`     VARCHAR(100) NOT NULL COMMENT '类型名称',
     `type_code`     VARCHAR(100) DEFAULT NULL COMMENT '类型编码',
     `rated_power`   DECIMAL(10,2) DEFAULT 0 COMMENT '额定功率(W)',
+    `has_camera`    TINYINT(1)   DEFAULT 0 COMMENT '是否有监控',
+    `has_speaker`   TINYINT(1)   DEFAULT 0 COMMENT '是否有广播',
     `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
     `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

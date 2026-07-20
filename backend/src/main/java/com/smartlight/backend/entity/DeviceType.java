@@ -29,6 +29,14 @@ public class DeviceType {
     @TableField("rated_power")
     private BigDecimal ratedPower;
 
+    /** 是否有监控 */
+    @TableField("has_camera")
+    private Boolean hasCamera;
+
+    /** 是否有广播 */
+    @TableField("has_speaker")
+    private Boolean hasSpeaker;
+
     /** 描述 */
     private String description;
 
