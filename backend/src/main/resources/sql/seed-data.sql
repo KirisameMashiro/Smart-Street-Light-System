@@ -3,7 +3,7 @@
 -- 说明: 执行前请先运行 schema.sql 创建表结构
 -- ============================================================
 
-USE smart_light;
+USE dream32;
 
 -- ============================================================
 -- 清空所有表数据（注意外键约束顺序）
@@ -23,6 +23,9 @@ TRUNCATE TABLE `knowledge`;
 TRUNCATE TABLE `light`;
 TRUNCATE TABLE `user`;
 TRUNCATE TABLE `brightness_recommendation`;
+TRUNCATE TABLE `device_type`;
+TRUNCATE TABLE `road`;
+TRUNCATE TABLE `district`;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -36,7 +39,38 @@ INSERT INTO `user` (`username`, `password`, `real_name`, `role`, `status`, `crea
 ('operator', 'e10adc3949ba59abbe56e057f20f883e', '运维人员',   'operator', 1, NOW(), NOW());
 
 -- ============================================================
--- 2. 路灯设备（29 盏，覆盖多个行政区/路段）
+-- 2. 基础数据：行政区
+-- ============================================================
+INSERT INTO `district` (`district_name`, `district_code`, `sort_order`, `description`) VALUES
+('中心区', 'CENTER', 1, '城市中心区域'),
+('城北区', 'NORTH',  2, '城市北部区域'),
+('城东区', 'EAST',   3, '城市东部区域'),
+('滨海区', 'COAST',  4, '沿海区域'),
+('高新区', 'HIGH_TECH', 5, '高新技术开发区');
+
+-- ============================================================
+-- 3. 基础数据：路段（必须先插入行政区才能获取 district_id）
+-- ============================================================
+INSERT INTO `road` (`road_name`, `district_id`, `sort_order`, `description`) VALUES
+('人民路', (SELECT id FROM `district` WHERE district_name = '中心区'), 1, '中心区主干道'),
+('解放路', (SELECT id FROM `district` WHERE district_name = '中心区'), 2, '中心区次干道'),
+('建设路', (SELECT id FROM `district` WHERE district_name = '城北区'), 1, '城北区主干道'),
+('南京路', (SELECT id FROM `district` WHERE district_name = '城东区'), 1, '城东区主干道'),
+('渤海路', (SELECT id FROM `district` WHERE district_name = '滨海区'), 1, '滨海区沿海道路'),
+('黄河路', (SELECT id FROM `district` WHERE district_name = '滨海区'), 2, '滨海区主干道'),
+('创新路', (SELECT id FROM `district` WHERE district_name = '高新区'), 1, '高新区科技街'),
+('创业路', (SELECT id FROM `district` WHERE district_name = '高新区'), 2, '高新区创业街');
+
+-- ============================================================
+-- 4. 基础数据：设备类型
+-- ============================================================
+INSERT INTO `device_type` (`type_name`, `type_code`, `rated_power`, `description`) VALUES
+('LED-100W', 'LED-100', 100.00, '100W LED 路灯'),
+('LED-150W', 'LED-150', 150.00, '150W LED 路灯'),
+('LED-200W', 'LED-200', 200.00, '200W LED 路灯');
+
+-- ============================================================
+-- 5. 路灯设备（29 盏，覆盖多个行政区/路段）
 -- ============================================================
 INSERT INTO `light` (`light_code`, `light_name`, `location`, `longitude`, `latitude`, `status`, `brightness`, `device_type`, `rated_power`, `district`, `road`) VALUES
 ('L-RM-001', '人民路路灯001', '人民路与解放路交叉口', 118.123456, 36.123456, 1, 80, 'LED-100W', 100.00, '中心区', '人民路'),

@@ -2,11 +2,13 @@
 -- 智慧路灯管理系统 - 数据库结构初始化脚本
 -- 可重复执行：每次执行会先删除所有表再重建
 -- ============================================================
-CREATE DATABASE IF NOT EXISTS smart_light
+CREATE DATABASE IF NOT EXISTS dream32
     DEFAULT CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
-USE smart_light;
+USE dream32;
+
+SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================
 -- 1. 系统用户表
@@ -272,3 +274,57 @@ CREATE TABLE `brightness_recommendation` (
     KEY `idx_calc_hour` (`calc_hour`),
     KEY `idx_road_level` (`road_level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='亮度推荐记录表';
+
+-- ============================================================
+-- 14. 行政区基础表
+-- ============================================================
+DROP TABLE IF EXISTS `district`;
+CREATE TABLE `district` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `district_name` VARCHAR(100) NOT NULL COMMENT '行政区名称',
+    `district_code` VARCHAR(100) DEFAULT NULL COMMENT '行政区编码',
+    `sort_order`    INT DEFAULT 0 COMMENT '排序号',
+    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_district_name` (`district_name`),
+    KEY `idx_sort` (`sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行政区基础表';
+
+-- ============================================================
+-- 15. 路段基础表
+-- ============================================================
+DROP TABLE IF EXISTS `road`;
+CREATE TABLE `road` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `road_name`     VARCHAR(200) NOT NULL COMMENT '路段名称',
+    `district_id`   BIGINT NOT NULL COMMENT '所属行政区ID',
+    `sort_order`    INT DEFAULT 0 COMMENT '排序号',
+    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_road_district` (`road_name`, `district_id`),
+    KEY `idx_district` (`district_id`),
+    KEY `idx_sort` (`sort_order`),
+    CONSTRAINT `fk_road_district` FOREIGN KEY (`district_id`) REFERENCES `district` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='路段基础表';
+
+-- ============================================================
+-- 16. 设备类型基础表
+-- ============================================================
+DROP TABLE IF EXISTS `device_type`;
+CREATE TABLE `device_type` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `type_name`     VARCHAR(100) NOT NULL COMMENT '类型名称',
+    `type_code`     VARCHAR(100) DEFAULT NULL COMMENT '类型编码',
+    `rated_power`   DECIMAL(10,2) DEFAULT 0 COMMENT '额定功率(W)',
+    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_type_name` (`type_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='设备类型基础表';
+
+SET FOREIGN_KEY_CHECKS = 1;

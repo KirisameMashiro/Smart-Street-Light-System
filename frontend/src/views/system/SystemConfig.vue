@@ -85,6 +85,94 @@
           </el-table>
         </div>
       </el-tab-pane>
+
+      <!-- 区域管理 -->
+      <el-tab-pane label="区域管理" name="district">
+        <div class="table-card">
+          <div class="toolbar" style="padding: 12px 16px">
+            <el-button type="primary" :icon="Plus" @click="openDistrictDialog()">新增行政区</el-button>
+            <el-button :icon="Refresh" :loading="districtLoading" @click="loadDistricts">刷新</el-button>
+          </div>
+          <el-table :data="districts" stripe>
+            <el-table-column type="index" label="#" width="60" />
+            <el-table-column prop="districtName" label="行政区名称" width="180" show-overflow-tooltip />
+            <el-table-column prop="districtCode" label="行政区编码" width="160" show-overflow-tooltip />
+            <el-table-column prop="sortOrder" label="排序" width="100" />
+            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openDistrictDialog(row)">编辑</el-button>
+                <el-button link type="danger" @click="onDistrictDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+
+      <!-- 路段管理 -->
+      <el-tab-pane label="路段管理" name="road">
+        <div class="table-card">
+          <div class="toolbar" style="padding: 12px 16px">
+            <el-select
+              v-model="roadFilterDistrict"
+              placeholder="按行政区筛选"
+              clearable
+              filterable
+              style="width: 180px; margin-right: 8px"
+              @change="loadRoads"
+            >
+              <el-option
+                v-for="d in districts"
+                :key="d.id"
+                :label="d.districtName"
+                :value="d.id"
+              />
+            </el-select>
+            <el-button type="primary" :icon="Plus" @click="openRoadDialog()">新增路段</el-button>
+            <el-button :icon="Refresh" :loading="roadLoading" @click="loadRoads">刷新</el-button>
+          </div>
+          <el-table :data="filteredRoads" stripe>
+            <el-table-column type="index" label="#" width="60" />
+            <el-table-column prop="roadName" label="路段名称" width="200" show-overflow-tooltip />
+            <el-table-column label="所属行政区" width="160">
+              <template #default="{ row }">
+                {{ districtNameOf(row.districtId) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="sortOrder" label="排序" width="100" />
+            <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+            <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openRoadDialog(row)">编辑</el-button>
+                <el-button link type="danger" @click="onRoadDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
+
+      <!-- 设备类型管理 -->
+      <el-tab-pane label="设备类型管理" name="deviceType">
+        <div class="table-card">
+          <div class="toolbar" style="padding: 12px 16px">
+            <el-button type="primary" :icon="Plus" @click="openDeviceTypeDialog()">新增设备类型</el-button>
+            <el-button :icon="Refresh" :loading="deviceTypeLoading" @click="loadDeviceTypes">刷新</el-button>
+          </div>
+          <el-table :data="deviceTypes" stripe>
+            <el-table-column type="index" label="#" width="60" />
+            <el-table-column prop="typeName" label="类型名称" width="200" show-overflow-tooltip />
+            <el-table-column prop="typeCode" label="类型编码" width="160" show-overflow-tooltip />
+            <el-table-column prop="ratedPower" label="额定功率(W)" width="140" />
+            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openDeviceTypeDialog(row)">编辑</el-button>
+                <el-button link type="danger" @click="onDeviceTypeDelete(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <!-- 新增/编辑规则弹窗 -->
@@ -222,6 +310,95 @@
         <el-button type="primary" :loading="ruleSubmitting" @click="onRuleSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 新增/编辑行政区弹窗 -->
+    <el-dialog
+      v-model="districtDialogVisible"
+      :title="districtIsEdit ? '编辑行政区' : '新增行政区'"
+      width="520px"
+      @closed="resetDistrictForm"
+    >
+      <el-form ref="districtFormRef" :model="districtForm" :rules="districtRules" label-width="100px">
+        <el-form-item label="行政区名称" prop="districtName">
+          <el-input v-model="districtForm.districtName" placeholder="请输入行政区名称" />
+        </el-form-item>
+        <el-form-item label="行政区编码" prop="districtCode">
+          <el-input v-model="districtForm.districtCode" placeholder="请输入行政区编码" />
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="districtForm.sortOrder" :min="0" :step="1" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="districtForm.description" type="textarea" :rows="3" placeholder="描述信息（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="districtDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="districtSubmitting" @click="onDistrictSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增/编辑路段弹窗 -->
+    <el-dialog
+      v-model="roadDialogVisible"
+      :title="roadIsEdit ? '编辑路段' : '新增路段'"
+      width="520px"
+      @closed="resetRoadForm"
+    >
+      <el-form ref="roadFormRef" :model="roadForm" :rules="roadRules" label-width="100px">
+        <el-form-item label="路段名称" prop="roadName">
+          <el-input v-model="roadForm.roadName" placeholder="请输入路段名称" />
+        </el-form-item>
+        <el-form-item label="所属行政区" prop="districtId">
+          <el-select v-model="roadForm.districtId" placeholder="请选择行政区" filterable style="width: 100%">
+            <el-option
+              v-for="d in districts"
+              :key="d.id"
+              :label="d.districtName"
+              :value="d.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="roadForm.sortOrder" :min="0" :step="1" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="roadForm.description" type="textarea" :rows="3" placeholder="描述信息（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="roadDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="roadSubmitting" @click="onRoadSubmit">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 新增/编辑设备类型弹窗 -->
+    <el-dialog
+      v-model="deviceTypeDialogVisible"
+      :title="deviceTypeIsEdit ? '编辑设备类型' : '新增设备类型'"
+      width="520px"
+      @closed="resetDeviceTypeForm"
+    >
+      <el-form ref="deviceTypeFormRef" :model="deviceTypeForm" :rules="deviceTypeRules" label-width="100px">
+        <el-form-item label="类型名称" prop="typeName">
+          <el-input v-model="deviceTypeForm.typeName" placeholder="请输入类型名称" />
+        </el-form-item>
+        <el-form-item label="类型编码" prop="typeCode">
+          <el-input v-model="deviceTypeForm.typeCode" placeholder="请输入类型编码" />
+        </el-form-item>
+        <el-form-item label="额定功率">
+          <el-input-number v-model="deviceTypeForm.ratedPower" :min="0" :step="10" controls-position="right" />
+          <span style="margin-left: 8px; color: #909399">W</span>
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="deviceTypeForm.description" type="textarea" :rows="3" placeholder="描述信息（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="deviceTypeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="deviceTypeSubmitting" @click="onDeviceTypeSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -236,7 +413,19 @@ import {
   getAlertRules,
   addAlertRule,
   updateAlertRule,
-  deleteAlertRule
+  deleteAlertRule,
+  getDistricts,
+  addDistrict,
+  updateDistrict,
+  deleteDistrict,
+  getRoads,
+  addRoad,
+  updateRoad,
+  deleteRoad,
+  getDeviceTypes,
+  addDeviceType,
+  updateDeviceType,
+  deleteDeviceType
 } from '@/api/config'
 import { logOperation } from '@/utils/log'
 import {
@@ -539,9 +728,329 @@ async function onToggleEnabled(row) {
   }
 }
 
+// ============ 行政区管理 ============
+const districtLoading = ref(false)
+const districtSubmitting = ref(false)
+const districts = ref([])
+const districtDialogVisible = ref(false)
+const districtIsEdit = ref(false)
+const districtFormRef = ref()
+const districtForm = reactive({
+  id: undefined,
+  districtName: '',
+  districtCode: '',
+  sortOrder: 0,
+  description: ''
+})
+
+const districtRules = {
+  districtName: [{ required: true, message: '请输入行政区名称', trigger: 'blur' }],
+  districtCode: [{ required: true, message: '请输入行政区编码', trigger: 'blur' }]
+}
+
+function resetDistrictForm() {
+  Object.assign(districtForm, {
+    id: undefined,
+    districtName: '',
+    districtCode: '',
+    sortOrder: 0,
+    description: ''
+  })
+  districtFormRef.value?.clearValidate()
+}
+
+async function loadDistricts() {
+  districtLoading.value = true
+  try {
+    const res = await getDistricts()
+    districts.value = res.data || []
+  } catch (e) {
+    districts.value = []
+  } finally {
+    districtLoading.value = false
+  }
+}
+
+function openDistrictDialog(row) {
+  districtIsEdit.value = !!row
+  if (row) {
+    Object.assign(districtForm, {
+      id: row.id,
+      districtName: row.districtName || '',
+      districtCode: row.districtCode || '',
+      sortOrder: row.sortOrder || 0,
+      description: row.description || ''
+    })
+  } else {
+    resetDistrictForm()
+  }
+  districtDialogVisible.value = true
+}
+
+async function onDistrictSubmit() {
+  try {
+    await districtFormRef.value.validate()
+  } catch (e) {
+    return
+  }
+  districtSubmitting.value = true
+  try {
+    if (districtIsEdit.value) {
+      await updateDistrict({ ...districtForm })
+      ElMessage.success('更新成功')
+      logOperation('config_update', `修改行政区：${districtForm.districtName}`)
+    } else {
+      const { id, ...payload } = districtForm
+      await addDistrict(payload)
+      ElMessage.success('新增成功')
+      logOperation('config_update', `新增行政区：${districtForm.districtName}`)
+    }
+    districtDialogVisible.value = false
+    loadDistricts()
+  } catch (e) {
+  } finally {
+    districtSubmitting.value = false
+  }
+}
+
+async function onDistrictDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除行政区「${row.districtName}」吗？`, '删除确认', {
+      type: 'warning'
+    })
+  } catch (e) {
+    return
+  }
+  try {
+    await deleteDistrict(row.id)
+    ElMessage.success('删除成功')
+    logOperation('config_update', `删除行政区：${row.districtName}`)
+    loadDistricts()
+  } catch (e) {
+  }
+}
+
+// ============ 路段管理 ============
+const roadLoading = ref(false)
+const roadSubmitting = ref(false)
+const roads = ref([])
+const roadFilterDistrict = ref('')
+const roadDialogVisible = ref(false)
+const roadIsEdit = ref(false)
+const roadFormRef = ref()
+const roadForm = reactive({
+  id: undefined,
+  roadName: '',
+  districtId: undefined,
+  sortOrder: 0,
+  description: ''
+})
+
+const roadRules = {
+  roadName: [{ required: true, message: '请输入路段名称', trigger: 'blur' }],
+  districtId: [{ required: true, message: '请选择所属行政区', trigger: 'change' }]
+}
+
+function districtNameOf(districtId) {
+  const d = districts.value.find(d => d.id === districtId)
+  return d ? d.districtName : '-'
+}
+
+const filteredRoads = computed(() => {
+  if (!roadFilterDistrict.value) return roads.value
+  return roads.value.filter(r => r.districtId === roadFilterDistrict.value)
+})
+
+function resetRoadForm() {
+  Object.assign(roadForm, {
+    id: undefined,
+    roadName: '',
+    districtId: undefined,
+    sortOrder: 0,
+    description: ''
+  })
+  roadFormRef.value?.clearValidate()
+}
+
+async function loadRoads() {
+  roadLoading.value = true
+  try {
+    const res = await getRoads()
+    roads.value = res.data || []
+  } catch (e) {
+    roads.value = []
+  } finally {
+    roadLoading.value = false
+  }
+}
+
+function openRoadDialog(row) {
+  roadIsEdit.value = !!row
+  if (row) {
+    Object.assign(roadForm, {
+      id: row.id,
+      roadName: row.roadName || '',
+      districtId: row.districtId,
+      sortOrder: row.sortOrder || 0,
+      description: row.description || ''
+    })
+  } else {
+    resetRoadForm()
+  }
+  roadDialogVisible.value = true
+}
+
+async function onRoadSubmit() {
+  try {
+    await roadFormRef.value.validate()
+  } catch (e) {
+    return
+  }
+  roadSubmitting.value = true
+  try {
+    if (roadIsEdit.value) {
+      await updateRoad({ ...roadForm })
+      ElMessage.success('更新成功')
+      logOperation('config_update', `修改路段：${roadForm.roadName}`)
+    } else {
+      const { id, ...payload } = roadForm
+      await addRoad(payload)
+      ElMessage.success('新增成功')
+      logOperation('config_update', `新增路段：${roadForm.roadName}`)
+    }
+    roadDialogVisible.value = false
+    loadRoads()
+  } catch (e) {
+  } finally {
+    roadSubmitting.value = false
+  }
+}
+
+async function onRoadDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除路段「${row.roadName}」吗？`, '删除确认', {
+      type: 'warning'
+    })
+  } catch (e) {
+    return
+  }
+  try {
+    await deleteRoad(row.id)
+    ElMessage.success('删除成功')
+    logOperation('config_update', `删除路段：${row.roadName}`)
+    loadRoads()
+  } catch (e) {
+  }
+}
+
+// ============ 设备类型管理 ============
+const deviceTypeLoading = ref(false)
+const deviceTypeSubmitting = ref(false)
+const deviceTypes = ref([])
+const deviceTypeDialogVisible = ref(false)
+const deviceTypeIsEdit = ref(false)
+const deviceTypeFormRef = ref()
+const deviceTypeForm = reactive({
+  id: undefined,
+  typeName: '',
+  typeCode: '',
+  ratedPower: 0,
+  description: ''
+})
+
+const deviceTypeRules = {
+  typeName: [{ required: true, message: '请输入类型名称', trigger: 'blur' }],
+  typeCode: [{ required: true, message: '请输入类型编码', trigger: 'blur' }]
+}
+
+function resetDeviceTypeForm() {
+  Object.assign(deviceTypeForm, {
+    id: undefined,
+    typeName: '',
+    typeCode: '',
+    ratedPower: 0,
+    description: ''
+  })
+  deviceTypeFormRef.value?.clearValidate()
+}
+
+async function loadDeviceTypes() {
+  deviceTypeLoading.value = true
+  try {
+    const res = await getDeviceTypes()
+    deviceTypes.value = res.data || []
+  } catch (e) {
+    deviceTypes.value = []
+  } finally {
+    deviceTypeLoading.value = false
+  }
+}
+
+function openDeviceTypeDialog(row) {
+  deviceTypeIsEdit.value = !!row
+  if (row) {
+    Object.assign(deviceTypeForm, {
+      id: row.id,
+      typeName: row.typeName || '',
+      typeCode: row.typeCode || '',
+      ratedPower: row.ratedPower || 0,
+      description: row.description || ''
+    })
+  } else {
+    resetDeviceTypeForm()
+  }
+  deviceTypeDialogVisible.value = true
+}
+
+async function onDeviceTypeSubmit() {
+  try {
+    await deviceTypeFormRef.value.validate()
+  } catch (e) {
+    return
+  }
+  deviceTypeSubmitting.value = true
+  try {
+    if (deviceTypeIsEdit.value) {
+      await updateDeviceType({ ...deviceTypeForm })
+      ElMessage.success('更新成功')
+      logOperation('config_update', `修改设备类型：${deviceTypeForm.typeName}`)
+    } else {
+      const { id, ...payload } = deviceTypeForm
+      await addDeviceType(payload)
+      ElMessage.success('新增成功')
+      logOperation('config_update', `新增设备类型：${deviceTypeForm.typeName}`)
+    }
+    deviceTypeDialogVisible.value = false
+    loadDeviceTypes()
+  } catch (e) {
+  } finally {
+    deviceTypeSubmitting.value = false
+  }
+}
+
+async function onDeviceTypeDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除设备类型「${row.typeName}」吗？`, '删除确认', {
+      type: 'warning'
+    })
+  } catch (e) {
+    return
+  }
+  try {
+    await deleteDeviceType(row.id)
+    ElMessage.success('删除成功')
+    logOperation('config_update', `删除设备类型：${row.typeName}`)
+    loadDeviceTypes()
+  } catch (e) {
+  }
+}
+
 onMounted(() => {
   loadConfig()
   loadRules()
+  loadDistricts()
+  loadRoads()
+  loadDeviceTypes()
 })
 </script>
 
