@@ -47,6 +47,8 @@ CREATE TABLE `light` (
     `rated_power`   DECIMAL(10,2) DEFAULT NULL COMMENT '额定功率 (W)',
     `district`      VARCHAR(50)  DEFAULT NULL COMMENT '行政区',
     `road`          VARCHAR(100) DEFAULT NULL COMMENT '路段',
+    `has_camera`    TINYINT(1)   DEFAULT 0 COMMENT '是否有监控',
+    `has_speaker`   TINYINT(1)   DEFAULT 0 COMMENT '是否有广播',
     `remark`        VARCHAR(500) DEFAULT NULL COMMENT '备注',
     `create_time`   DATETIME     DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time`   DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

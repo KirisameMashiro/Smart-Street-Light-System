@@ -117,6 +117,18 @@
         <el-table-column label="投用日期" width="120">
           <template #default="{ row }">{{ formatDate(row.commissionDate) }}</template>
         </el-table-column>
+        <el-table-column label="监控" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.hasCamera" type="success" size="small">有</el-tag>
+            <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="广播" width="70" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.hasSpeaker" type="success" size="small">有</el-tag>
+            <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="额定功率(W)" width="110">
           <template #default="{ row }">{{ row.ratedPower ?? '-' }}</template>
         </el-table-column>
@@ -262,6 +274,22 @@
                   :label="o.label"
                   :value="o.value"
                 />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="监控" prop="hasCamera">
+              <el-select v-model="form.hasCamera" placeholder="请选择" clearable style="width:100%">
+                <el-option :value="true" label="有监控" />
+                <el-option :value="false" label="无监控" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="广播" prop="hasSpeaker">
+              <el-select v-model="form.hasSpeaker" placeholder="请选择" clearable style="width:100%">
+                <el-option :value="true" label="有广播" />
+                <el-option :value="false" label="无广播" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -538,6 +566,8 @@ const form = reactive({
   brightness: 0,
   deviceType: undefined,
   ratedPower: undefined,
+  hasCamera: false,
+  hasSpeaker: false,
   commissionDate: undefined,
   remark: ''
 })
@@ -573,6 +603,8 @@ function resetForm() {
     brightness: 0,
     deviceType: undefined,
     ratedPower: undefined,
+    hasCamera: false,
+    hasSpeaker: false,
     commissionDate: undefined,
     remark: ''
   })
