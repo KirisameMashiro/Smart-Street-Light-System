@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.smartlight.backend.handler.IntegerListTypeHandler;
 import lombok.Data;
 
@@ -13,6 +14,7 @@ import java.util.List;
 
 @Data
 @TableName(value = "broadcast_strategy", autoResultMap = true)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class BroadcastStrategy {
 
     @TableId(type = IdType.AUTO)
@@ -36,6 +38,18 @@ public class BroadcastStrategy {
     private List<Integer> customDays;
 
     private Integer enabled;
+
+    /** 是否启用人数流量条件 */
+    @TableField("enable_flow")
+    private Boolean enableFlow;
+
+    /** 人数流量条件: gt-大于, lt-小于 */
+    @TableField("flow_condition")
+    private String flowCondition;
+
+    /** 人数流量阈值 */
+    @TableField("flow_threshold")
+    private Integer flowThreshold;
 
     private String description;
 

@@ -361,15 +361,54 @@ CREATE TABLE `broadcast_strategy` (
     `end_time`      TIME NOT NULL COMMENT '结束时间',
     `repeat_type`   VARCHAR(20) DEFAULT 'daily' COMMENT '重复类型: daily-每天, weekdays-工作日, weekend-周末, custom-自定义',
     `custom_days`   JSON DEFAULT NULL COMMENT '自定义星期 [1,2,3,4,5,6,7]',
-    `enabled`       TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
-    `description`   VARCHAR(500) DEFAULT NULL COMMENT '描述',
-    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `update_time`   DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `enabled`           TINYINT DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `enable_flow`       TINYINT(1)  DEFAULT 0 COMMENT '是否启用人数流量条件',
+    `flow_condition`    VARCHAR(10) DEFAULT 'gt' COMMENT '人数流量条件: gt-大于, lt-小于',
+    `flow_threshold`    INT         DEFAULT 0 COMMENT '人数流量阈值',
+    `description`       VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `create_time`       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time`       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_strategy_name` (`name`),
     KEY `idx_broadcast_id` (`broadcast_id`),
     KEY `idx_enabled` (`enabled`),
     CONSTRAINT `fk_strategy_broadcast` FOREIGN KEY (`broadcast_id`) REFERENCES `broadcast` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='广播策略表';
+
+-- ============================================================
+-- 19. 人流量原始数据表
+-- ============================================================
+DROP TABLE IF EXISTS `pedestrian_flow`;
+CREATE TABLE `pedestrian_flow` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `light_id`      BIGINT NOT NULL COMMENT '关联路灯ID',
+    `flow_count`    INT DEFAULT 0 COMMENT '人流量计数',
+    `collect_time`  DATETIME NOT NULL COMMENT '数据采集时间',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_light_id` (`light_id`),
+    KEY `idx_collect_time` (`collect_time`),
+    CONSTRAINT `fk_flow_light` FOREIGN KEY (`light_id`) REFERENCES `light` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人流量原始数据表';
+
+-- ============================================================
+-- 20. 人流量小时聚合表
+-- ============================================================
+DROP TABLE IF EXISTS `pedestrian_flow_hourly`;
+CREATE TABLE `pedestrian_flow_hourly` (
+    `id`            BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `light_id`      BIGINT NOT NULL COMMENT '关联路灯ID',
+    `hour_start`    DATETIME NOT NULL COMMENT '统计小时起点',
+    `avg_flow`      DECIMAL(10,2) DEFAULT NULL COMMENT '小时平均人流量',
+    `max_flow`      INT DEFAULT NULL COMMENT '小时最高人流量',
+    `min_flow`      INT DEFAULT NULL COMMENT '小时最低人流量',
+    `total_flow`    INT DEFAULT 0 COMMENT '小时累计人流量',
+    `data_count`    INT DEFAULT 0 COMMENT '采样次数',
+    `create_time`   DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_light_hour` (`light_id`, `hour_start`),
+    KEY `idx_hour_start` (`hour_start`),
+    CONSTRAINT `fk_flow_hourly_light` FOREIGN KEY (`light_id`) REFERENCES `light` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='人流量小时聚合表';
 
 SET FOREIGN_KEY_CHECKS = 1;
