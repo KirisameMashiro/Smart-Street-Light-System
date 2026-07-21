@@ -1,8 +1,10 @@
 package com.smartlight.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartlight.backend.dto.PedestrianFlowIngestDTO;
 import com.smartlight.backend.dto.SensorDataDTO;
 import com.smartlight.backend.event.MqttReconnectedEvent;
+import com.smartlight.backend.service.PedestrianFlowIngestService;
 import com.smartlight.backend.service.SensorDataIngestService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -24,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 public class MqttConfig {
 
     private final SensorDataIngestService sensorDataIngestService;
+    private final PedestrianFlowIngestService pedestrianFlowIngestService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
@@ -54,13 +57,9 @@ public class MqttConfig {
             log.info("MQTT 未启用 (mqtt.enabled=false)，跳过连接");
             return;
         }
-        // 异步启动连接，不阻塞应用启动
         taskScheduler.submit(this::connectWithRetry);
     }
 
-    /**
-     * 连接 MQTT Broker，失败时自动重试
-     */
     private synchronized void connectWithRetry() {
         if (connecting) return;
         connecting = true;
@@ -89,11 +88,14 @@ public class MqttConfig {
                         String sensorTopic = topicPrefix + "sensor/+";
                         mqttClient.subscribe(sensorTopic, qos);
                         log.info("MQTT 已订阅主题: {}", sensorTopic);
+
+                        String flowTopic = topicPrefix + "flow/+";
+                        mqttClient.subscribe(flowTopic, qos);
+                        log.info("MQTT 已订阅主题: {}", flowTopic);
                     } catch (MqttException e) {
                         log.error("MQTT 订阅失败: {}", e.getMessage());
                     }
                     connecting = false;
-                    // 重连成功后，发布事件让监听器同步路灯状态
                     if (reconnect) {
                         log.info("MQTT 重连成功，发布重连事件...");
                         eventPublisher.publishEvent(new MqttReconnectedEvent(this));
@@ -103,8 +105,6 @@ public class MqttConfig {
                 @Override
                 public void connectionLost(Throwable cause) {
                     log.warn("MQTT 连接断开: {}, 将自动重连...", cause.getMessage());
-                    // Paho 的 setAutomaticReconnect(true) 会处理重连，
-                    // 但如果重连也失败，我们兜底重试
                     scheduleRetry(MAX_RETRY_DELAY_SECONDS);
                 }
 
@@ -118,7 +118,6 @@ public class MqttConfig {
             });
 
             mqttClient.connect(options);
-
             log.info("MQTT 连接中: broker={}", brokerUrl);
             connecting = false;
 
@@ -140,39 +139,40 @@ public class MqttConfig {
             String payload = new String(message.getPayload());
             log.debug("MQTT 收到消息: topic={}, payload={}", topic, payload);
 
-            SensorDataDTO dto = objectMapper.readValue(payload, SensorDataDTO.class);
-
-            if (dto.getLightId() == null) {
-                log.warn("MQTT 消息缺少 lightId 字段，丢弃: {}", payload);
-                return;
+            // 判断是人流量主题 smartlight/flow/{lightId} 还是传感器主题
+            if (topic != null && topic.contains("/flow/")) {
+                // 人流量数据处理
+                PedestrianFlowIngestDTO dto = objectMapper.readValue(payload, PedestrianFlowIngestDTO.class);
+                if (dto.getLightId() == null) {
+                    log.warn("MQTT 人流量消息缺少 lightId，丢弃: {}", payload);
+                    return;
+                }
+                pedestrianFlowIngestService.ingest(dto);
+                log.info("MQTT 人流量数据已入库: lightId={}, flowCount={}, topic={}",
+                        dto.getLightId(), dto.getFlowCount(), topic);
+            } else {
+                // 传感器数据处理
+                SensorDataDTO dto = objectMapper.readValue(payload, SensorDataDTO.class);
+                if (dto.getLightId() == null) {
+                    log.warn("MQTT 传感器消息缺少 lightId 字段，丢弃: {}", payload);
+                    return;
+                }
+                sensorDataIngestService.ingest(dto);
+                log.info("MQTT 传感器数据已入库: lightId={}, topic={}", dto.getLightId(), topic);
             }
-
-            sensorDataIngestService.ingest(dto);
-            log.info("MQTT 传感器数据已入库: lightId={}, topic={}", dto.getLightId(), topic);
         } catch (Exception e) {
             log.error("MQTT 消息处理失败: topic={}, error={}", topic, e.getMessage(), e);
         }
     }
 
-    // ==================== 暴露给 MqttPublishService 的 getter ====================
-
-    /**
-     * 获取 MqttClient 实例（用于发布消息）
-     */
     public MqttClient getMqttClient() {
         return mqttClient;
     }
 
-    /**
-     * 检查 MQTT 是否已连接
-     */
     public boolean isMqttConnected() {
         return mqttClient != null && mqttClient.isConnected();
     }
 
-    /**
-     * 获取 Topic 前缀
-     */
     public String getTopicPrefix() {
         return topicPrefix;
     }
