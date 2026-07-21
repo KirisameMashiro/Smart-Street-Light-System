@@ -186,6 +186,7 @@ const cachedViews = [
   'RealtimeMonitor',
   'SensorData',
   'IlluminanceTrend',
+  'PedestrianFlowMonitor',
   'RemoteControl',
   'TimedStrategy',
   'ThresholdControl',
@@ -234,7 +235,8 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator'],
     children: [
       { title: '实时监测', path: '/monitor/realtime', icon: 'Aim' },
-      { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts' }
+      { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts' },
+      { title: '人流监测', path: '/monitor/pedestrian-flow', icon: 'UserFilled' }
     ]
   },
   {
