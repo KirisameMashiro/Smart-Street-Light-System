@@ -52,6 +52,12 @@ const routes = [
         meta: { title: '人流监测', keepAlive: true }
       },
       {
+        path: 'monitor/pedestrian-flow-trend',
+        name: 'PedestrianFlowTrend',
+        component: () => import('@/views/monitor/PedestrianFlowTrend.vue'),
+        meta: { title: '历史人流趋势', keepAlive: true }
+      },
+      {
         path: 'monitor/illuminance-trend',
         name: 'IlluminanceTrend',
         component: () => import('@/views/monitor/IlluminanceTrend.vue'),
