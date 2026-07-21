@@ -17,21 +17,24 @@ public interface PedestrianFlowMapper extends BaseMapper<PedestrianFlow> {
     @Select("SELECT * FROM pedestrian_flow WHERE light_id = #{lightId} ORDER BY collect_time DESC LIMIT 1")
     PedestrianFlow selectLatestByLightId(@Param("lightId") Long lightId);
 
-    /** 批量 UPSERT 小时聚合数据 */
+    /** 批量 UPSERT 小时聚合数据（实现在 XML 中） */
     void upsertHourlyBatch(@Param("list") List<PedestrianFlowHourlyVO> list);
 
-    /** 从小时聚合表分页查询 */
-    @Select("<script>"
-            + "SELECT light_id AS lightId, hour_start AS collectTime, "
-            + "avg_flow AS flowCount FROM pedestrian_flow_hourly "
-            + "<where>"
-            + "<if test='lightId != null'> AND light_id = #{lightId} </if>"
-            + "<if test='startTime != null'> AND hour_start &gt;= #{startTime} </if>"
-            + "<if test='endTime != null'> AND hour_start &lt;= #{endTime} </if>"
-            + "</where>"
-            + "ORDER BY hour_start DESC"
-            + "</script>")
+    /** 从小时聚合表分页查询（动态 SQL 实现在 XML 中） */
     List<Map<String, Object>> selectFromHourlyPage(@Param("lightId") Long lightId,
                                                    @Param("startTime") String startTime,
                                                    @Param("endTime") String endTime);
+
+    /** 从小时聚合表查询某路灯最新的一条记录 */
+    @Select("SELECT light_id   AS lightId, "
+            + "       hour_start AS collectTime, "
+            + "       avg_flow   AS flowCount, "
+            + "       max_flow   AS maxFlow, "
+            + "       min_flow   AS minFlow, "
+            + "       total_flow AS totalFlow, "
+            + "       data_count AS dataCount "
+            + "FROM pedestrian_flow_hourly "
+            + "WHERE light_id = #{lightId} "
+            + "ORDER BY hour_start DESC LIMIT 1")
+    Map<String, Object> selectLatestFromHourly(@Param("lightId") Long lightId);
 }

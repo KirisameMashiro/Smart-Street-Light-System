@@ -70,28 +70,35 @@
       <div class="stat-card">
         <div class="stat-label">最高人流量</div>
         <div class="stat-value">
-          <span class="stat-num">{{ stats.max.toFixed(0) }}</span>
+          <span class="stat-num highlight-max">{{ stats.maxFlow ?? '-' }}</span>
           <span class="stat-unit">人</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">最低人流量</div>
         <div class="stat-value">
-          <span class="stat-num">{{ stats.min.toFixed(0) }}</span>
+          <span class="stat-num highlight-min">{{ stats.minFlow ?? '-' }}</span>
           <span class="stat-unit">人</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">平均人流量</div>
         <div class="stat-value">
-          <span class="stat-num">{{ stats.avg.toFixed(0) }}</span>
+          <span class="stat-num highlight-avg">{{ stats.avgFlow ?? '-' }}</span>
+          <span class="stat-unit">人</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">累计人流量</div>
+        <div class="stat-value">
+          <span class="stat-num highlight-total">{{ stats.totalFlow ?? '-' }}</span>
           <span class="stat-unit">人</span>
         </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">数据点数</div>
         <div class="stat-value">
-          <span class="stat-num">{{ stats.count }}</span>
+          <span class="stat-num">{{ stats.dataCount ?? 0 }}</span>
           <span class="stat-unit">条</span>
         </div>
       </div>
@@ -118,12 +125,27 @@
               {{ lightNameOf(row.lightId) }}
             </template>
           </el-table-column>
-          <el-table-column label="人流量" width="120" align="center">
+          <el-table-column label="平均人流量" width="110" align="center">
             <template #default="{ row }">
               <span class="flow-value">{{ row.flowCount ?? '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="采集时间" width="180">
+          <el-table-column label="最高" width="90" align="center">
+            <template #default="{ row }">
+              {{ row.maxFlow ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="最低" width="90" align="center">
+            <template #default="{ row }">
+              {{ row.minFlow ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="累计" width="100" align="center">
+            <template #default="{ row }">
+              {{ row.totalFlow ?? '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="统计时段" width="200">
             <template #default="{ row }">{{ formatDateTime(row.collectTime) }}</template>
           </el-table-column>
         </el-table>
@@ -175,17 +197,26 @@ const query = reactive({
 
 const stats = computed(() => {
   const data = chartData.value
-  if (!data.length) return { max: 0, min: 0, avg: 0, count: 0 }
+  if (!data.length) return { maxFlow: 0, minFlow: 0, avgFlow: 0, totalFlow: 0, dataCount: 0 }
   let max = -Infinity
   let min = Infinity
-  let sum = 0
+  let total = 0
+  let count = 0
   for (const d of data) {
-    const v = d.flowCount ?? 0
-    if (v > max) max = v
-    if (v < min) min = v
-    sum += v
+    if (d.maxFlow != null && d.maxFlow > max) max = d.maxFlow
+    if (d.minFlow != null && d.minFlow < min) min = d.minFlow
+    if (d.totalFlow != null) total += d.totalFlow
+    if (d.dataCount != null) count += d.dataCount
   }
-  return { max, min, avg: sum / data.length, count: data.length }
+  const avgSum = data.reduce((s, d) => s + (d.flowCount ?? 0), 0)
+  const avg = avgSum / data.length
+  return {
+    maxFlow: max === -Infinity ? 0 : max,
+    minFlow: min === Infinity ? 0 : min,
+    avgFlow: Math.ceil(avg),   // 向上取整
+    totalFlow: total,
+    dataCount: count
+  }
 })
 
 function lightNameOf(id) {
@@ -253,7 +284,11 @@ async function loadData() {
       chartData.value = chartRecords
         .map((r) => ({
           time: r.collectTime,
-          flowCount: r.flowCount ?? 0
+          flowCount: r.flowCount ?? 0,
+          maxFlow: r.maxFlow,
+          minFlow: r.minFlow,
+          totalFlow: r.totalFlow,
+          dataCount: r.dataCount
         }))
         .sort((a, b) => parseTime(a.time) - parseTime(b.time))
     } else {
@@ -356,12 +391,21 @@ function renderChart() {
       trigger: 'axis',
       formatter: (params) => {
         const p = params[0]
+        if (!p) return ''
         const d = new Date(p.value[0])
         const mm = String(d.getMonth() + 1).padStart(2, '0')
         const dd = String(d.getDate()).padStart(2, '0')
         const hh = String(d.getHours()).padStart(2, '0')
         const mi = String(d.getMinutes()).padStart(2, '0')
-        return `${mm}-${dd} ${hh}:${mi}<br/>人流量: <strong>${p.value[1]}</strong> 人`
+        // 找到对应时间点的完整数据
+        const pt = parseTime(p.value[0])
+        const full = chartData.value.find(x => parseTime(x.time) === pt)
+        let extra = ''
+        if (full) {
+          extra = `<br/>最高: ${full.maxFlow ?? '-'} | 最低: ${full.minFlow ?? '-'}`
+          extra += `<br/>累计: ${full.totalFlow ?? '-'} | 采样: ${full.dataCount ?? '-'}`
+        }
+        return `${mm}-${dd} ${hh}:${mi}<br/>平均人流量: <strong>${p.value[1]}</strong> 人${extra}`
       }
     },
     grid: { left: 60, right: 30, top: 30, bottom: 40 },
@@ -375,7 +419,7 @@ function renderChart() {
     },
     dataZoom: [{ type: 'inside', start: 0, end: 100 }],
     series: [{
-      name: '人流量',
+      name: '平均人流量',
       type: 'line',
       data: points,
       smooth: true,
@@ -452,12 +496,16 @@ onUnmounted(() => {
 
 <style scoped>
 .time-separator { margin: 0 8px; color: #909399; font-size: 14px; }
-.stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.stat-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 16px; }
 .stat-card { background: #fff; border-radius: 8px; padding: 20px 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 .stat-label { font-size: 14px; color: #909399; margin-bottom: 8px; }
 .stat-value { display: flex; align-items: baseline; gap: 6px; }
 .stat-num { font-size: 28px; font-weight: 600; color: #303133; line-height: 1.2; }
 .stat-unit { font-size: 14px; color: #909399; }
+.highlight-max { color: #e6a23c; }
+.highlight-min { color: #409eff; }
+.highlight-avg { color: #67c23a; }
+.highlight-total { color: #f56c6c; }
 .chart-card { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); position: relative; margin-bottom: 16px; }
 .chart-container { width: 100%; height: 400px; }
 .empty-tip { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #909399; font-size: 14px; }

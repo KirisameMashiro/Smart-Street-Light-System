@@ -51,6 +51,11 @@ public class PedestrianFlowServiceImpl extends ServiceImpl<PedestrianFlowMapper,
         flow.setLightId(map.get("lightId") != null ? ((Number) map.get("lightId")).longValue() : null);
         flow.setCollectTime(map.get("collectTime") != null ? (LocalDateTime) map.get("collectTime") : null);
         flow.setFlowCount(map.get("flowCount") != null ? ((Number) map.get("flowCount")).intValue() : null);
+        // 小时聚合扩展字段
+        flow.setMaxFlow(map.get("maxFlow") != null ? ((Number) map.get("maxFlow")).intValue() : null);
+        flow.setMinFlow(map.get("minFlow") != null ? ((Number) map.get("minFlow")).intValue() : null);
+        flow.setTotalFlow(map.get("totalFlow") != null ? ((Number) map.get("totalFlow")).intValue() : null);
+        flow.setDataCount(map.get("dataCount") != null ? ((Number) map.get("dataCount")).intValue() : null);
         return flow;
     }
 
@@ -58,16 +63,17 @@ public class PedestrianFlowServiceImpl extends ServiceImpl<PedestrianFlowMapper,
     public PedestrianFlow getLatestByLightId(Long lightId) {
         if (lightId == null) return null;
 
-        // ① 优先从 Redis 读取
+        // ① 优先从 Redis 读取（最新人流量缓存）
         PedestrianFlow cached = getFromRedis(lightId);
         if (cached != null) return cached;
 
-        // ② Redis Miss，回退到 MySQL
-        LambdaQueryWrapper<PedestrianFlow> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(PedestrianFlow::getLightId, lightId)
-               .orderByDesc(PedestrianFlow::getCollectTime)
-               .last("LIMIT 1");
-        return this.getOne(wrapper);
+        // ② Redis Miss，回退到小时聚合表的最新记录
+        // （原始数据不再写入 pedestrian_flow 表）
+        Map<String, Object> hourlyRow = baseMapper.selectLatestFromHourly(lightId);
+        if (hourlyRow != null && !hourlyRow.isEmpty()) {
+            return mapRowToFlow(hourlyRow);
+        }
+        return null;
     }
 
     @Override
@@ -115,19 +121,20 @@ public class PedestrianFlowServiceImpl extends ServiceImpl<PedestrianFlowMapper,
 
     @Override
     public PedestrianFlow getAverageData(Long lightId, LocalDateTime startTime, LocalDateTime endTime) {
-        LambdaQueryWrapper<PedestrianFlow> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(PedestrianFlow::getLightId, lightId)
-               .ge(PedestrianFlow::getCollectTime, startTime)
-               .le(PedestrianFlow::getCollectTime, endTime);
-        List<PedestrianFlow> list = this.list(wrapper);
-        if (list.isEmpty()) return null;
+        // 从小时聚合表查询（原始数据仅存 Redis，不再入 MySQL）
+        String start = startTime != null ? startTime.toString() : null;
+        String end = endTime != null ? endTime.toString() : null;
+        List<Map<String, Object>> hourlyRecords = baseMapper.selectFromHourlyPage(lightId, start, end);
+        if (hourlyRecords.isEmpty()) return null;
 
         PedestrianFlow avg = new PedestrianFlow();
         avg.setLightId(lightId);
-        avg.setFlowCount((int) list.stream()
-                .filter(d -> d.getFlowCount() != null)
-                .mapToInt(PedestrianFlow::getFlowCount)
-                .average().orElse(0));
+        double avgVal = hourlyRecords.stream()
+                .map(m -> m.get("flowCount"))
+                .filter(Objects::nonNull)
+                .mapToDouble(v -> ((Number) v).doubleValue())
+                .average().orElse(0);
+        avg.setFlowCount((int) Math.ceil(avgVal));
         return avg;
     }
 
@@ -163,18 +170,20 @@ public class PedestrianFlowServiceImpl extends ServiceImpl<PedestrianFlowMapper,
         catch (Exception e) { return null; }
     }
 
+    /**
+     * Redis Miss 时的回退策略：查询小时聚合表的最新记录
+     * （原始数据不再写入 pedestrian_flow 表，所以不从原始表回退）
+     */
     private void fillMissingFromDb(List<Light> allLights, Map<Long, PedestrianFlow> result) {
         for (Light light : allLights) {
             if (result.containsKey(light.getId())) continue;
             try {
-                LambdaQueryWrapper<PedestrianFlow> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(PedestrianFlow::getLightId, light.getId())
-                       .orderByDesc(PedestrianFlow::getCollectTime)
-                       .last("LIMIT 1");
-                PedestrianFlow dbData = this.getOne(wrapper);
-                if (dbData != null) result.put(light.getId(), dbData);
+                Map<String, Object> hourlyRow = baseMapper.selectLatestFromHourly(light.getId());
+                if (hourlyRow != null && !hourlyRow.isEmpty()) {
+                    result.put(light.getId(), mapRowToFlow(hourlyRow));
+                }
             } catch (Exception e) {
-                log.warn("补全人流量数据失败: lightId={}", light.getId(), e);
+                log.warn("从小时聚合表补全人流量数据失败: lightId={}", light.getId(), e);
             }
         }
     }

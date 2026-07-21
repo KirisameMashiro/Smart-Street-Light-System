@@ -148,7 +148,7 @@ public class MqttConfig {
                     return;
                 }
                 pedestrianFlowIngestService.ingest(dto);
-                log.info("MQTT 人流量数据已入库: lightId={}, flowCount={}, topic={}",
+                log.info("MQTT 人流量数据已写入Redis: lightId={}, flowCount={}, topic={}",
                         dto.getLightId(), dto.getFlowCount(), topic);
             } else {
                 // 传感器数据处理

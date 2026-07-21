@@ -2,6 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.smartlight.backend.mapper.PedestrianFlowMapper">
 
+    <!-- 批量 UPSERT 小时聚合数据 -->
     <insert id="upsertHourlyBatch">
         INSERT INTO pedestrian_flow_hourly
             (light_id, hour_start, avg_flow, max_flow, min_flow, total_flow, data_count)
@@ -18,5 +19,23 @@
             total_flow  = total_flow + VALUES(total_flow),
             data_count  = data_count + VALUES(data_count)
     </insert>
+
+    <!-- 从小时聚合表分页查询（返回全部聚合字段） -->
+    <select id="selectFromHourlyPage" resultType="java.util.Map">
+        SELECT light_id   AS lightId,
+               hour_start AS collectTime,
+               avg_flow   AS flowCount,
+               max_flow   AS maxFlow,
+               min_flow   AS minFlow,
+               total_flow AS totalFlow,
+               data_count AS dataCount
+        FROM pedestrian_flow_hourly
+        <where>
+            <if test="lightId != null"> AND light_id = #{lightId} </if>
+            <if test="startTime != null"> AND hour_start >= #{startTime} </if>
+            <if test="endTime != null"> AND hour_start &lt;= #{endTime} </if>
+        </where>
+        ORDER BY hour_start DESC
+    </select>
 
 </mapper>
