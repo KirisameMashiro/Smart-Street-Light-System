@@ -32,6 +32,12 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
+        <el-table-column label="播放间隔" width="120">
+          <template #default="{ row }">
+            <span v-if="row.playInterval && row.playInterval > 0">每 {{ row.playInterval }} 分钟</span>
+            <span v-else style="color: #909399">持续</span>
+          </template>
+        </el-table-column>
         <el-table-column label="人流量条件" width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.enableFlow">
@@ -72,6 +78,10 @@
         </el-form-item>
         <el-form-item label="结束时间" required>
           <el-time-select v-model="form.endTime" :picker-options="{ start: '00:00', step: '00:30', end: '23:30' }" />
+        </el-form-item>
+        <el-form-item :label="form.enableFlow ? '最小播放间隔' : '播放间隔'">
+          <el-input-number v-model="form.playInterval" :min="0" :step="1" placeholder="0" />
+          <span style="margin-left: 8px; color: #909399; font-size: 13px">分钟（{{ form.enableFlow ? '两次播放之间的最小间隔' : '0 表示持续播放，>0 表示每隔指定分钟播放一次' }}）</span>
         </el-form-item>
         <el-form-item label="重复类型">
           <el-select v-model="form.repeatType" placeholder="请选择重复类型">
@@ -172,6 +182,7 @@ const form = reactive({
   broadcastId: null,
   startTime: '18:00',
   endTime: '22:00',
+  playInterval: 0,
   repeatType: 'daily',
   customDays: [],
   customMode: 'week',
@@ -256,6 +267,7 @@ function openDialog(row = null) {
       broadcastId: row.broadcastId,
       startTime: stripSeconds(row.startTime),
       endTime: stripSeconds(row.endTime),
+      playInterval: row.playInterval || 0,
       repeatType: row.repeatType || 'daily',
       customDays: row.customDays || [],
       customMode: 'week',
@@ -274,6 +286,7 @@ function openDialog(row = null) {
       broadcastId: null,
       startTime: '18:00',
       endTime: '22:00',
+      playInterval: 0,
       repeatType: 'daily',
       customDays: [],
       customMode: 'week',
@@ -339,6 +352,7 @@ async function onSave() {
   delete payload.customMode
   delete payload.customDates
   delete payload.customDateRange
+  delete payload.playInterval
   try {
     if (form.id) {
       await updateStrategy(payload)
