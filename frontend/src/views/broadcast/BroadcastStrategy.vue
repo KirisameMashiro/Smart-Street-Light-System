@@ -28,6 +28,7 @@
             <span v-if="row.repeatType === 'custom' && row.customDays?.length">
               {{ formatCustomDays(row.customDays) }}
             </span>
+            <span v-else-if="row.repeatType === 'custom'">自定义</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -80,17 +81,45 @@
             <el-option label="自定义" value="custom" />
           </el-select>
         </el-form-item>
-        <el-form-item label="自定义星期" v-if="form.repeatType === 'custom'">
-          <el-select v-model="form.customDays" multiple placeholder="请选择星期">
-            <el-option label="周一" :value="1" />
-            <el-option label="周二" :value="2" />
-            <el-option label="周三" :value="3" />
-            <el-option label="周四" :value="4" />
-            <el-option label="周五" :value="5" />
-            <el-option label="周六" :value="6" />
-            <el-option label="周日" :value="7" />
-          </el-select>
-        </el-form-item>
+        <template v-if="form.repeatType === 'custom'">
+          <el-form-item label="自定义方式">
+            <el-radio-group v-model="form.customMode">
+              <el-radio label="date">按日期</el-radio>
+              <el-radio label="range">按日期范围</el-radio>
+              <el-radio label="week">按星期</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="form.customMode === 'date'" label="选择日期">
+            <el-date-picker
+              v-model="form.customDates"
+              type="dates"
+              placeholder="选择播放日期"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item v-else-if="form.customMode === 'range'" label="日期范围">
+            <el-date-picker
+              v-model="form.customDateRange"
+              type="daterange"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              value-format="YYYY-MM-DD"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-form-item v-else label="选择星期">
+            <el-select v-model="form.customDays" multiple placeholder="请选择星期" style="width: 100%">
+              <el-option label="周一" :value="1" />
+              <el-option label="周二" :value="2" />
+              <el-option label="周三" :value="3" />
+              <el-option label="周四" :value="4" />
+              <el-option label="周五" :value="5" />
+              <el-option label="周六" :value="6" />
+              <el-option label="周日" :value="7" />
+            </el-select>
+          </el-form-item>
+        </template>
         <el-form-item label="人流量判断">
           <el-switch v-model="form.enableFlow" active-text="启用" inactive-text="不启用" />
         </el-form-item>
@@ -145,6 +174,9 @@ const form = reactive({
   endTime: '22:00',
   repeatType: 'daily',
   customDays: [],
+  customMode: 'week',
+  customDates: [],
+  customDateRange: [],
   enableFlow: false,
   flowCondition: 'gt',
   flowThreshold: 0,
@@ -226,6 +258,9 @@ function openDialog(row = null) {
       endTime: stripSeconds(row.endTime),
       repeatType: row.repeatType || 'daily',
       customDays: row.customDays || [],
+      customMode: 'week',
+      customDates: [],
+      customDateRange: [],
       enableFlow: row.enableFlow || false,
       flowCondition: row.flowCondition || 'gt',
       flowThreshold: row.flowThreshold || 0,
@@ -241,6 +276,9 @@ function openDialog(row = null) {
       endTime: '22:00',
       repeatType: 'daily',
       customDays: [],
+      customMode: 'week',
+      customDates: [],
+      customDateRange: [],
       enableFlow: false,
       flowCondition: 'gt',
       flowThreshold: 0,
@@ -263,12 +301,44 @@ async function onSave() {
     ElMessage.warning('请选择开始时间和结束时间')
     return
   }
+  if (form.repeatType === 'custom') {
+    if (form.customMode === 'date') {
+      if (!form.customDates || form.customDates.length === 0) {
+        ElMessage.warning('请至少选择一个日期')
+        return
+      }
+    } else if (form.customMode === 'range') {
+      if (!form.customDateRange || form.customDateRange.length !== 2) {
+        ElMessage.warning('请选择日期范围')
+        return
+      }
+    } else {
+      if (!form.customDays || form.customDays.length === 0) {
+        ElMessage.warning('请至少选择一个星期')
+        return
+      }
+    }
+  }
+
   saving.value = true
   const payload = {
     ...form,
     startTime: ensureTimeWithSeconds(form.startTime),
     endTime: ensureTimeWithSeconds(form.endTime)
   }
+
+  // 自定义按日期时，将日期转换为对应星期几；后端只接收 customDays
+  if (form.repeatType === 'custom' && form.customMode === 'date' && form.customDates?.length) {
+    const daySet = new Set(form.customDates.map(dateStr => {
+      const date = new Date(dateStr)
+      const day = date.getDay()
+      return day === 0 ? 7 : day
+    }))
+    payload.customDays = Array.from(daySet).sort((a, b) => a - b)
+  }
+  delete payload.customMode
+  delete payload.customDates
+  delete payload.customDateRange
   try {
     if (form.id) {
       await updateStrategy(payload)

@@ -250,7 +250,7 @@ const menuConfig = [
   },
   {
     title: '广播管理',
-    icon: 'Speaker',
+    icon: 'Mic',
     roles: ['admin', 'municipal', 'operator'],
     children: [
       { title: '广播设计', path: '/broadcast/design', icon: 'Microphone' },

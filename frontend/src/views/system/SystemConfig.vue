@@ -95,10 +95,9 @@
           </div>
           <el-table :data="districts" stripe>
             <el-table-column type="index" label="#" width="60" />
-            <el-table-column prop="districtName" label="行政区名称" width="180" show-overflow-tooltip />
-            <el-table-column prop="districtCode" label="行政区编码" width="160" show-overflow-tooltip />
+            <el-table-column prop="districtName" label="行政区名称" width="240" show-overflow-tooltip />
             <el-table-column prop="sortOrder" label="排序" width="100" />
-            <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="description" label="描述" min-width="260" show-overflow-tooltip />
             <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openDistrictDialog(row)">编辑</el-button>
@@ -333,9 +332,6 @@
       <el-form ref="districtFormRef" :model="districtForm" :rules="districtRules" label-width="100px">
         <el-form-item label="行政区名称" prop="districtName">
           <el-input v-model="districtForm.districtName" placeholder="请输入行政区名称" />
-        </el-form-item>
-        <el-form-item label="行政区编码" prop="districtCode">
-          <el-input v-model="districtForm.districtCode" placeholder="请输入行政区编码" />
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="districtForm.sortOrder" :min="0" :step="1" controls-position="right" />
@@ -762,21 +758,18 @@ const districtFormRef = ref()
 const districtForm = reactive({
   id: undefined,
   districtName: '',
-  districtCode: '',
   sortOrder: 0,
   description: ''
 })
 
 const districtRules = {
-  districtName: [{ required: true, message: '请输入行政区名称', trigger: 'blur' }],
-  districtCode: [{ required: true, message: '请输入行政区编码', trigger: 'blur' }]
+  districtName: [{ required: true, message: '请输入行政区名称', trigger: 'blur' }]
 }
 
 function resetDistrictForm() {
   Object.assign(districtForm, {
     id: undefined,
     districtName: '',
-    districtCode: '',
     sortOrder: 0,
     description: ''
   })
@@ -801,7 +794,6 @@ function openDistrictDialog(row) {
     Object.assign(districtForm, {
       id: row.id,
       districtName: row.districtName || '',
-      districtCode: row.districtCode || '',
       sortOrder: row.sortOrder || 0,
       description: row.description || ''
     })
