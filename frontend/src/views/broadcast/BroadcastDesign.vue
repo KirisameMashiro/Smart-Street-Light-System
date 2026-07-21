@@ -121,7 +121,7 @@ function formatTime(time) {
 async function loadAllLights() {
   try {
     const res = await getAllLights()
-    allLights.value = res.data || []
+    allLights.value = (res.data || []).filter(l => l.hasSpeaker === true || l.hasSpeaker === 1)
     lightOptions.value = allLights.value
   } catch (error) {
     // ignore
