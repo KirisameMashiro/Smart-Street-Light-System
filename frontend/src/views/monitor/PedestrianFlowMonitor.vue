@@ -65,18 +65,6 @@
           <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
           <el-table-column prop="district" label="行政区" width="100" />
           <el-table-column prop="road" label="路段" width="100" />
-          <el-table-column label="监控" width="70" align="center">
-            <template #default="{ row }">
-              <el-tag v-if="row.hasCamera" type="success" size="small" effect="plain">有</el-tag>
-              <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="广播" width="70" align="center">
-            <template #default="{ row }">
-              <el-tag v-if="row.hasSpeaker" type="success" size="small" effect="plain">有</el-tag>
-              <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
-            </template>
-          </el-table-column>
           <el-table-column label="最新人流量" width="120" align="center">
             <template #default="{ row }">
               <span v-if="flowMap[row.id] != null" class="flow-value">{{ flowMap[row.id] }} 人</span>
@@ -210,7 +198,8 @@ function goToDetail(row) {
 async function loadAllLights() {
   try {
     const res = await getAllLights()
-    allLights.value = res.data || []
+    // 只显示有监控（hasCamera=true）的路灯
+    allLights.value = (res.data || []).filter((l) => l.hasCamera)
   } catch (e) {
     allLights.value = []
   }
