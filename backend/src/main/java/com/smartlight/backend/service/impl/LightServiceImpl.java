@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -38,13 +39,34 @@ import java.util.stream.Collectors;
 public class LightServiceImpl extends ServiceImpl<LightMapper, Light> implements LightService {
 
     /**
-     * 覆写 updateById，确保每次更新都刷新 updateTime
-     * （MyBatis-Plus 自动填充器可能因策略配置不生效）
+     * 覆写 save，新增路灯后使缓存失效
+     */
+    @Override
+    public boolean save(Light entity) {
+        boolean result = super.save(entity);
+        evictCache();
+        return result;
+    }
+
+    /**
+     * 覆写 updateById，确保每次更新都刷新 updateTime 并使缓存失效
      */
     @Override
     public boolean updateById(Light entity) {
         entity.setUpdateTime(LocalDateTime.now());
-        return super.updateById(entity);
+        boolean result = super.updateById(entity);
+        evictCache();
+        return result;
+    }
+
+    /**
+     * 覆写 removeById，删除路灯后使缓存失效
+     */
+    @Override
+    public boolean removeById(Serializable id) {
+        boolean result = super.removeById(id);
+        evictCache();
+        return result;
     }
 
     /**
