@@ -60,24 +60,24 @@
     <div class="table-card">
       <div class="table-wrapper">
         <el-table :data="page.records" stripe>
-          <el-table-column type="index" label="#" width="60" />
-          <el-table-column prop="lightCode" label="编号" width="110" />
-          <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
-          <el-table-column prop="district" label="行政区" width="100" />
-          <el-table-column prop="road" label="路段" width="100" />
+          <el-table-column type="index" label="#" width="50" />
+          <el-table-column prop="lightCode" label="编号" min-width="110" />
+          <el-table-column prop="lightName" label="名称" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="district" label="行政区" min-width="100" />
+          <el-table-column prop="road" label="路段" min-width="100" />
           <el-table-column label="最新人流量" width="120" align="center">
             <template #default="{ row }">
               <span v-if="flowMap[row.id] != null" class="flow-value">{{ flowMap[row.id] }} 人</span>
               <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="近1h平均人流量" width="140" align="center">
+          <el-table-column label="近1h平均人流量" width="130" align="center">
             <template #default="{ row }">
               <span v-if="avgFlowMap[row.id] != null" class="flow-value">{{ avgFlowMap[row.id] }} 人</span>
               <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="采集时间" width="170">
+          <el-table-column label="采集时间" min-width="160">
             <template #default="{ row }">
               <span v-if="flowCollectTime[row.id]" class="text-muted" style="font-size: 13px">
                 {{ flowCollectTime[row.id] }}
@@ -85,7 +85,7 @@
               <span v-else class="text-muted">-</span>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100" fixed="right">
+          <el-table-column label="操作" width="90" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="goToDetail(row)">详情</el-button>
             </template>
