@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartlight.backend.mapper.PedestrianFlowMapper">
+
+    <insert id="upsertHourlyBatch">
+        INSERT INTO pedestrian_flow_hourly
+            (light_id, hour_start, avg_flow, max_flow, min_flow, total_flow, data_count)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.lightId}, #{item.hourStart},
+             #{item.avgFlow}, #{item.maxFlow}, #{item.minFlow},
+             #{item.totalFlow}, #{item.dataCount})
+        </foreach>
+        ON DUPLICATE KEY UPDATE
+            avg_flow    = (avg_flow * data_count + VALUES(avg_flow)) / (data_count + VALUES(data_count)),
+            max_flow    = GREATEST(IFNULL(max_flow, 0), VALUES(max_flow)),
+            min_flow    = LEAST(IFNULL(min_flow, VALUES(min_flow)), VALUES(min_flow)),
+            total_flow  = total_flow + VALUES(total_flow),
+            data_count  = data_count + VALUES(data_count)
+    </insert>
+
+</mapper>

@@ -2,6 +2,7 @@ package com.smartlight.backend.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.smartlight.backend.entity.PedestrianFlow;
+import com.smartlight.backend.entity.PedestrianFlowHourlyVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -16,7 +17,10 @@ public interface PedestrianFlowMapper extends BaseMapper<PedestrianFlow> {
     @Select("SELECT * FROM pedestrian_flow WHERE light_id = #{lightId} ORDER BY collect_time DESC LIMIT 1")
     PedestrianFlow selectLatestByLightId(@Param("lightId") Long lightId);
 
-    /** 从小时聚合表分页查询（使用 <script> 动态SQL） */
+    /** 批量 UPSERT 小时聚合数据 */
+    void upsertHourlyBatch(@Param("list") List<PedestrianFlowHourlyVO> list);
+
+    /** 从小时聚合表分页查询 */
     @Select("<script>"
             + "SELECT light_id AS lightId, hour_start AS collectTime, "
             + "avg_flow AS flowCount FROM pedestrian_flow_hourly "

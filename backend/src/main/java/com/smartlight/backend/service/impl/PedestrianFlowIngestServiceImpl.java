@@ -4,6 +4,7 @@ import com.smartlight.backend.dto.PedestrianFlowIngestDTO;
 import com.smartlight.backend.entity.PedestrianFlow;
 import com.smartlight.backend.mapper.PedestrianFlowMapper;
 import com.smartlight.backend.service.PedestrianFlowIngestService;
+import com.smartlight.backend.service.impl.PedestrianFlowBatchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -26,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class PedestrianFlowIngestServiceImpl implements PedestrianFlowIngestService {
 
     private final PedestrianFlowMapper pedestrianFlowMapper;
+    private final PedestrianFlowBatchService pedestrianFlowBatchService;
     private final Optional<StringRedisTemplate> stringRedisTemplate;
 
     /** Redis Key 前缀：每盏路灯最新人流量 */
@@ -51,7 +53,10 @@ public class PedestrianFlowIngestServiceImpl implements PedestrianFlowIngestServ
         log.info("人流量数据已写入MySQL: lightId={}, flowCount={}, collectTime={}",
                 entity.getLightId(), entity.getFlowCount(), entity.getCollectTime());
 
-        // 3. 更新 Redis 缓存
+        // 3. 加入小时聚合缓冲区
+        pedestrianFlowBatchService.enqueue(entity);
+
+        // 4. 更新 Redis 缓存
         saveToRedis(entity);
 
         return entity;
