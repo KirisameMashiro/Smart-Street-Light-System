@@ -1,4 +1,4 @@
-transformers>=4.45.0
+qwen-tts
 torch>=2.1.0
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0

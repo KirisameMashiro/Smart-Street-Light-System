@@ -5,7 +5,7 @@ Exposes an OpenAI-compatible POST /v1/audio/speech endpoint
 for Qwen3-TTS-12Hz-0.6B-CustomVoice text-to-speech synthesis.
 
 Usage:
-    pip install transformers fastapi uvicorn soundfile accelerate
+    pip install qwen-tts fastapi uvicorn soundfile accelerate torch
     python tts_server.py          # starts on port 8001
 """
 
@@ -28,38 +28,46 @@ MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 
 # Lazy-loaded model
 model = None
-processor = None
 
 
 class TtsRequest(BaseModel):
     model: str = Field(default=MODEL_NAME, description="Model name")
     input: str = Field(..., description="Text to synthesize")
-    voice: Optional[str] = Field(default="default", description="Voice name")
+    voice: Optional[str] = Field(default="Vivian", description="Speaker name: Vivian, Serena, Uncle_Fu, Dylan, Eric, Ryan, Aiden, Ono_Anna, Sohee")
+    instruct: Optional[str] = Field(default=None, description="Instruction for emotion/style (e.g., '用特别愤怒的语气说')")
+    language: Optional[str] = Field(default="Chinese", description="Language: Chinese, English, Japanese, Korean")
     response_format: Optional[str] = Field(default="wav", description="Audio format")
-    speed: Optional[float] = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed multiplier")
+    speed: Optional[float] = Field(default=1.0, ge=0.5, le=2.0, description="Speech speed multiplier (not fully supported)")
 
 
 def load_model():
     """Load the model on first request."""
-    global model, processor
+    global model
     if model is not None:
         return
 
     logger.info("Loading Qwen3-TTS model...")
-    from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+    from qwen_tts import Qwen3TTSModel
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Check for CUDA
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
-    processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(
+    # Use bfloat16 if CUDA available, else float32
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    
+    # attn_implementation only for CUDA
+    attn_kwargs = {}
+    if torch.cuda.is_available():
+        attn_kwargs["attn_implementation"] = "flash_attention_2"
+
+    model = Qwen3TTSModel.from_pretrained(
         MODEL_NAME,
-        trust_remote_code=True,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-        device_map="auto" if device == "cuda" else None,
+        device_map=device,
+        dtype=dtype,
+        **attn_kwargs
     )
-    model.to(device)
-    model.eval()
+    
     logger.info("Model loaded successfully")
 
 
@@ -69,70 +77,40 @@ async def tts_speech(req: TtsRequest):
     try:
         load_model()
 
-        device = next(model.parameters()).device
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": req.input},
-                ],
-            }
-        ]
-
-        prompt = processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+        # Generate speech
+        wavs, sr = model.generate_custom_voice(
+            text=req.input,
+            language=req.language,
+            speaker=req.voice,
+            instruct=req.instruct if req.instruct else None,
         )
 
-        inputs = processor(
-            text=prompt,
-            padding=True,
-            return_tensors="pt",
-        )
-
-        # Move inputs to the same device as the model
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-
-        with torch.no_grad():
-            generated_ids = model.generate(
-                **inputs,
-                max_new_tokens=512,
-                do_sample=True,
-                temperature=0.7,
-            )
-
-        # Decode the generated audio tokens
-        audio_values = generated_ids  # In Qwen2Audio, this returns audio tokens
-        # The processor handles decoding
-        audio = processor.decode_audio(generated_ids[0].cpu().numpy())
-
-        # Apply speed adjustment
-        if req.speed != 1.0 and audio is not None:
-            import numpy as np
-            original_rate = processor.feature_extractor.sampling_rate if hasattr(processor, 'feature_extractor') else 24000
-            # Simple speed change via resampling
-            new_rate = int(original_rate * req.speed)
-            # Use soundfile to apply speed change by resampling
-            import resampy
-            audio = resampy.resample(audio, original_rate, new_rate)
-
-        if audio is None:
+        if not wavs or len(wavs) == 0:
             raise HTTPException(status_code=500, detail="TTS synthesis failed: no audio output")
 
-        # Determine sample rate
-        sample_rate = processor.feature_extractor.sampling_rate if hasattr(processor, 'feature_extractor') else 24000
-        if req.speed != 1.0:
-            sample_rate = int(sample_rate * req.speed)
+        # Get the first audio channel
+        audio = wavs[0] if isinstance(wavs, list) else wavs
+
+        # Convert to numpy if tensor
+        if torch.is_tensor(audio):
+            audio = audio.cpu().numpy()
+
+        # Speed adjustment (simple resampling - changes pitch too)
+        if req.speed != 1.0 and audio is not None:
+            import resampy
+            new_sr = int(sr * req.speed)
+            audio = resampy.resample(audio, sr, new_sr)
+            sr = new_sr
 
         # Write WAV to bytes
         buf = io.BytesIO()
-        sf.write(buf, audio, samplerate=sample_rate, format="WAV")
+        sf.write(buf, audio, samplerate=sr, format="WAV")
         wav_bytes = buf.getvalue()
 
         logger.info(
             f"TTS synthesized: text_len={len(req.input)}, "
-            f"voice={req.voice}, speed={req.speed}, "
-            f"audio_size={len(wav_bytes)} bytes"
+            f"voice={req.voice}, language={req.language}, "
+            f"instruct={req.instruct}, audio_size={len(wav_bytes)} bytes"
         )
 
         return Response(content=wav_bytes, media_type="audio/wav")
