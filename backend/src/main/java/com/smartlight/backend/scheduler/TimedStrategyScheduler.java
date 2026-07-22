@@ -5,9 +5,11 @@ import com.smartlight.backend.entity.TimedStrategy;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.TimedStrategyMapper;
 import com.smartlight.backend.service.MqttPublishService;
+import com.smartlight.backend.service.ThresholdControlService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -29,6 +33,11 @@ public class TimedStrategyScheduler {
     private final TimedStrategyMapper timedStrategyMapper;
     private final LightMapper lightMapper;
     private final MqttPublishService mqttPublishService;
+    private final ThresholdControlService thresholdControlService;
+    private final Optional<StringRedisTemplate> stringRedisTemplate;
+
+    /** Redis Key 前缀：每盏路灯最新传感器数据（Hash 结构） */
+    private static final String KEY_SENSOR_LATEST_PREFIX = "sensor:latest:";
 
     @PostConstruct
     public void onStartup() {
@@ -117,31 +126,75 @@ public class TimedStrategyScheduler {
         return false;
     }
 
+    /**
+     * 执行策略的开灯逻辑
+     * <p>
+     * 支持两种模式：
+     * <ul>
+     *   <li><b>固定亮度</b>（useDynamicBrightness=false，默认）：使用策略配置的固定 brightness 值</li>
+     *   <li><b>动态亮度</b>（useDynamicBrightness=true）：策略负责开关时机，亮度由实时光照传感器数据
+     *        + 阈值分段配置动态计算。若全局阈值开关关闭或无传感器数据，回退到固定亮度</li>
+     * </ul>
+     */
     private void applyStrategyOn(TimedStrategy strategy) {
         List<Light> lights = getLightsForStrategy(strategy);
         if (lights.isEmpty()) {
             return;
         }
 
+        // ---------- 动态亮度预处理 ----------
+        boolean useDynamic = Boolean.TRUE.equals(strategy.getUseDynamicBrightness());
+
+        if (useDynamic) {
+            // 全局阈值配置作为动态亮度的数据源
+            var thresholdConfig = thresholdControlService.getConfig();
+            if (!Boolean.TRUE.equals(thresholdConfig.getEnabled())) {
+                log.debug("策略「{}」启用动态亮度但全局阈值已关闭，回退固定亮度", strategy.getName());
+                useDynamic = false;
+            } else if (thresholdConfig.getSegments() == null || thresholdConfig.getSegments().isEmpty()) {
+                log.debug("策略「{}」启用动态亮度但阈值分段为空，回退固定亮度", strategy.getName());
+                useDynamic = false;
+            }
+        }
+
         int count = 0;
         for (Light light : lights) {
             if (Integer.valueOf(2).equals(light.getStatus())) {
-                continue;
+                continue; // 故障灯跳过
             }
             if (isUnderManualProtection(light)) {
-                continue;
+                continue; // 手动控制保护期内跳过
             }
-            if (!Integer.valueOf(1).equals(light.getStatus()) || !strategy.getBrightness().equals(light.getBrightness())) {
-                light.setStatus(1);
-                light.setBrightness(strategy.getBrightness());
+
+            Integer targetStatus = 1;
+            Integer targetBrightness;
+
+            if (useDynamic) {
+                // 动态模式：读取实时光照，计算等效亮度
+                Double illuminance = getIlluminanceFromRedis(light.getId());
+                if (illuminance == null) {
+                    // 无传感器数据 → 回退到策略固定亮度
+                    targetBrightness = strategy.getBrightness();
+                } else {
+                    targetBrightness = thresholdControlService.findMatchingBrightness(illuminance);
+                }
+            } else {
+                // 固定模式
+                targetBrightness = strategy.getBrightness();
+            }
+
+            if (!Integer.valueOf(1).equals(light.getStatus()) || !targetBrightness.equals(light.getBrightness())) {
+                light.setStatus(targetStatus);
+                light.setBrightness(targetBrightness);
                 lightMapper.updateById(light);
-                mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
+                mqttPublishService.publishCombinedControl(light.getLightCode(), targetStatus, targetBrightness);
                 count++;
             }
         }
 
         if (count > 0) {
-            log.info("策略「{}」已开启 {} 盏路灯", strategy.getName(), count);
+            log.info("策略「{}」已开启 {} 盏路灯，模式: {}",
+                    strategy.getName(), count, useDynamic ? "动态亮度" : "固定亮度");
         }
     }
 
@@ -281,5 +334,31 @@ public class TimedStrategyScheduler {
             return false;
         }
         return true;
+    }
+
+    /**
+     * 从 Redis 读取某盏灯的最新光照值
+     * <p>
+     * 实时传感器数据通过 SensorDataIngestService 写入 Redis Hash
+     * {@code sensor:latest:{lightId}}，阈值为 {@code illuminance}。
+     *
+     * @param lightId 路灯ID
+     * @return 光照值 (lux)，无数据返回 null
+     */
+    private Double getIlluminanceFromRedis(Long lightId) {
+        if (stringRedisTemplate.isEmpty()) {
+            return null;
+        }
+        String key = KEY_SENSOR_LATEST_PREFIX + lightId;
+        Map<Object, Object> entries = stringRedisTemplate.get().opsForHash().entries(key);
+        if (entries.isEmpty()) return null;
+
+        Object val = entries.get("illuminance");
+        if (val == null) return null;
+        try {
+            return Double.parseDouble(val.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

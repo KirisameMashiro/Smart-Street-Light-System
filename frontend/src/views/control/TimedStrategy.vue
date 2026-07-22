@@ -1,7 +1,7 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <h2 class="page-title">定时策略</h2>
+      <h2 class="page-title">照明策略</h2>
       <div class="toolbar">
         <el-button type="primary" :icon="Plus" @click="openDialog()">新增策略</el-button>
         <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
@@ -172,6 +172,17 @@
         <el-form-item label="目标亮度" prop="brightness">
           <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" />
         </el-form-item>
+        <el-form-item label="动态亮度">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <el-switch v-model="form.useDynamicBrightness" />
+            <span class="text-muted" style="font-size: 12px;">
+              {{ form.useDynamicBrightness ? '根据实时光照自动调节亮度' : '使用上方固定亮度值' }}
+            </span>
+            <el-button type="primary" link size="small" @click="openThresholdConfig">
+              <el-icon><Setting /></el-icon> 阈值配置
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="适用区域">
           <div class="apply-groups">
             <div
@@ -238,6 +249,79 @@
         <el-button type="primary" :loading="submitting" @click="onSubmit">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 阈值联动配置子对话框 -->
+    <el-dialog
+      v-model="thresholdDialogVisible"
+      title="阈值联动配置"
+      width="520px"
+      append-to-body
+    >
+      <el-form ref="thresholdFormRef" :model="thresholdForm" label-width="120px">
+        <el-form-item label="阈值总开关">
+          <el-switch v-model="thresholdForm.enabled" />
+          <span class="text-muted" style="margin-left: 8px; font-size: 12px;">
+            {{ thresholdForm.enabled ? '动态亮度功能可用' : '动态亮度功能已全局关闭' }}
+          </span>
+        </el-form-item>
+        <el-form-item label="关灯光照阈值 (lux)">
+          <el-input-number
+            v-model="thresholdForm.lightOffThreshold"
+            :min="0"
+            :max="9999"
+            :step="10"
+            style="width: 100%"
+          />
+          <div class="text-muted" style="font-size: 11px; line-height: 1.4;">
+            光照值高于此阈值时，动态亮度将关闭路灯
+          </div>
+        </el-form-item>
+        <el-form-item label="开灯分段设置">
+          <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+            <div
+              v-for="(seg, idx) in thresholdForm.segments"
+              :key="idx"
+              style="display: flex; gap: 8px; align-items: center;"
+            >
+              <span style="font-size: 12px; white-space: nowrap;">光照 ≤</span>
+              <el-input-number
+                v-model="seg.threshold"
+                :min="0"
+                :max="9999"
+                :step="10"
+                size="small"
+                style="width: 120px;"
+              />
+              <span style="font-size: 12px; white-space: nowrap;">lux → 亮度</span>
+              <el-input-number
+                v-model="seg.brightness"
+                :min="0"
+                :max="100"
+                :step="5"
+                size="small"
+                style="width: 100px;"
+              />
+              <span style="font-size: 12px;">%</span>
+              <el-button
+                v-if="thresholdForm.segments.length > 1"
+                :icon="Delete"
+                circle
+                size="small"
+                type="danger"
+                @click="removeThresholdSegment(idx)"
+              />
+            </div>
+            <el-button type="primary" size="small" @click="addThresholdSegment" style="align-self: flex-start;">
+              + 添加分段
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="thresholdDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="thresholdSaving" @click="saveThresholdConfig">保存配置</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -245,13 +329,15 @@
 defineOptions({ name: 'TimedStrategy' })
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh, Clock } from '@element-plus/icons-vue'
+import { Plus, Refresh, Clock, Setting, Delete } from '@element-plus/icons-vue'
 import {
   getStrategyPage,
   addStrategy,
   updateStrategy,
   deleteStrategy,
-  toggleStrategy
+  toggleStrategy,
+  getThresholdConfig,
+  updateThresholdConfig
 } from '@/api/control'
 import { getDistricts, getRoads, getAllLights } from '@/api/light'
 import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
@@ -340,9 +426,62 @@ const form = reactive({
   startTime: '18:00:00',
   endTime: '06:00:00',
   brightness: 80,
+  useDynamicBrightness: false,
   applyGroups: [],
   enabled: true
 })
+
+// ---------- 阈值联动配置子对话框 ----------
+const thresholdDialogVisible = ref(false)
+const thresholdSaving = ref(false)
+const thresholdFormRef = ref()
+const thresholdForm = reactive({
+  enabled: false,
+  lightOffThreshold: 100,
+  segments: []
+})
+
+function addThresholdSegment() {
+  thresholdForm.segments.push({ threshold: 30, brightness: 100 })
+}
+
+function removeThresholdSegment(idx) {
+  thresholdForm.segments.splice(idx, 1)
+}
+
+async function openThresholdConfig() {
+  try {
+    const res = await getThresholdConfig()
+    const data = res.data || {}
+    thresholdForm.enabled = !!data.enabled
+    thresholdForm.lightOffThreshold = data.lightOffThreshold ?? 100
+    thresholdForm.segments = (data.segments && data.segments.length > 0)
+      ? data.segments.map(s => ({ threshold: s.threshold ?? 30, brightness: s.brightness ?? 100 }))
+      : [{ threshold: 30, brightness: 100 }]
+  } catch (e) {
+    thresholdForm.enabled = false
+    thresholdForm.lightOffThreshold = 100
+    thresholdForm.segments = [{ threshold: 30, brightness: 100 }]
+  }
+  thresholdDialogVisible.value = true
+}
+
+async function saveThresholdConfig() {
+  thresholdSaving.value = true
+  try {
+    await updateThresholdConfig({
+      enabled: thresholdForm.enabled,
+      lightOffThreshold: thresholdForm.lightOffThreshold,
+      segments: thresholdForm.segments.map(s => ({ threshold: s.threshold, brightness: s.brightness }))
+    })
+    ElMessage.success('阈值配置已保存')
+    thresholdDialogVisible.value = false
+  } catch (e) {
+    // 错误已由拦截器处理
+  } finally {
+    thresholdSaving.value = false
+  }
+}
 
 function addApplyGroup() {
   form.applyGroups.push({
@@ -420,6 +559,7 @@ function openDialog(row) {
       startTime: row.startTime || '18:00:00',
       endTime: row.endTime || '06:00:00',
       brightness: row.brightness ?? 80,
+      useDynamicBrightness: !!row.useDynamicBrightness,
       applyGroups,
       enabled: !!row.enabled
     })
@@ -440,6 +580,7 @@ function resetForm() {
     startTime: '18:00:00',
     endTime: '06:00:00',
     brightness: 80,
+    useDynamicBrightness: false,
     applyGroups: [{ district: '', roads: [] }],
     enabled: true
   })
@@ -691,6 +832,7 @@ async function onSubmit() {
       startTime: form.startTime,
       endTime: form.endTime,
       brightness: form.brightness,
+      useDynamicBrightness: form.useDynamicBrightness,
       enabled: form.enabled,
       groups
     }

@@ -74,13 +74,7 @@ const routes = [
         path: 'control/strategy',
         name: 'TimedStrategy',
         component: () => import('@/views/control/TimedStrategy.vue'),
-        meta: { title: '定时策略', keepAlive: true }
-      },
-      {
-        path: 'control/threshold',
-        name: 'ThresholdControl',
-        component: () => import('@/views/control/ThresholdControl.vue'),
-        meta: { title: '阈值联动', keepAlive: true }
+        meta: { title: '照明策略', keepAlive: true }
       },
       {
         path: 'control/log',

@@ -190,7 +190,6 @@ const cachedViews = [
   'PedestrianFlowTrend',
   'RemoteControl',
   'TimedStrategy',
-  'ThresholdControl',
   'OperationLog',
   'Alerts',
   'FaultHandle',
@@ -247,8 +246,7 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator'],
     children: [
       { title: '远程控制', path: '/control/remote', icon: 'SetUp' },
-      { title: '定时策略', path: '/control/strategy', icon: 'Clock' },
-      { title: '阈值联动', path: '/control/threshold', icon: 'Connection' },
+      { title: '照明策略', path: '/control/strategy', icon: 'Clock' },
       { title: '操作日志', path: '/control/log', icon: 'List' }
     ]
   },

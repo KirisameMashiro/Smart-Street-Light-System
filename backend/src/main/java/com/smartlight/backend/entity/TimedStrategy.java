@@ -40,6 +40,13 @@ public class TimedStrategy {
 
     private Integer brightness;
 
+    /**
+     * 是否启用动态亮度调节（根据实时光照传感器数据动态计算亮度）
+     * true: 策略仅控开关时机，亮度由光照+阈值分段动态决定
+     * false: 使用策略指定的固定亮度
+     */
+    private Boolean useDynamicBrightness;
+
     @TableField(value = "region_groups")
     @JsonIgnore
     private String regionGroupsJson;

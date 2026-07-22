@@ -1,10 +1,10 @@
 import request from './request'
 
-// 照明控制 API —— 远程控制复用已有接口；定时策略/阈值联动 [后端缺失]
+// 照明控制 API —— 远程控制复用已有接口；定时策略/阈值联动已实现
 // 远程控制（复用 [后端已实现] 接口，由 control.js 统一封装日志记录）
 export { batchSwitchLight, setLightBrightness } from './light.js'
 
-// ============ 定时策略 [后端缺失] /api/control/strategies ============
+// ============ 定时策略 /api/control/strategies ============
 export function getStrategyPage(params) {
   return request.get('/control/strategies/page', { params })
 }
@@ -26,7 +26,7 @@ export function toggleStrategy(id, enabled) {
   })
 }
 
-// ============ 阈值联动控制 [后端缺失] /api/control/threshold ============
+// ============ 阈值联动配置 /api/control/threshold ============
 export function getThresholdConfig() {
   return request.get('/control/threshold')
 }
