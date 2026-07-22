@@ -49,20 +49,6 @@
         />
       </el-select>
       <el-select
-        v-model="query.road"
-        placeholder="路段"
-        clearable
-        style="width: 140px"
-        @change="onSearch"
-      >
-        <el-option
-          v-for="o in filteredRoadOptions"
-          :key="o.value"
-          :label="o.label"
-          :value="o.value"
-        />
-      </el-select>
-      <el-select
         v-model="query.deviceType"
         placeholder="设备类型"
         clearable
@@ -352,39 +338,21 @@ const query = reactive({
   pageSize: 10,
   keyword: '',
   district: undefined,
-  road: undefined,
   deviceType: undefined,
   status: undefined
 })
 
 const districtOptions = ref([])
-const roadOptions = ref([])
 const deviceTypeOptions = ref([])
 const deviceTypeMap = ref({})
-const districtRoadMap = ref({})
-
-const filteredRoadOptions = computed(() => {
-  if (!query.district) return roadOptions.value
-  return (districtRoadMap.value[query.district] || []).map(r => ({ value: r, label: r }))
-})
-
-const formDistrictRoadMap = ref({})
-
-const formFilteredRoadOptions = computed(() => {
-  if (!form.district) return roadOptions.value
-  return (formDistrictRoadMap.value[form.district] || []).map(r => ({ value: r, label: r }))
-})
 
 async function loadOptions() {
   try {
-    const [dRes, rRes, tRes, lightsRes] = await Promise.all([
+    const [dRes, tRes] = await Promise.all([
       getSystemDistricts(),
-      getSystemRoads(),
-      getSystemDeviceTypes(),
-      getAllLights()
+      getSystemDeviceTypes()
     ])
     districtOptions.value = (dRes.data || []).map((d) => ({ value: d.districtName, label: d.districtName }))
-    roadOptions.value = (rRes.data || []).map((r) => ({ value: r.roadName, label: r.roadName }))
     const deviceTypes = tRes.data || []
     deviceTypeOptions.value = deviceTypes.map((t) => ({ value: t.typeName, label: t.typeName }))
     deviceTypeMap.value = {}
@@ -393,21 +361,6 @@ async function loadOptions() {
         deviceTypeMap.value[t.typeName] = { hasCamera: !!t.hasCamera, hasSpeaker: !!t.hasSpeaker, ratedPower: t.ratedPower }
       }
     })
-
-    const map = {}
-    const roads = rRes.data || []
-    roads.forEach(road => {
-      if (road.districtName && road.roadName) {
-        if (!map[road.districtName]) {
-          map[road.districtName] = []
-        }
-        if (!map[road.districtName].includes(road.roadName)) {
-          map[road.districtName].push(road.roadName)
-        }
-      }
-    })
-    districtRoadMap.value = map
-    formDistrictRoadMap.value = map
   } catch (e) {}
 }
 
@@ -436,13 +389,8 @@ function onFormDeviceTypeChange(val) {
 }
 
 function onDistrictChange() {
-  query.road = undefined
   query.pageNum = 1
   loadData()
-}
-
-function onFormDistrictChange() {
-  form.road = undefined
 }
 
 function onSearch() {
@@ -453,7 +401,6 @@ function onSearch() {
 function onReset() {
   query.keyword = ''
   query.district = undefined
-  query.road = undefined
   query.deviceType = undefined
   query.status = undefined
   onSearch()

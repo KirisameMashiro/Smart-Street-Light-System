@@ -37,26 +37,6 @@
           :key="o.value"
           :label="o.label"
           :value="o.value"
-        >
-          <span>{{ o.label }}</span>
-          <span
-            v-if="filter.road && o.hasRoad"
-            style="margin-left: 6px; color: #67c23a; font-size: 12px"
-          >✓ 包含{{ filter.road }}</span>
-        </el-option>
-      </el-select>
-      <el-select
-        v-model="filter.road"
-        placeholder="路段"
-        clearable
-        style="width: 160px"
-        @change="onRoadChange"
-      >
-        <el-option
-          v-for="o in availableRoads"
-          :key="o.value"
-          :label="o.label"
-          :value="o.value"
         />
       </el-select>
       <el-select
@@ -154,15 +134,33 @@
           <span class="map-info-item">比例尺: <b>{{ scaleText }}</b></span>
           <span class="map-info-item">比例: <b>{{ scaleRatio }}</b></span>
         </span>
+        <el-input-number
+          :model-value="currentZoom"
+          :min="3"
+          :max="18"
+          :step="0.5"
+          size="small"
+          :precision="1"
+          style="width: 110px"
+          @change="onZoomChange"
+        />
+        <el-button size="small" @click="setZoom(16)">1:4m</el-button>
+        <el-button size="small" @click="setZoom(18)">1:1m</el-button>
         <el-select
           v-model="selectedZone"
-          placeholder="选择园区"
+          placeholder="选择路灯"
           clearable
-          style="width: 140px"
+          filterable
+          style="width: 160px"
           size="small"
           @change="onZoneChange"
         >
-          <el-option v-for="z in zooZones" :key="z.name" :label="z.name" :value="z.name" />
+          <el-option
+            v-for="l in lightsWithLocation"
+            :key="l.id"
+            :label="(l.lightName || l.lightCode) + ' (' + l.lightCode + ')'"
+            :value="l.id"
+          />
         </el-select>
         <el-button type="primary" size="small" :icon="Plus" @click="openAddLightDialog">添加路灯</el-button>
         <span class="text-muted" style="margin-left: auto">
@@ -278,8 +276,11 @@
           <el-input v-model="addLightForm.location" placeholder="如 熊猫馆门前" />
         </el-form-item>
         <el-form-item label="行政区">
-          <el-select v-model="addLightForm.district" placeholder="选择行政区">
-            <el-option v-for="o in availableDistricts" :key="o.value" :label="o.label" :value="o.value" />
+          <el-select v-model="addLightForm.district" placeholder="选择行政区（可搜索动物园园区）" filterable allow-create>
+            <el-option v-for="o in availableDistricts" :key="o.value" :label="o.label" :value="o.value">
+              <span>{{ o.label }}</span>
+              <span v-if="o.isZooZone" style="float:right; font-size:11px; color:#67c23a; margin-left:8px">🦁 园区</span>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="路段">
@@ -306,38 +307,6 @@
         <el-button type="primary" :loading="addingLight" @click="onAddLight">保存</el-button>
       </template>
     </el-dialog>
-
-    <!-- 路段跨行政区选择弹窗 -->
-    <el-dialog
-      v-model="districtSelectDialog"
-      title="请选择行政区"
-      width="360px"
-      :close-on-click-modal="false"
-      :show-close="false"
-    >
-      <div v-if="pendingRoad" style="padding: 8px 0">
-        <p style="margin: 0 0 16px 0; color: #606266; font-size: 14px">
-          路段"<b>{{ pendingRoad }}</b>"存在于多个行政区：
-        </p>
-        <p style="margin: 0 0 16px 0; color: #f56c6c; font-size: 13px">
-          {{ pendingDistricts.join('、') }}
-        </p>
-        <el-select v-model="selectedPendingDistrict" placeholder="请选择行政区" style="width: 100%">
-          <el-option
-            v-for="d in pendingDistricts"
-            :key="d"
-            :label="d"
-            :value="d"
-          />
-        </el-select>
-      </div>
-      <template #footer>
-        <el-button @click="onCancelDistrictSelect">取消</el-button>
-        <el-button type="primary" :disabled="!selectedPendingDistrict" @click="onConfirmDistrictSelect">
-          确定
-        </el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
@@ -350,6 +319,7 @@ import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getLightPage, getLightById, addLight } from '@/api/light'
 import { getAllLatestSensorData, getLatestSensorData, getTodayEnergy } from '@/api/sensor'
+import { getDistricts } from '@/api/config'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { useAppStore } from '@/store/app'
 
@@ -363,6 +333,7 @@ const router = useRouter()
 
 const page = ref({ records: [], total: 0 })
 const allLights = ref([])
+const systemDistricts = ref([])
 const sensorMap = reactive({})
 const cumulativeEnergyMap = reactive({})
 const sensorApiAvailable = ref(null)
@@ -370,25 +341,22 @@ const sensorApiAvailable = ref(null)
 /** 是否使用批量传感器API（/latest/all — Redis缓存版） */
 const useBatchSensorApi = ref(false)
 
-const filter = reactive({ district: undefined, road: undefined, status: undefined })
+const filter = reactive({ district: undefined, status: undefined })
 const listQuery = reactive({ pageNum: 1, pageSize: 10 })
-
-const roadDistrictsMap = computed(() => {
-  const map = new Map()
-  allLights.value.forEach((l) => {
-    if (!l.road || !l.district) return
-    if (!map.has(l.road)) {
-      map.set(l.road, new Set())
-    }
-    map.get(l.road).add(l.district)
-  })
-  return map
-})
 
 const availableDistricts = computed(() => {
   const districts = new Set()
+  // 优先加入数据库中已存在的行政区（区域管理表）
+  systemDistricts.value.forEach((d) => {
+    if (d.districtName) districts.add(d.districtName)
+  })
+  // 补充路灯数据中已使用的行政区
   allLights.value.forEach((l) => {
     if (l.district) districts.add(l.district)
+  })
+  // 补充重庆动物园园区名称作为可选行政区
+  zooZones.forEach((z) => {
+    if (z.name) districts.add(z.name)
   })
   const arr = Array.from(districts)
   if (arr.length === 0) {
@@ -397,24 +365,8 @@ const availableDistricts = computed(() => {
   return arr.map((d) => ({
     value: d,
     label: d,
-    hasRoad: filter.road
-      ? roadDistrictsMap.value.get(filter.road)?.has(d) ?? false
-      : false
+    isZooZone: zooZones.some((z) => z.name === d)
   }))
-})
-
-const availableRoads = computed(() => {
-  const roads = new Set()
-  allLights.value.forEach((l) => {
-    if (!l.road) return
-    if (filter.district && l.district !== filter.district) return
-    roads.add(l.road)
-  })
-  const arr = Array.from(roads)
-  if (arr.length === 0) {
-    return []
-  }
-  return arr.map((r) => ({ value: r, label: r }))
 })
 
 const stats = computed(() => {
@@ -425,9 +377,15 @@ const stats = computed(() => {
 })
 
 const lightsWithLocation = computed(() =>
-  allLights.value.filter(
-    (l) => l.longitude != null && l.latitude != null && l.longitude !== 0 && l.latitude !== 0
-  )
+  allLights.value.filter((l) => {
+    if (l.longitude == null || l.latitude == null || l.longitude === 0 || l.latitude === 0) {
+      return false
+    }
+    if (filter.district && l.district !== filter.district) {
+      return false
+    }
+    return true
+  })
 )
 
 function applySensor(id, d) {
@@ -536,6 +494,36 @@ const currentZoom = ref(14)
 const scaleText = ref('0 m')
 const scaleRatio = ref('1:100')
 
+const MAP_STATE_KEY = 'smartlight_map_state'
+
+function saveMapState() {
+  if (!mapInstance) return
+  const center = mapInstance.getCenter()
+  const zoom = mapInstance.getZoom()
+  localStorage.setItem(MAP_STATE_KEY, JSON.stringify({
+    lat: center.lat,
+    lng: center.lng,
+    zoom
+  }))
+}
+
+function loadMapState() {
+  try {
+    const saved = localStorage.getItem(MAP_STATE_KEY)
+    if (saved) {
+      const state = JSON.parse(saved)
+      if (state.lat != null && state.lng != null) {
+        mapCenter.value = [state.lat, state.lng]
+      }
+      if (state.zoom != null) {
+        mapZoom.value = state.zoom
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+}
+
 const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
 const gaodeSubdomains = ['1', '2', '3', '4']
 
@@ -560,13 +548,29 @@ const zooZones = [
 
 const selectedZone = ref('')
 
-function onZoneChange(name) {
-  if (!name || !mapInstance) return
-  const zone = zooZones.find(z => z.name === name)
-  if (zone) {
-    mapInstance.setView([zone.lat, zone.lng], zone.zoom, { animate: true })
-    ElMessage.success(`已定位到${name}`)
+function setZoom(zoom) {
+  if (!mapInstance) return
+  mapInstance.setZoom(zoom, { animate: true })
+}
+
+function onZoomChange(val) {
+  if (!mapInstance || val == null) return
+  mapInstance.setZoom(Number(val), { animate: true })
+}
+
+function onZoneChange(lightId) {
+  if (lightId == null || lightId === '' || !mapInstance) return
+  const light = allLights.value.find(
+    (l) => l.id === lightId || l.id === Number(lightId)
+  )
+  if (!light || light.longitude == null || light.latitude == null) {
+    ElMessage.warning('该路灯暂无位置信息')
+    return
   }
+  // 使用 panTo 将路灯移动到地图中央，保持当前缩放级别不变
+  mapInstance.panTo([Number(light.latitude), Number(light.longitude)], { animate: true })
+  const name = light.lightName || light.lightCode || `路灯#${light.id}`
+  ElMessage.success(`已定位到${name}`)
 }
 
 function getMarkerColor(status) {
@@ -616,9 +620,13 @@ function createMarkerIcon(light) {
 function initMap() {
   if (!mapContainer.value) return
 
+  loadMapState()
+
   if (mapInstance) {
-    mapInstance.remove()
-    mapInstance = null
+    nextTick(() => {
+      mapInstance.invalidateSize()
+    })
+    return
   }
 
   markerMap = {}
@@ -627,15 +635,16 @@ function initMap() {
     center: mapCenter.value,
     zoom: mapZoom.value,
     zoomControl: true,
-    attributionControl: false
+    attributionControl: false,
+    minZoom: 3,
+    maxZoom: 18,
+    zoomSnap: 0.5,
+    zoomDelta: 0.5
   })
 
   markersLayer = L.featureGroup().addTo(mapInstance)
   addTileLayer()
 
-  if (scaleControl) {
-    mapInstance.removeControl(scaleControl)
-  }
   scaleControl = L.control.scale({
     position: 'bottomleft',
     imperial: false,
@@ -649,6 +658,11 @@ function initMap() {
     currentZoom.value = z
     scaleText.value = computeScaleText(z)
     scaleRatio.value = computeScaleRatio(z)
+    saveMapState()
+  })
+
+  mapInstance.on('moveend', () => {
+    saveMapState()
   })
 
   mapInstance.on('click', (e) => {
@@ -662,16 +676,19 @@ function initMap() {
 
 function computeScaleText(zoom) {
   const metersPerPixel = 156543.03392 * Math.cos((29.4253 * Math.PI) / 180) / Math.pow(2, zoom)
-  const centimeters = Math.round(metersPerPixel * 100 * 100)
+  const centimeters = metersPerPixel * 100 * 100
   if (centimeters >= 100000) {
     const km = centimeters / 100000
     return km.toFixed(km >= 5 ? 0 : 1) + ' km'
   } else if (centimeters >= 1000) {
-    return Math.round(centimeters / 100) + ' m'
+    return Math.round(centimeters / 100) / 10 + ' m'
   } else if (centimeters >= 10) {
     return Math.round(centimeters) + ' cm'
-  } else {
+  } else if (centimeters >= 1) {
     return centimeters.toFixed(1) + ' cm'
+  } else {
+    const mm = centimeters * 10
+    return mm.toFixed(1) + ' mm'
   }
 }
 
@@ -733,9 +750,9 @@ function updateMapBounds() {
     if (bounds && bounds.isValid()) {
       if (layers.length === 1 && layers[0].getLatLng) {
         const ll = layers[0].getLatLng()
-        mapInstance.setView([ll.lat, ll.lng], 17, { animate: true })
+        mapInstance.setView([ll.lat, ll.lng], 19, { animate: true })
       } else {
-        mapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 18, minZoom: 12 })
+        mapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 20, minZoom: 12 })
       }
     }
   } catch (e) {
@@ -884,18 +901,19 @@ async function refreshAll(reprobe = false) {
   if (reprobe) sensorApiAvailable.value = null
   loading.value = true
   try {
-    const [pageRes, allRes] = await Promise.all([
+    const [pageRes, allRes, districtRes] = await Promise.all([
       getLightPage({
         pageNum: listQuery.pageNum,
         pageSize: listQuery.pageSize,
         district: filter.district,
-        road: filter.road,
         status: filter.status
       }),
-      getLightPage({ pageNum: 1, pageSize: 9999 })
+      getLightPage({ pageNum: 1, pageSize: 9999 }),
+      getDistricts()
     ])
     const newPage = pageRes.data || { records: [], total: 0 }
     const newAll = allRes.data?.records || []
+    systemDistricts.value = districtRes.data || []
     // 检测列表中状态是否有变化（用于跨标签/页面同步通知）
     const prevStatusMap = new Map(allLights.value.map((l) => [l.id, l.status]))
     page.value = newPage
@@ -955,78 +973,11 @@ function applyFilter() {
 }
 
 function onFilterChange(changedField) {
-  if (changedField === 'district' && filter.road && filter.district) {
-    const districts = roadDistrictsMap.value.get(filter.road)
-    if (districts && !districts.has(filter.district)) {
-      filter.road = undefined
-    }
-  }
   applyFilter()
 }
 
 function onDistrictChange(v) {
-  if (filter.road) {
-    const districts = roadDistrictsMap.value.get(filter.road)
-    if (!districts || !districts.has(v)) {
-      filter.road = undefined
-    }
-  }
   onFilterChange('district', v)
-}
-
-const districtSelectDialog = ref(false)
-const pendingRoad = ref('')
-const pendingDistricts = ref([])
-const selectedPendingDistrict = ref('')
-
-function openDistrictSelect(road, districts) {
-  pendingRoad.value = road
-  pendingDistricts.value = Array.from(districts)
-  selectedPendingDistrict.value = ''
-  districtSelectDialog.value = true
-}
-
-function onCancelDistrictSelect() {
-  districtSelectDialog.value = false
-  filter.road = undefined
-  applyFilter()
-}
-
-function onConfirmDistrictSelect() {
-  if (!selectedPendingDistrict.value) return
-  filter.district = selectedPendingDistrict.value
-  districtSelectDialog.value = false
-  applyFilter()
-}
-
-function onRoadChange(road) {
-  if (!road) {
-    filter.district = undefined
-    applyFilter()
-    return
-  }
-
-  const districts = roadDistrictsMap.value.get(road)
-
-  if (filter.district && districts?.has(filter.district)) {
-    applyFilter()
-    return
-  }
-
-  if (districts && districts.size === 1) {
-    filter.district = Array.from(districts)[0]
-    applyFilter()
-    return
-  }
-
-  if (districts && districts.size > 1) {
-    filter.district = undefined
-    applyFilter()
-    openDistrictSelect(road, districts)
-    return
-  }
-
-  applyFilter()
 }
 
 let timer = null
@@ -1086,7 +1037,6 @@ watch(mode, async (m) => {
     setTimeout(() => {
       if (mapInstance) {
         mapInstance.invalidateSize()
-        updateMapBounds()
       }
     }, 100)
   }

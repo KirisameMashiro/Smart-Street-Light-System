@@ -92,6 +92,9 @@
           <div class="toolbar" style="padding: 12px 16px">
             <el-button type="primary" :icon="Plus" @click="openDistrictDialog()">新增行政区</el-button>
             <el-button :icon="Refresh" :loading="districtLoading" @click="loadDistricts">刷新</el-button>
+            <el-button type="success" :loading="districtImporting" @click="importZooZones">
+              🦁 批量导入动物园园区
+            </el-button>
           </div>
           <el-table :data="districts" stripe>
             <el-table-column type="index" label="#" width="60" />
@@ -751,6 +754,7 @@ async function onToggleEnabled(row) {
 // ============ 行政区管理 ============
 const districtLoading = ref(false)
 const districtSubmitting = ref(false)
+const districtImporting = ref(false)
 const districts = ref([])
 const districtDialogVisible = ref(false)
 const districtIsEdit = ref(false)
@@ -785,6 +789,58 @@ async function loadDistricts() {
     districts.value = []
   } finally {
     districtLoading.value = false
+  }
+}
+
+async function importZooZones() {
+  const zooZoneNames = [
+    '熊猫馆', '大象馆', '长颈鹿馆', '老虎馆', '狮子馆',
+    '猴山', '鸟语林', '两栖爬行动物馆', '企鹅馆', '金丝猴馆',
+    '儿童乐园', '正门广场', '南门入口', '北门入口', '天鹅湖', '停车场'
+  ]
+
+  try {
+    await ElMessageBox.confirm(
+      `确定将 ${zooZoneNames.length} 个动物园园区名称导入为行政区吗？\n已存在的名称不会重复添加。`,
+      '批量导入确认',
+      { type: 'warning' }
+    )
+  } catch (e) {
+    return
+  }
+
+  districtImporting.value = true
+  let successCount = 0
+  let skipCount = 0
+
+  const existingNames = new Set(districts.value.map(d => d.districtName))
+
+  for (const name of zooZoneNames) {
+    if (existingNames.has(name)) {
+      skipCount++
+      continue
+    }
+    try {
+      await addDistrict({
+        districtName: name,
+        sortOrder: successCount + skipCount,
+        description: `重庆动物园${name}园区`
+      })
+      successCount++
+    } catch (e) {
+      skipCount++
+    }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  districtImporting.value = false
+  await loadDistricts()
+
+  if (successCount > 0) {
+    ElMessage.success(`成功导入 ${successCount} 个园区，跳过已存在 ${skipCount} 个`)
+    logOperation('config_update', `批量导入动物园园区：成功${successCount}个`)
+  } else {
+    ElMessage.info('所有园区名称已存在，无需导入')
   }
 }
 

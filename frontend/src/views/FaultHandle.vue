@@ -46,15 +46,6 @@
       >
         <el-option v-for="d in districtOptions" :key="d" :label="d" :value="d" />
       </el-select>
-      <el-select
-        v-model="filterRoad"
-        placeholder="路段"
-        clearable
-        style="width: 160px"
-        @change="onSearch"
-      >
-        <el-option v-for="r in filteredRoads" :key="r" :label="r" :value="r" />
-      </el-select>
       <el-button type="primary" :icon="Search" @click="onSearch">查询</el-button>
       <el-button :icon="RefreshLeft" @click="onReset">重置</el-button>
     </div>
@@ -165,7 +156,7 @@ const allLights = ref([])
 const tableData = ref([])
 const searchKeyword = ref('')
 const filterDistrict = ref('')
-const filterRoad = ref('')
+
 let pollTimer = null
 
 const detailVisible = ref(false)
@@ -178,9 +169,6 @@ const fixForm = reactive({
   remark: ''
 })
 
-// 行政区与路段映射
-const districtRoadMap = {}
-
 const faultCount = computed(() => allLights.value.filter(l => Number(l.status) === 2).length)
 
 const districtOptions = computed(() => {
@@ -188,39 +176,15 @@ const districtOptions = computed(() => {
   return Array.from(set)
 })
 
-const roadOptions = computed(() => {
-  const set = new Set(allLights.value.filter(l => Number(l.status) === 2).map(l => l.road).filter(Boolean))
-  return Array.from(set)
-})
-
-const filteredRoads = computed(() => {
-  if (!filterDistrict.value) return roadOptions.value
-  return districtRoadMap[filterDistrict.value] || []
-})
-
 async function loadData() {
   loading.value = true
   try {
     const res = await getLightPage({ pageNum: 1, pageSize: 9999 })
     allLights.value = res.data?.records || []
-    buildDistrictRoadMap()
     filterData()
   } finally {
     loading.value = false
   }
-}
-
-function buildDistrictRoadMap() {
-  allLights.value.forEach(light => {
-    if (light.district && light.road) {
-      if (!districtRoadMap[light.district]) {
-        districtRoadMap[light.district] = []
-      }
-      if (!districtRoadMap[light.district].includes(light.road)) {
-        districtRoadMap[light.district].push(light.road)
-      }
-    }
-  })
 }
 
 function filterData() {
@@ -239,10 +203,6 @@ function filterData() {
     list = list.filter(l => l.district === filterDistrict.value)
   }
 
-  if (filterRoad.value) {
-    list = list.filter(l => l.road === filterRoad.value)
-  }
-
   tableData.value = list
 }
 
@@ -253,7 +213,6 @@ function onSearch() {
 function onReset() {
   searchKeyword.value = ''
   filterDistrict.value = ''
-  filterRoad.value = ''
   filterData()
 }
 

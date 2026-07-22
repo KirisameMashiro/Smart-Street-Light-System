@@ -48,7 +48,6 @@ export const DEVICE_TYPE_OPTIONS = [
 // 分组维度
 export const GROUP_BY_OPTIONS = [
   { value: 'district', label: '行政区' },
-  { value: 'road', label: '路段' },
   { value: 'deviceType', label: '设备类型' }
 ]
 

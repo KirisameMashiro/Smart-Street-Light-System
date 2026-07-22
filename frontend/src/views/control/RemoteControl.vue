@@ -91,15 +91,6 @@
         <el-option v-for="o in districtOptions" :key="o.value" :label="o.label" :value="o.value" />
       </el-select>
       <el-select
-        v-model="query.road"
-        placeholder="路段"
-        clearable
-        style="width: 150px"
-        @change="onRoadChange"
-      >
-        <el-option v-for="o in filteredRoadOptions" :key="o.value" :label="o.label" :value="o.value" />
-      </el-select>
-      <el-select
         v-model="query.deviceType"
         placeholder="设备类型"
         clearable
@@ -305,7 +296,6 @@ const roadDistrictMap = ref({})
 
 const query = reactive({
   district: undefined,
-  road: undefined,
   deviceType: undefined,
   status: undefined
 })
@@ -314,16 +304,10 @@ const query = reactive({
 const filteredData = computed(() => {
   return allData.value.filter((d) => {
     if (query.district && d.district !== query.district) return false
-    if (query.road && d.road !== query.road) return false
     if (query.deviceType && d.deviceType !== query.deviceType) return false
     if (query.status !== undefined && query.status !== null && d.status !== query.status) return false
     return true
   })
-})
-
-const filteredRoadOptions = computed(() => {
-  if (!query.district) return roadOptions.value
-  return (districtRoadMap.value[query.district] || []).map(r => ({ value: r, label: r }))
 })
 
 // 分组：按所选维度聚合当前筛选结果
@@ -348,15 +332,12 @@ const groups = computed(() => {
 async function loadData() {
   loading.value = true
   try {
-    const [lightsRes, districtsRes, roadsRes] = await Promise.all([
+    const [lightsRes, districtsRes] = await Promise.all([
       getAllLights(),
-      getSystemDistricts(),
-      getSystemRoads()
+      getSystemDistricts()
     ])
     allData.value = lightsRes.data || []
     districtOptions.value = (districtsRes.data || []).map(d => ({ value: d.districtName, label: d.districtName }))
-    roadOptions.value = (roadsRes.data || []).map(r => ({ value: r.roadName, label: r.roadName }))
-    buildDistrictRoadMap(roadsRes.data || [])
   } catch (e) {
     allData.value = []
   } finally {
@@ -364,39 +345,16 @@ async function loadData() {
   }
 }
 
-function buildDistrictRoadMap(roads) {
-  districtRoadMap.value = {}
-  roadDistrictMap.value = {}
-  roads.forEach(road => {
-    if (road.districtName && road.roadName) {
-      if (!districtRoadMap.value[road.districtName]) {
-        districtRoadMap.value[road.districtName] = []
-      }
-      if (!districtRoadMap.value[road.districtName].includes(road.roadName)) {
-        districtRoadMap.value[road.districtName].push(road.roadName)
-      }
-      roadDistrictMap.value[road.roadName] = road.districtName
-    }
-  })
-}
-
 function onSelectionChange(rows) {
   selection.value = rows
 }
 
 function onDistrictChange() {
-  query.road = undefined
-}
-
-function onRoadChange(val) {
-  if (val && roadDistrictMap.value[val]) {
-    query.district = roadDistrictMap.value[val]
-  }
+  query.pageNum = 1
 }
 
 function onReset() {
   query.district = undefined
-  query.road = undefined
   query.deviceType = undefined
   query.status = undefined
 }

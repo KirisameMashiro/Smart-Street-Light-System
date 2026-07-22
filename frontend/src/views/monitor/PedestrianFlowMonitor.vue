@@ -34,20 +34,6 @@
           :value="o.value"
         />
       </el-select>
-      <el-select
-        v-model="filter.road"
-        placeholder="路段"
-        clearable
-        style="width: 160px"
-        @change="applyFilter"
-      >
-        <el-option
-          v-for="o in availableRoads"
-          :key="o.value"
-          :label="o.label"
-          :value="o.value"
-        />
-      </el-select>
       <span class="text-muted" style="margin-left: auto">
         共 {{ filteredLights.length }} 盏
         <template v-if="stats.total > 0">
@@ -136,12 +122,11 @@ const districtOptions = ref([])
 const roadOptions = ref([])
 const districtRoadMap = ref({})
 
-const filter = reactive({ district: undefined, road: undefined })
+const filter = reactive({ district: undefined })
 
 const filteredLights = computed(() => {
   return allLights.value.filter((d) => {
     if (filter.district && d.district !== filter.district) return false
-    if (filter.road && d.road !== filter.road) return false
     return true
   })
 })
@@ -163,16 +148,6 @@ const availableDistricts = computed(() => {
   return Array.from(districts).map((d) => ({ value: d, label: d }))
 })
 
-const availableRoads = computed(() => {
-  const roads = new Set()
-  allLights.value.forEach((l) => {
-    if (!l.road) return
-    if (filter.district && l.district !== filter.district) return
-    roads.add(l.road)
-  })
-  return Array.from(roads).map((r) => ({ value: r, label: r }))
-})
-
 const stats = computed(() => {
   let hasData = 0, noData = 0
   allLights.value.forEach((l) => {
@@ -183,7 +158,6 @@ const stats = computed(() => {
 })
 
 function onDistrictChange() {
-  filter.road = undefined
   query.pageNum = 1
 }
 
@@ -207,22 +181,8 @@ async function loadAllLights() {
 
 async function loadDistrictsAndRoads() {
   try {
-    const [dRes, rRes] = await Promise.all([
-      getSystemDistricts(),
-      getSystemRoads()
-    ])
+    const dRes = await getSystemDistricts()
     districtOptions.value = (dRes.data || []).map((d) => ({ value: d.districtName, label: d.districtName }))
-    roadOptions.value = (rRes.data || []).map((r) => ({ value: r.roadName, label: r.roadName }))
-    const map = {}
-    ;(rRes.data || []).forEach((road) => {
-      if (road.districtName && road.roadName) {
-        if (!map[road.districtName]) map[road.districtName] = []
-        if (!map[road.districtName].includes(road.roadName)) {
-          map[road.districtName].push(road.roadName)
-        }
-      }
-    })
-    districtRoadMap.value = map
   } catch (e) {}
 }
 
