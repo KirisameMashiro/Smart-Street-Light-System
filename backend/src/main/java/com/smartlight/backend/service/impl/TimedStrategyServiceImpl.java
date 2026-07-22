@@ -11,6 +11,7 @@ import com.smartlight.backend.service.MqttPublishService;
 import com.smartlight.backend.service.TimedStrategyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.dao.DuplicateKeyException;
@@ -30,6 +31,7 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
     private final TimedStrategyMapper timedStrategyMapper;
     private final LightMapper lightMapper;
     private final MqttPublishService mqttPublishService;
+    private final ApplicationContext applicationContext;
 
     @Override
     public IPage<TimedStrategy> getPage(int pageNum, int pageSize, String type, String name) {
@@ -165,20 +167,79 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             return;
         }
 
+        // ---------- 动态亮度预处理 ----------
+        boolean useDynamic = Boolean.TRUE.equals(strategy.getUseDynamicBrightness());
+        List<TimedStrategy.BrightnessSegment> segments = null;
+        if (useDynamic) {
+            segments = strategy.getBrightnessSegments();
+            if (segments == null || segments.isEmpty()) {
+                log.debug("策略「{}」启用动态亮度但未配置阈值分段，回退固定亮度", strategy.getName());
+                useDynamic = false;
+            }
+        }
+
         int count = 0;
         for (Light light : lights) {
             if (Integer.valueOf(2).equals(light.getStatus())) continue; // 故障灯跳过
             if (Boolean.TRUE.equals(light.getManualControl())) continue; // 手动控制灯跳过
-            if (!Integer.valueOf(1).equals(light.getStatus()) || !strategy.getBrightness().equals(light.getBrightness())) {
-                light.setStatus(1);
-                light.setBrightness(strategy.getBrightness());
+
+            Integer targetStatus;
+            Integer targetBrightness;
+
+            if (useDynamic) {
+                // 动态模式：查找灯所属的区域分组，优先使用分组级阈值
+                TimedStrategy.RegionGroup matchedGroup = findMatchingGroup(strategy, light);
+                Double offThreshold = (matchedGroup != null && matchedGroup.getLightOffThreshold() != null)
+                    ? matchedGroup.getLightOffThreshold()
+                    : strategy.getLightOffThreshold();
+                List<TimedStrategy.BrightnessSegment> effectiveSegments = (matchedGroup != null
+                        && matchedGroup.getBrightnessSegments() != null
+                        && !matchedGroup.getBrightnessSegments().isEmpty())
+                    ? matchedGroup.getBrightnessSegments()
+                    : segments;
+
+                Double illuminance = getIlluminanceFromRedis(light.getId());
+                if (illuminance == null) {
+                    // 无传感器数据 → 跳过该灯，等待下次检查
+                    continue;
+                }
+                // 滞后区间防抖：正在亮灯时需光照高于阈值120%才关，已关灯时需低于阈值80%才开
+                double hysteresisOff = (offThreshold != null) ? offThreshold * 1.20 : Double.MAX_VALUE;
+                double hysteresisOn  = (offThreshold != null) ? offThreshold * 0.80 : 0;
+                boolean currentlyOn = Integer.valueOf(1).equals(light.getStatus());
+                if (currentlyOn && illuminance > hysteresisOff) {
+                    targetBrightness = 0;
+                    targetStatus = 0;
+                } else if (!currentlyOn && illuminance > hysteresisOn) {
+                    // 已关灯且光照不够暗 → 保持关灯
+                    targetBrightness = 0;
+                    targetStatus = 0;
+                } else if (!currentlyOn && illuminance <= hysteresisOn) {
+                    // 已关灯且光照够暗了 → 开灯
+                    targetBrightness = matchSegmentBrightness(illuminance, effectiveSegments);
+                    targetStatus = 1;
+                } else {
+                    // 正在亮灯且光照 <= hysteresisOff → 继续按动态亮度调节
+                    targetBrightness = matchSegmentBrightness(illuminance, effectiveSegments);
+                    targetStatus = 1;
+                }
+            } else {
+                // 固定模式
+                targetStatus = 1;
+                targetBrightness = strategy.getBrightness();
+            }
+
+            if (!Integer.valueOf(1).equals(light.getStatus()) || !targetBrightness.equals(light.getBrightness())) {
+                light.setStatus(targetStatus);
+                light.setBrightness(targetBrightness);
                 lightMapper.updateById(light);
-                mqttPublishService.publishCombinedControl(light.getLightCode(), 1, strategy.getBrightness());
+                mqttPublishService.publishCombinedControl(light.getLightCode(), targetStatus, targetBrightness);
                 count++;
             }
         }
 
-        log.info("策略「{}」已立即执行，实际调整了 {} 盏路灯", strategy.getName(), count);
+        log.info("策略「{}」已立即执行，实际调整了 {} 盏路灯，模式: {}", 
+                strategy.getName(), count, useDynamic ? "动态亮度" : "固定亮度");
     }
 
     private void turnOffLightsForStrategy(TimedStrategy strategy) {
@@ -249,6 +310,70 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             }
         }
         return false;
+    }
+
+    /**
+     * 查找路灯匹配的策略区域分组。
+     * 返回第一个匹配的 RegionGroup，若策略未配置分组（覆盖全部）或没有匹配的分组则返回 null。
+     */
+    private TimedStrategy.RegionGroup findMatchingGroup(TimedStrategy strategy, Light light) {
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups == null || groups.isEmpty()) {
+            return null;
+        }
+        for (TimedStrategy.RegionGroup group : groups) {
+            boolean districtMatch = group.getDistrict() == null || group.getDistrict().isEmpty()
+                    || group.getDistrict().equals(light.getDistrict());
+            boolean roadMatch = group.getRoads() == null || group.getRoads().isEmpty()
+                    || (light.getRoad() != null && group.getRoads().contains(light.getRoad()));
+            if (districtMatch && roadMatch) {
+                return group;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 根据光照值和阈值分段，匹配目标亮度百分比
+     */
+    private Integer matchSegmentBrightness(double illuminance, List<TimedStrategy.BrightnessSegment> segments) {
+        TimedStrategy.BrightnessSegment matched = null;
+        for (TimedStrategy.BrightnessSegment seg : segments) {
+            if (illuminance <= seg.getThreshold()) {
+                if (matched == null || seg.getThreshold() < matched.getThreshold()) {
+                    matched = seg;
+                }
+            }
+        }
+        if (matched == null && !segments.isEmpty()) {
+            matched = segments.stream()
+                    .max((a, b) -> Double.compare(a.getThreshold(), b.getThreshold()))
+                    .orElse(null);
+        }
+        return matched != null && matched.getBrightness() != null ? matched.getBrightness() : 100;
+    }
+
+    /**
+     * 从 Redis 读取某盏灯的最新光照值
+     */
+    private Double getIlluminanceFromRedis(Long lightId) {
+        try {
+            String key = "sensor:latest:" + lightId;
+            org.springframework.data.redis.core.StringRedisTemplate redisTemplate = 
+                org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils.qualifiedBeanOfType(
+                    applicationContext, org.springframework.data.redis.core.StringRedisTemplate.class, "stringRedisTemplate");
+            if (redisTemplate == null) {
+                return null;
+            }
+            java.util.Map<Object, Object> entries = redisTemplate.opsForHash().entries(key);
+            if (entries.isEmpty()) return null;
+            Object val = entries.get("illuminance");
+            if (val == null) return null;
+            return Double.parseDouble(val.toString());
+        } catch (Exception e) {
+            log.debug("从 Redis 读取光照值失败: lightId={}, error={}", lightId, e.getMessage());
+            return null;
+        }
     }
 
     private boolean isStrategyActive(LocalDateTime now, TimedStrategy strategy) {
