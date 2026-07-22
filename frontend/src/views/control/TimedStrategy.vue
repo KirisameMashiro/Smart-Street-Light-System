@@ -192,9 +192,8 @@
                   v-model="group.district"
                   clearable
                   filterable
-                  placeholder="选择行政区"
+                  placeholder="选择动物园区"
                   style="width: 35%"
-                  @change="() => { group.roads = [] }"
                 >
                   <el-option
                     v-for="o in DISTRICT_OPTIONS"
@@ -204,29 +203,6 @@
                     :disabled="isDistrictDisabled(o.value, index)"
                   />
                 </el-select>
-                <div class="road-select-wrapper">
-                  <el-select
-                    v-model="group.roads"
-                    multiple
-                    clearable
-                    filterable
-                    placeholder="选择路段"
-                    class="road-select-multi"
-                  >
-                    <el-option
-                      v-for="o in (group.district ? (districtRoadMap[group.district] || []).map(r => ({ value: r, label: r })) : [])"
-                      :key="o.value"
-                      :label="o.label"
-                      :value="o.value"
-                    />
-                  </el-select>
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="selectAllRoads(index)"
-                    :disabled="!group.district"
-                  >全选</el-button>
-                </div>
               </div>
               <!-- 分组级阈值配置：动态亮度开启时直接展示 -->
               <div v-if="form.useDynamicBrightness" class="group-threshold-section">
@@ -319,7 +295,7 @@ import {
   deleteStrategy,
   toggleStrategy
 } from '@/api/control'
-import { getDistricts, getRoads, getAllLights } from '@/api/light'
+import { getDistricts, getAllLights } from '@/api/light'
 import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
@@ -329,7 +305,6 @@ const tableData = ref([])
 const total = ref(0)
 
 const DISTRICT_OPTIONS = ref([])
-const ROAD_OPTIONS = ref([])
 const districtRoadMap = ref({})
 
 const query = reactive({
@@ -428,16 +403,6 @@ function removeApplyGroup(index) {
 
 function isDistrictDisabled(districtValue, currentIndex) {
   return form.applyGroups.some((g, idx) => idx !== currentIndex && g.district === districtValue)
-}
-
-function selectAllRoads(index) {
-  const group = form.applyGroups[index]
-  if (!group.district) {
-    ElMessage.warning('请先选择行政区')
-    return
-  }
-  const districtRoads = districtRoadMap.value[group.district] || []
-  group.roads = [...districtRoads]
 }
 
 const rules = {
@@ -812,14 +777,12 @@ async function onSubmit() {
 
 async function loadOptions() {
   try {
-    const [districtsRes, roadsRes, lightsRes] = await Promise.all([
+    const [districtsRes, lightsRes] = await Promise.all([
       getDistricts(),
-      getRoads(),
       getAllLights()
     ])
-    
+
     DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
-    ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
     
     const map = {}
     const lights = lightsRes.data || []
@@ -898,44 +861,6 @@ onMounted(() => {
   align-items: flex-start;
 }
 
-.road-select-wrapper {
-  display: flex;
-  gap: 6px;
-  width: calc(65% - 8px);
-  align-items: flex-start;
-}
-
-.road-select-multi {
-  width: 100%;
-}
-
-.road-select-multi :deep(.el-select__wrapper) {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.road-select-multi :deep(.el-select__selection) {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-.road-select-multi :deep(.el-select__tags) {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-
-.road-select-multi :deep(.el-tag) {
-  display: inline-flex;
-  margin: 0 !important;
-  flex-shrink: 0;
-}
 
 .group-actions {
   margin-top: 8px;
@@ -983,46 +908,3 @@ onMounted(() => {
 }
 </style>
 
-<style>
-.road-select-multi .el-select__tags {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: wrap !important;
-  gap: 2px !important;
-  align-items: center !important;
-}
-
-.road-select-multi .el-select__tags > * {
-  display: inline-flex !important;
-  flex-direction: row !important;
-}
-
-.road-select-multi .el-tag {
-  display: inline-flex !important;
-  margin: 0 !important;
-  flex-shrink: 0;
-  padding: 0 3px !important;
-  height: 20px !important;
-  line-height: 18px !important;
-  font-size: 11px !important;
-}
-
-.road-select-multi .el-tag .el-tag__close {
-  margin-left: 2px !important;
-  font-size: 10px !important;
-}
-
-.road-select-multi .el-select__wrapper {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.road-select-multi .el-select__selection {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-</style>
