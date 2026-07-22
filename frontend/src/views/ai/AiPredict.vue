@@ -10,7 +10,7 @@
       <el-autocomplete
         v-model="searchKeyword"
         :fetch-suggestions="fetchSuggestions"
-        placeholder="输入编号/名称/位置/行政区搜索路灯"
+        placeholder="输入编号/名称/位置/动物园区搜索路灯"
         :trigger-on-focus="true"
         clearable
         style="width: 420px"

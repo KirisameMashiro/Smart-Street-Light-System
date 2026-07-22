@@ -36,7 +36,7 @@
       />
       <el-select
         v-model="query.district"
-        placeholder="行政区"
+        placeholder="动物园区"
         clearable
         style="width: 140px"
         @change="onDistrictChange"
@@ -91,7 +91,7 @@
         <el-table-column prop="lightCode" label="编号" width="110" />
         <el-table-column prop="lightName" label="名称" width="130" show-overflow-tooltip />
         <el-table-column prop="location" label="安装位置" min-width="150" show-overflow-tooltip />
-        <el-table-column label="行政区" width="100">
+        <el-table-column label="动物园区" width="100">
           <template #default="{ row }">{{ row.district || '-' }}</template>
         </el-table-column>
         <el-table-column label="路段" width="100">
@@ -172,7 +172,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="行政区" prop="district">
+            <el-form-item label="动物园区" prop="district">
               <el-select v-model="form.district" placeholder="请选择" clearable style="width:100%" @change="onFormDistrictChange">
                 <el-option
                   v-for="o in districtOptions"
@@ -264,7 +264,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-                    <el-col :span="12">
+          <el-col :span="12">
             <el-form-item label="额定功率(W)" prop="ratedPower">
               <el-input-number v-model="form.ratedPower" :min="0" :precision="2" style="width:100%" />
             </el-form-item>

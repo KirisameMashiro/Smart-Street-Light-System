@@ -17,13 +17,16 @@ export const ONLINE_STATUS_MAP = {
   fault: { label: '故障', type: 'danger' }
 }
 
-// ============ 行政区 [前端扩展] 后端 light 表无 district 字段 ============
+// ============ 动物园区 [前端扩展] 后端 light 表无 district 字段 ============
 export const DISTRICT_OPTIONS = [
-  { value: '城东区', label: '城东区' },
-  { value: '城西区', label: '城西区' },
-  { value: '城南区', label: '城南区' },
-  { value: '城北区', label: '城北区' },
-  { value: '中心区', label: '中心区' }
+  { value: '熊猫馆', label: '熊猫馆' },
+  { value: '大象馆', label: '大象馆' },
+  { value: '长颈鹿馆', label: '长颈鹿馆' },
+  { value: '老虎馆', label: '老虎馆' },
+  { value: '狮子馆', label: '狮子馆' },
+  { value: '猴山', label: '猴山' },
+  { value: '鸟语林', label: '鸟语林' },
+  { value: '正门广场', label: '正门广场' }
 ]
 
 // ============ 路段 [前端扩展] 后端 light 表无 road 字段 ============
@@ -47,7 +50,7 @@ export const DEVICE_TYPE_OPTIONS = [
 
 // 分组维度
 export const GROUP_BY_OPTIONS = [
-  { value: 'district', label: '行政区' },
+  { value: 'district', label: '动物园区' },
   { value: 'deviceType', label: '设备类型' }
 ]
 

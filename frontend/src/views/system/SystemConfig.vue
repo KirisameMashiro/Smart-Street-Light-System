@@ -90,7 +90,7 @@
       <el-tab-pane label="区域管理" name="district">
         <div class="table-card">
           <div class="toolbar" style="padding: 12px 16px">
-            <el-button type="primary" :icon="Plus" @click="openDistrictDialog()">新增行政区</el-button>
+            <el-button type="primary" :icon="Plus" @click="openDistrictDialog()">新增动物园区</el-button>
             <el-button :icon="Refresh" :loading="districtLoading" @click="loadDistricts">刷新</el-button>
             <el-button type="success" :loading="districtImporting" @click="importZooZones">
               🦁 批量导入动物园园区
@@ -98,7 +98,7 @@
           </div>
           <el-table :data="districts" stripe>
             <el-table-column type="index" label="#" width="60" />
-            <el-table-column prop="districtName" label="行政区名称" width="240" show-overflow-tooltip />
+            <el-table-column prop="districtName" label="动物园区名称" width="240" show-overflow-tooltip />
             <el-table-column prop="sortOrder" label="排序" width="100" />
             <el-table-column prop="description" label="描述" min-width="260" show-overflow-tooltip />
             <el-table-column label="操作" width="180" fixed="right" class-name="table-ops">
@@ -117,7 +117,7 @@
           <div class="toolbar" style="padding: 12px 16px">
             <el-select
               v-model="roadFilterDistrict"
-              placeholder="按行政区筛选"
+              placeholder="按动物园区筛选"
               clearable
               filterable
               style="width: 180px; margin-right: 8px"
@@ -136,7 +136,7 @@
           <el-table :data="filteredRoads" stripe>
             <el-table-column type="index" label="#" width="60" />
             <el-table-column prop="roadName" label="路段名称" width="200" show-overflow-tooltip />
-            <el-table-column label="所属行政区" width="160">
+            <el-table-column label="所属动物园区" width="160">
               <template #default="{ row }">
                 {{ districtNameOf(row.districtId) }}
               </template>
@@ -325,16 +325,16 @@
       </template>
     </el-dialog>
 
-    <!-- 新增/编辑行政区弹窗 -->
+    <!-- 新增/编辑动物园区弹窗 -->
     <el-dialog
       v-model="districtDialogVisible"
-      :title="districtIsEdit ? '编辑行政区' : '新增行政区'"
+      :title="districtIsEdit ? '编辑动物园区' : '新增动物园区'"
       width="520px"
       @closed="resetDistrictForm"
     >
       <el-form ref="districtFormRef" :model="districtForm" :rules="districtRules" label-width="100px">
-        <el-form-item label="行政区名称" prop="districtName">
-          <el-input v-model="districtForm.districtName" placeholder="请输入行政区名称" />
+        <el-form-item label="动物园区名称" prop="districtName">
+          <el-input v-model="districtForm.districtName" placeholder="请输入动物园区名称" />
         </el-form-item>
         <el-form-item label="排序">
           <el-input-number v-model="districtForm.sortOrder" :min="0" :step="1" controls-position="right" />
@@ -360,8 +360,8 @@
         <el-form-item label="路段名称" prop="roadName">
           <el-input v-model="roadForm.roadName" placeholder="请输入路段名称" />
         </el-form-item>
-        <el-form-item label="所属行政区" prop="districtId">
-          <el-select v-model="roadForm.districtId" placeholder="请选择行政区" filterable style="width: 100%">
+        <el-form-item label="所属动物园区" prop="districtId">
+          <el-select v-model="roadForm.districtId" placeholder="请选择动物园区" filterable style="width: 100%">
             <el-option
               v-for="d in districts"
               :key="d.id"
@@ -751,7 +751,7 @@ async function onToggleEnabled(row) {
   }
 }
 
-// ============ 行政区管理 ============
+// ============ 动物园区管理 ============
 const districtLoading = ref(false)
 const districtSubmitting = ref(false)
 const districtImporting = ref(false)
@@ -767,7 +767,7 @@ const districtForm = reactive({
 })
 
 const districtRules = {
-  districtName: [{ required: true, message: '请输入行政区名称', trigger: 'blur' }]
+  districtName: [{ required: true, message: '请输入动物园区名称', trigger: 'blur' }]
 }
 
 function resetDistrictForm() {
@@ -801,7 +801,7 @@ async function importZooZones() {
 
   try {
     await ElMessageBox.confirm(
-      `确定将 ${zooZoneNames.length} 个动物园园区名称导入为行政区吗？\n已存在的名称不会重复添加。`,
+      `确定将 ${zooZoneNames.length} 个动物园园区名称导入为动物园区吗？\n已存在的名称不会重复添加。`,
       '批量导入确认',
       { type: 'warning' }
     )
@@ -870,12 +870,12 @@ async function onDistrictSubmit() {
     if (districtIsEdit.value) {
       await updateDistrict({ ...districtForm })
       ElMessage.success('更新成功')
-      logOperation('config_update', `修改行政区：${districtForm.districtName}`)
+      logOperation('config_update', `修改动物园区：${districtForm.districtName}`)
     } else {
       const { id, ...payload } = districtForm
       await addDistrict(payload)
       ElMessage.success('新增成功')
-      logOperation('config_update', `新增行政区：${districtForm.districtName}`)
+      logOperation('config_update', `新增动物园区：${districtForm.districtName}`)
     }
     districtDialogVisible.value = false
     loadDistricts()
@@ -887,7 +887,7 @@ async function onDistrictSubmit() {
 
 async function onDistrictDelete(row) {
   try {
-    await ElMessageBox.confirm(`确定删除行政区「${row.districtName}」吗？`, '删除确认', {
+    await ElMessageBox.confirm(`确定删除动物园区「${row.districtName}」吗？`, '删除确认', {
       type: 'warning'
     })
   } catch (e) {
@@ -896,7 +896,7 @@ async function onDistrictDelete(row) {
   try {
     await deleteDistrict(row.id)
     ElMessage.success('删除成功')
-    logOperation('config_update', `删除行政区：${row.districtName}`)
+    logOperation('config_update', `删除动物园区：${row.districtName}`)
     loadDistricts()
   } catch (e) {
   }
@@ -920,7 +920,7 @@ const roadForm = reactive({
 
 const roadRules = {
   roadName: [{ required: true, message: '请输入路段名称', trigger: 'blur' }],
-  districtId: [{ required: true, message: '请选择所属行政区', trigger: 'change' }]
+  districtId: [{ required: true, message: '请选择所属动物园区', trigger: 'change' }]
 }
 
 function districtNameOf(districtId) {

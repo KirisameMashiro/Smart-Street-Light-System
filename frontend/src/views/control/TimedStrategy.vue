@@ -65,10 +65,6 @@
             <template v-if="row.groups?.length">
               <template v-for="(g, i) in row.groups" :key="i">
                 <template v-if="g.district">{{ g.district }}</template>
-                <template v-if="g.roads?.length">
-                  <span v-if="g.district" class="text-muted"> · </span>
-                  {{ g.roads.join('、') }}
-                </template>
                 <template v-if="i < row.groups.length - 1">；</template>
               </template>
             </template>
@@ -195,9 +191,8 @@
                   v-model="group.district"
                   clearable
                   filterable
-                  placeholder="选择行政区"
-                  style="width: 35%"
-                  @change="() => { group.roads = [] }"
+                  placeholder="选择动物园区"
+                  style="width: 100%"
                 >
                   <el-option
                     v-for="o in DISTRICT_OPTIONS"
@@ -207,36 +202,13 @@
                     :disabled="isDistrictDisabled(o.value, index)"
                   />
                 </el-select>
-                <div class="road-select-wrapper">
-                  <el-select
-                    v-model="group.roads"
-                    multiple
-                    clearable
-                    filterable
-                    placeholder="选择路段"
-                    class="road-select-multi"
-                  >
-                    <el-option
-                      v-for="o in (group.district ? (districtRoadMap[group.district] || []).map(r => ({ value: r, label: r })) : [])"
-                      :key="o.value"
-                      :label="o.label"
-                      :value="o.value"
-                    />
-                  </el-select>
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="selectAllRoads(index)"
-                    :disabled="!group.district"
-                  >全选</el-button>
-                </div>
               </div>
               <div v-if="form.applyGroups.length > 1" class="group-actions">
                 <el-button type="danger" size="small" @click="removeApplyGroup(index)">删除</el-button>
               </div>
             </div>
             <el-button type="primary" size="small" @click="addApplyGroup" class="add-group-btn">
-              + 添加行政区
+              + 添加动物园区
             </el-button>
           </div>
         </el-form-item>
@@ -339,18 +311,14 @@ import {
   getThresholdConfig,
   updateThresholdConfig
 } from '@/api/control'
-import { getDistricts, getRoads, getAllLights } from '@/api/light'
-import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
+import { getDistricts } from '@/api/light'
+import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS, DISTRICT_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
 const loading = ref(false)
 const submitting = ref(false)
 const tableData = ref([])
 const total = ref(0)
-
-const DISTRICT_OPTIONS = ref([])
-const ROAD_OPTIONS = ref([])
-const districtRoadMap = ref({})
 
 const query = reactive({
   pageNum: 1,
@@ -485,8 +453,7 @@ async function saveThresholdConfig() {
 
 function addApplyGroup() {
   form.applyGroups.push({
-    district: '',
-    roads: []
+    district: ''
   })
 }
 
@@ -496,16 +463,6 @@ function removeApplyGroup(index) {
 
 function isDistrictDisabled(districtValue, currentIndex) {
   return form.applyGroups.some((g, idx) => idx !== currentIndex && g.district === districtValue)
-}
-
-function selectAllRoads(index) {
-  const group = form.applyGroups[index]
-  if (!group.district) {
-    ElMessage.warning('请先选择行政区')
-    return
-  }
-  const districtRoads = districtRoadMap.value[group.district] || []
-  group.roads = [...districtRoads]
 }
 
 const rules = {
@@ -538,17 +495,13 @@ function openDialog(row) {
   isEdit.value = !!row
   if (row) {
     let applyGroups = []
-    // 直接解析 groups 结构，完美保留行政区-路段配对
+    // 直接解析 groups 结构，完美保留动物园区-路段配对
     const groups = Array.isArray(row.groups) ? row.groups : []
     groups.forEach(g => {
       applyGroups.push({
-        district: g.district || '',
-        roads: Array.isArray(g.roads) ? [...g.roads] : []
+        district: g.district || ''
       })
     })
-    if (applyGroups.length === 0) {
-      applyGroups.push({ district: '', roads: [] })
-    }
     Object.assign(form, {
       id: row.id,
       name: row.name || '',
@@ -581,7 +534,7 @@ function resetForm() {
     endTime: '06:00:00',
     brightness: 80,
     useDynamicBrightness: false,
-    applyGroups: [{ district: '', roads: [] }],
+    applyGroups: [],
     enabled: true
   })
   formRef.value?.clearValidate()
@@ -627,45 +580,17 @@ function isTimeRangeOverlap(start1, end1, start2, end2) {
 }
 
 
-function isGroupOverlap(group, otherDistrict, otherRoads) {
+function isGroupOverlap(group, otherDistrict) {
   const formDistrict = group.district || ''
-  const formRoads = group.roads || []
 
-  if (!formDistrict && !formRoads.length) {
+  if (!formDistrict) {
     return true
   }
-  if (!otherDistrict && !otherRoads.length) {
+  if (!otherDistrict) {
     return true
   }
 
-  if (formRoads.length > 0 && otherRoads.length > 0) {
-    if (formDistrict && otherDistrict && formDistrict !== otherDistrict) {
-      return false
-    }
-    return formRoads.some(r => otherRoads.includes(r))
-  }
-
-  if (formDistrict && !formRoads.length) {
-    if (otherRoads.length > 0) {
-      return otherRoads.some(r => {
-        const d = districtRoadMap.value[formDistrict] || []
-        return d.includes(r)
-      })
-    }
-    return formDistrict === otherDistrict
-  }
-
-  if (otherDistrict && !otherRoads.length) {
-    if (formRoads.length > 0) {
-      return formRoads.some(r => {
-        const d = districtRoadMap.value[otherDistrict] || []
-        return d.includes(r)
-      })
-    }
-    return formDistrict === otherDistrict
-  }
-
-  return false
+  return formDistrict === otherDistrict
 }
 
 function isRoadOverlap(other) {
@@ -679,9 +604,8 @@ function isRoadOverlap(other) {
 
   for (const og of otherGroups) {
     const oDistrict = og.district || ''
-    const oRoads = Array.isArray(og.roads) ? og.roads : []
     for (const group of form.applyGroups) {
-      if (isGroupOverlap(group, oDistrict, oRoads)) return true
+      if (isGroupOverlap(group, oDistrict)) return true
     }
   }
   return false
@@ -819,10 +743,9 @@ async function onSubmit() {
   submitting.value = true
   try {
     const groups = form.applyGroups
-      .filter(g => g.district || (g.roads && g.roads.length > 0))
+      .filter(g => g.district)
       .map(g => ({
-        district: g.district || '',
-        roads: g.roads || []
+        district: g.district || ''
       }))
 
     const basePayload = {
@@ -869,28 +792,8 @@ async function onSubmit() {
 
 async function loadOptions() {
   try {
-    const [districtsRes, roadsRes, lightsRes] = await Promise.all([
-      getDistricts(),
-      getRoads(),
-      getAllLights()
-    ])
-    
+    const districtsRes = await getDistricts()
     DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
-    ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
-    
-    const map = {}
-    const lights = lightsRes.data || []
-    lights.forEach(light => {
-      if (light.district && light.road) {
-        if (!map[light.district]) {
-          map[light.district] = []
-        }
-        if (!map[light.district].includes(light.road)) {
-          map[light.district].push(light.road)
-        }
-      }
-    })
-    districtRoadMap.value = map
   } catch (e) {
     console.error('加载选项数据失败:', e)
   }
@@ -988,64 +891,8 @@ onMounted(() => {
   align-items: center;
 }
 
-.road-select-multi :deep(.el-tag) {
-  display: inline-flex;
-  margin: 0 !important;
-  flex-shrink: 0;
-}
-
-.group-actions {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #dcdfe6;
-}
-
 .add-group-btn {
   margin-top: 4px;
   align-self: flex-start;
-}
-</style>
-
-<style>
-.road-select-multi .el-select__tags {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: wrap !important;
-  gap: 2px !important;
-  align-items: center !important;
-}
-
-.road-select-multi .el-select__tags > * {
-  display: inline-flex !important;
-  flex-direction: row !important;
-}
-
-.road-select-multi .el-tag {
-  display: inline-flex !important;
-  margin: 0 !important;
-  flex-shrink: 0;
-  padding: 0 3px !important;
-  height: 20px !important;
-  line-height: 18px !important;
-  font-size: 11px !important;
-}
-
-.road-select-multi .el-tag .el-tag__close {
-  margin-left: 2px !important;
-  font-size: 10px !important;
-}
-
-.road-select-multi .el-select__wrapper {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.road-select-multi .el-select__selection {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
 }
 </style>

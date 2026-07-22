@@ -22,7 +22,7 @@
     <div class="filter-bar">
       <el-select
         v-model="filter.district"
-        placeholder="行政区"
+        placeholder="动物园区"
         clearable
         style="width: 160px"
         @change="onDistrictChange"
@@ -49,7 +49,7 @@
           <el-table-column type="index" label="#" width="50" />
           <el-table-column prop="lightCode" label="编号" min-width="110" />
           <el-table-column prop="lightName" label="名称" min-width="130" show-overflow-tooltip />
-          <el-table-column prop="district" label="行政区" min-width="100" />
+          <el-table-column prop="district" label="动物园区" min-width="100" />
           <el-table-column prop="road" label="路段" min-width="100" />
           <el-table-column label="最新人流量" width="120" align="center">
             <template #default="{ row }">

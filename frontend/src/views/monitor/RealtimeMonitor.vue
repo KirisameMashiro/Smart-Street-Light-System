@@ -25,31 +25,6 @@
 
     <!-- 筛选 -->
     <div class="filter-bar">
-      <el-select
-        v-model="filter.district"
-        placeholder="行政区"
-        clearable
-        style="width: 160px"
-        @change="onDistrictChange"
-      >
-        <el-option
-          v-for="o in availableDistricts"
-          :key="o.value"
-          :label="o.label"
-          :value="o.value"
-        />
-      </el-select>
-      <el-select
-        v-model="filter.status"
-        placeholder="状态"
-        clearable
-        style="width: 120px"
-        @change="applyFilter"
-      >
-        <el-option label="开启" :value="1" />
-        <el-option label="关闭" :value="0" />
-        <el-option label="故障" :value="2" />
-      </el-select>
       <span class="text-muted" style="margin-left: auto">
         共 {{ page.total }} 盏
         <template v-if="mode === 'list'">
@@ -201,7 +176,7 @@
             <span class="detail-value">{{ selectedLight.location || '-' }}</span>
           </div>
           <div class="detail-row">
-            <span class="detail-label">行政区</span>
+            <span class="detail-label">动物园区</span>
             <span class="detail-value">{{ selectedLight.district || '-' }}</span>
           </div>
           <div class="detail-row">
@@ -275,8 +250,8 @@
         <el-form-item label="安装位置">
           <el-input v-model="addLightForm.location" placeholder="如 熊猫馆门前" />
         </el-form-item>
-        <el-form-item label="行政区">
-          <el-select v-model="addLightForm.district" placeholder="选择行政区（可搜索动物园园区）" filterable allow-create>
+        <el-form-item label="动物园区">
+          <el-select v-model="addLightForm.district" placeholder="选择动物园区（可搜索动物园园区）" filterable allow-create>
             <el-option v-for="o in availableDistricts" :key="o.value" :label="o.label" :value="o.value">
               <span>{{ o.label }}</span>
               <span v-if="o.isZooZone" style="float:right; font-size:11px; color:#67c23a; margin-left:8px">🦁 园区</span>
@@ -314,6 +289,7 @@
 defineOptions({ name: 'RealtimeMonitor' })
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { Refresh, Plus } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -346,15 +322,15 @@ const listQuery = reactive({ pageNum: 1, pageSize: 10 })
 
 const availableDistricts = computed(() => {
   const districts = new Set()
-  // 优先加入数据库中已存在的行政区（区域管理表）
+  // 优先加入数据库中已存在的动物园区（区域管理表）
   systemDistricts.value.forEach((d) => {
     if (d.districtName) districts.add(d.districtName)
   })
-  // 补充路灯数据中已使用的行政区
+  // 补充路灯数据中已使用的动物园区
   allLights.value.forEach((l) => {
     if (l.district) districts.add(l.district)
   })
-  // 补充重庆动物园园区名称作为可选行政区
+  // 补充重庆动物园园区名称作为可选动物园区
   zooZones.forEach((z) => {
     if (z.name) districts.add(z.name)
   })

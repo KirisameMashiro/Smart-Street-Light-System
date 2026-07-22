@@ -44,7 +44,7 @@ MQTT_CLIENT_ID = "laptop_broadcast_player"
 MQTT_TOPIC = "smartlight/broadcast/+"
 
 # 后端 API 地址（用于下载语音文件）
-BACKEND_API = "http://localhost:8080/api"
+BACKEND_API = "http://192.168.20.123:8080/api"
 
 # 播放控制
 PLAY_COOLDOWN_SECONDS = 5  # 同一路灯两次播放之间的冷却时间（秒）

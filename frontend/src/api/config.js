@@ -24,7 +24,7 @@ export function deleteAlertRule(id) {
   return request.delete(`/system/alert-rules/${id}`)
 }
 
-// 行政区管理
+// 动物园区管理
 export function getDistricts() {
   return request.get('/system/districts')
 }

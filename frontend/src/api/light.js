@@ -14,7 +14,7 @@ export function getAllLights() {
   return request.get('/lights')
 }
 
-// 获取行政区列表
+// 获取动物园区列表
 export function getDistricts() {
   return request.get('/lights/districts')
 }
@@ -76,7 +76,7 @@ export function getLightStats() {
   return request.get('/lights/stats')
 }
 
-// [后端缺失] 分组统计（按行政区/路段/类型）
+// [后端缺失] 分组统计（按动物园区/路段/类型）
 export function getLightGroupStats(groupBy) {
   return request.get('/lights/group-stats', { params: { groupBy } })
 }

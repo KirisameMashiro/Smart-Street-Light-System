@@ -39,7 +39,7 @@
       />
       <el-select
         v-model="filterDistrict"
-        placeholder="行政区"
+        placeholder="动物园区"
         clearable
         style="width: 160px"
         @change="onSearch"
@@ -58,7 +58,7 @@
           <el-table-column prop="lightCode" label="编号" width="130" />
           <el-table-column prop="lightName" label="名称" width="150" show-overflow-tooltip />
           <el-table-column prop="location" label="安装位置" min-width="200" show-overflow-tooltip />
-          <el-table-column prop="district" label="行政区" width="110" />
+          <el-table-column prop="district" label="动物园区" width="110" />
           <el-table-column prop="road" label="路段" width="110" />
           <el-table-column prop="deviceType" label="设备类型" width="100" />
           <el-table-column label="当前亮度" width="90">
@@ -87,7 +87,7 @@
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="编号">{{ current.lightCode }}</el-descriptions-item>
         <el-descriptions-item label="名称">{{ current.lightName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="行政区">{{ current.district || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="动物园区">{{ current.district || '-' }}</el-descriptions-item>
         <el-descriptions-item label="路段">{{ current.road || '-' }}</el-descriptions-item>
         <el-descriptions-item label="安装位置" :span="2">{{ current.location || '-' }}</el-descriptions-item>
         <el-descriptions-item label="设备类型">{{ current.deviceType || '-' }}</el-descriptions-item>
@@ -110,7 +110,7 @@
       <el-descriptions :column="1" border size="small" style="margin-bottom: 16px">
         <el-descriptions-item label="编号">{{ current.lightCode }}</el-descriptions-item>
         <el-descriptions-item label="名称">{{ current.lightName || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="行政区">{{ current.district || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="动物园区">{{ current.district || '-' }}</el-descriptions-item>
         <el-descriptions-item label="路段">{{ current.road || '-' }}</el-descriptions-item>
         <el-descriptions-item label="安装位置">{{ current.location || '-' }}</el-descriptions-item>
       </el-descriptions>
@@ -138,7 +138,7 @@
 
 <script setup>
 defineOptions({ name: 'FaultHandle' })
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh, View, Check } from '@element-plus/icons-vue'
 import { getAllLights, getLightPage, updateLight } from '@/api/light'
@@ -286,7 +286,6 @@ function stopPolling() {
   }
 }
 
-import { watch } from 'vue'
 watch(autoRefresh, (v) => {
   if (v) startPolling()
   else stopPolling()

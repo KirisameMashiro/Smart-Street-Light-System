@@ -167,7 +167,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Refresh, InfoFilled, WarningFilled } from '@element-plus/icons-vue'
@@ -339,8 +339,6 @@ function onVisibilityChange() {
     startPolling()
   }
 }
-
-import { watch } from 'vue'
 
 watch(() => appStore.lightDataVersion, () => {
   loadAll()

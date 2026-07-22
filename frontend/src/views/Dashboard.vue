@@ -76,9 +76,9 @@
       </el-col>
     </el-row>
 
-    <!-- 各行政区设备分布 -->
+    <!-- 各动物园区设备分布 -->
     <div class="chart-card" style="margin-top: 16px">
-      <div class="chart-title">各行政区设备分布</div>
+      <div class="chart-title">各动物园区设备分布</div>
       <el-empty
         v-if="districtError || districtData.length === 0"
         description="后端接口缺失或暂无数据"
@@ -298,7 +298,7 @@ function renderCharts() {
     })
   }
 
-  // 各行政区设备分布柱状图
+  // 各动物园区设备分布柱状图
   if (districtRef.value && districtData.value.length > 0) {
     districtChart = districtChart || echarts.init(districtRef.value)
     const names = districtData.value.map((d) => d.name)
