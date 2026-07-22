@@ -40,6 +40,9 @@ public class OfflineDetectService {
     /** Redis Key 前缀：每盏路灯最新传感器数据 */
     private static final String KEY_SENSOR_LATEST_PREFIX = "sensor:latest:";
 
+    /** 首次执行标记，防止冷启动时 Redis 为空导致全量误判故障 */
+    private volatile boolean firstRun = true;
+
     @Scheduled(fixedDelay = 30_000, initialDelay = 15_000)
     public void checkOfflineLights() {
         String timeoutStr = systemConfigService.getConfigValue("offline_fault_timeout");
@@ -58,6 +61,12 @@ public class OfflineDetectService {
             String collectTimeStr = getCollectTimeFromRedis(light.getId());
 
             if (collectTimeStr == null) {
+                // 冷启动保护：首次执行时 Redis 可能尚未写入数据，跳过故障标记
+                if (firstRun) {
+                    log.info("首次执行跳过: lightId={}, code={}, Redis 暂无传感器数据（冷启动保护）",
+                            light.getId(), light.getLightCode());
+                    continue;
+                }
                 // 无任何缓存数据 → 标记为故障
                 if (light.getStatus() != 2) {
                     markAsFault(light, timeoutSeconds);
@@ -86,6 +95,8 @@ public class OfflineDetectService {
         if (faultCount > 0 || restoreCount > 0) {
             log.info("失联检测完成: 标记故障 {} 盏, 恢复在线 {} 盏", faultCount, restoreCount);
         }
+
+        firstRun = false;
     }
 
     /**

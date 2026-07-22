@@ -3,9 +3,11 @@
 
 """
 路灯传感器模拟器（纯 MQTT 模式）
+v2: 光照值基于时间曲线 + 慢速漂移，不再随灯开关状态剧烈跳变
 """
 
 import json
+import math
 import random
 import time
 import threading
@@ -47,6 +49,14 @@ light_lock = threading.Lock()
 CONTROL_TOPIC = 'smartlight/control/+'
 connected_event = threading.Event()
 
+# ---------- 每盏灯的平滑照度状态 ----------
+# 存储格式: { light_id: float }，当前平滑后的照度值
+_smooth_illuminance = {}
+_smooth_lock = threading.Lock()
+
+# 平滑步长：每次更新最多变化这个幅度
+SMOOTH_STEP = 60
+
 def fetch_lights_from_api():
     url = f"{BACKEND_API_URL}/api/lights"
     print(f"[API] Fetching lights from {url} ...")
@@ -79,26 +89,46 @@ def fetch_lights_from_api():
 def generate_sensor_data(light):
     status = light['status']
     brightness = light['brightness']
-    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    light_id = light['id']
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    # 基于路灯 ID 的稳定偏移系数，让每盏灯功耗天然不同（±7%）
-    seed = int(hashlib.md5(str(light['id']).encode()).hexdigest()[:8], 16)
+    # ---- 功耗系数（每盏灯 ±7% 差异） ----
+    seed = int(hashlib.md5(str(light_id).encode()).hexdigest()[:8], 16)
     factor = 0.93 + (seed % 140) / 1000.0  # 0.93 ~ 1.07
 
+    # ---- 目标照度区间 ----
     if status == 0:
-        illuminance = random.randint(5, 50)
+        target_min, target_max = 5, 30
+    else:
+        ratio = brightness / 100.0
+        base = 300 + ratio * 150  # 300 ~ 450
+        target_min, target_max = int(base - 20), int(base + 20)
+
+    target = random.randint(target_min, target_max)
+
+    # ---- 平滑过渡：逐步逼近目标，避免剧烈跳变 ----
+    with _smooth_lock:
+        if light_id not in _smooth_illuminance:
+            _smooth_illuminance[light_id] = float(target)
+        current_val = _smooth_illuminance[light_id]
+
+        diff = target - current_val
+        if abs(diff) <= SMOOTH_STEP:
+            current_val = float(target)
+        else:
+            current_val += math.copysign(SMOOTH_STEP, diff)
+
+        _smooth_illuminance[light_id] = current_val
+
+    illuminance = max(0, int(round(current_val)))
+
+    # ---- 电气数据 ----
+    if status == 0:
         power = round(random.uniform(0.3, 2.0) * factor, 2)
         current = round(random.uniform(0.001, 0.01) * factor, 3)
         voltage = round(random.uniform(215, 225), 1)
     else:
-        # 开灯状态：照度随亮度变化，范围 300~450
         ratio = brightness / 100.0
-        # 照度在 300~450 之间随亮度线性变化，并加入少量随机波动
-        base_illuminance = 300 + ratio * 150
-        illuminance = int(base_illuminance + random.randint(-20, 20))
-        # 确保在范围内
-        illuminance = max(300, min(450, illuminance))
-        
         base_power = (50 + ratio * 100) * factor
         power = round(base_power + random.uniform(-3, 3), 2)
         base_current = (0.3 + ratio * 0.5) * factor
@@ -109,14 +139,14 @@ def generate_sensor_data(light):
     humidity = round(random.uniform(50, 80), 1)
 
     return {
-        "lightId": light['id'],
+        "lightId": light_id,
         "illuminance": illuminance,
         "power": power,
         "voltage": voltage,
         "current": current,
         "temperature": temperature,
         "humidity": humidity,
-        "collectTime": now
+        "collectTime": now_str
     }
 
 def on_connect(client, userdata, flags, reason_code, properties):

@@ -156,27 +156,18 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
 
     private void applyStrategyImmediately(TimedStrategy strategy) {
         LocalDateTime now = LocalDateTime.now();
-        
+
         if (!isStrategyActive(now, strategy)) {
             return;
         }
-        
+
         List<Light> lights = getLightsForStrategy(strategy);
         if (lights.isEmpty()) {
             log.info("策略「{}」未匹配到路灯", strategy.getName());
             return;
         }
 
-        // ---------- 动态亮度预处理 ----------
         boolean useDynamic = Boolean.TRUE.equals(strategy.getUseDynamicBrightness());
-        List<TimedStrategy.BrightnessSegment> segments = null;
-        if (useDynamic) {
-            segments = strategy.getBrightnessSegments();
-            if (segments == null || segments.isEmpty()) {
-                log.debug("策略「{}」启用动态亮度但未配置阈值分段，回退固定亮度", strategy.getName());
-                useDynamic = false;
-            }
-        }
 
         int count = 0;
         for (Light light : lights) {
@@ -187,41 +178,42 @@ public class TimedStrategyServiceImpl implements TimedStrategyService {
             Integer targetBrightness;
 
             if (useDynamic) {
-                // 动态模式：查找灯所属的区域分组，优先使用分组级阈值
+                // 动态模式：阈值完全来自区域分组，无策略级兜底
                 TimedStrategy.RegionGroup matchedGroup = findMatchingGroup(strategy, light);
-                Double offThreshold = (matchedGroup != null && matchedGroup.getLightOffThreshold() != null)
-                    ? matchedGroup.getLightOffThreshold()
-                    : strategy.getLightOffThreshold();
-                List<TimedStrategy.BrightnessSegment> effectiveSegments = (matchedGroup != null
-                        && matchedGroup.getBrightnessSegments() != null
-                        && !matchedGroup.getBrightnessSegments().isEmpty())
-                    ? matchedGroup.getBrightnessSegments()
-                    : segments;
+                if (matchedGroup == null
+                        || matchedGroup.getLightOffThreshold() == null
+                        || matchedGroup.getBrightnessSegments() == null
+                        || matchedGroup.getBrightnessSegments().isEmpty()) {
+                    continue;
+                }
+
+                Double offThreshold = matchedGroup.getLightOffThreshold();
+                List<TimedStrategy.BrightnessSegment> effectiveSegments = matchedGroup.getBrightnessSegments();
 
                 Double illuminance = getIlluminanceFromRedis(light.getId());
                 if (illuminance == null) {
-                    // 无传感器数据 → 跳过该灯，等待下次检查
                     continue;
                 }
-                // 滞后区间防抖：正在亮灯时需光照高于阈值120%才关，已关灯时需低于阈值80%才开
-                double hysteresisOff = (offThreshold != null) ? offThreshold * 1.20 : Double.MAX_VALUE;
-                double hysteresisOn  = (offThreshold != null) ? offThreshold * 0.80 : 0;
+
+                double hysteresisOff = offThreshold * 1.20;
+                double hysteresisOn = effectiveSegments.stream()
+                    .mapToDouble(s -> s.getThreshold() != null ? s.getThreshold() : 0)
+                    .max()
+                    .orElse(0.0);
+
                 boolean currentlyOn = Integer.valueOf(1).equals(light.getStatus());
                 if (currentlyOn && illuminance > hysteresisOff) {
                     targetBrightness = 0;
                     targetStatus = 0;
-                } else if (!currentlyOn && illuminance > hysteresisOn) {
-                    // 已关灯且光照不够暗 → 保持关灯
-                    targetBrightness = 0;
-                    targetStatus = 0;
                 } else if (!currentlyOn && illuminance <= hysteresisOn) {
-                    // 已关灯且光照够暗了 → 开灯
+                    targetBrightness = matchSegmentBrightness(illuminance, effectiveSegments);
+                    targetStatus = 1;
+                } else if (currentlyOn) {
                     targetBrightness = matchSegmentBrightness(illuminance, effectiveSegments);
                     targetStatus = 1;
                 } else {
-                    // 正在亮灯且光照 <= hysteresisOff → 继续按动态亮度调节
-                    targetBrightness = matchSegmentBrightness(illuminance, effectiveSegments);
-                    targetStatus = 1;
+                    targetBrightness = 0;
+                    targetStatus = 0;
                 }
             } else {
                 // 固定模式

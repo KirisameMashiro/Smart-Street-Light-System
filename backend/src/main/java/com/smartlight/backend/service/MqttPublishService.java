@@ -199,7 +199,11 @@ public class MqttPublishService {
                     continue;
                 }
                 try {
-                    Map<String, Object> payload = buildPayload("set", light.getStatus(), light.getBrightness(), light.getLightCode());
+                    // 故障状态 (status=2) 是后端内部标记，不应同步到物理设备
+                    // 避免冷启动时将 DB 中残留的旧故障状态广播给所有路灯
+                    int syncStatus = (light.getStatus() != null && light.getStatus() == 2) ? 0 : light.getStatus();
+                    int syncBrightness = (light.getStatus() != null && light.getStatus() == 2) ? 0 : light.getBrightness();
+                    Map<String, Object> payload = buildPayload("set", syncStatus, syncBrightness, light.getLightCode());
                     doPublish(light.getLightCode(), payload);
                     successCount++;
                 } catch (Exception e) {

@@ -226,7 +226,7 @@ CREATE TABLE `timed_strategy` (
     `end_time` TIME NOT NULL COMMENT '结束时间',
     `brightness` INT NOT NULL DEFAULT 80 COMMENT '目标亮度 0-100',
     `use_dynamic_brightness` TINYINT(1) DEFAULT 0 COMMENT '是否启用动态亮度: 0-固定亮度, 1-根据光照动态调节',
-    `region_groups` JSON DEFAULT NULL COMMENT '适用区域分组 [{district, roads}]',
+    `region_groups` JSON DEFAULT NULL COMMENT '适用区域分组 [{district, roads, lightOffThreshold, brightnessSegments}]',
     `enabled` TINYINT DEFAULT 1 COMMENT '是否启用 0-禁用 1-启用',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
