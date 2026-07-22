@@ -43,6 +43,10 @@ public class BroadcastController {
     @Autowired
     private MqttPublishService mqttPublishService;
 
+    /** 服务器对外可访问的地址，用于生成语音文件下载 URL 下发给路灯设备 */
+    @org.springframework.beans.factory.annotation.Value("${broadcast.server-url:http://localhost:8080}")
+    private String serverUrl;
+
     // ========== 广播设计管理 ==========
 
     @GetMapping("/broadcasts")
@@ -230,7 +234,7 @@ public class BroadcastController {
         // 构建语音文件 URL
         String voiceFileUrl = null;
         if (broadcast.getVoiceFilePath() != null && !broadcast.getVoiceFilePath().isEmpty()) {
-            voiceFileUrl = "http://localhost:8080/api/broadcast/broadcasts/"
+            voiceFileUrl = serverUrl + "/api/broadcast/broadcasts/"
                     + broadcast.getId() + "/voice-file";
         }
 
