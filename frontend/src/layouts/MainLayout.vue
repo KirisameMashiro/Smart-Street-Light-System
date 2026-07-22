@@ -192,7 +192,6 @@ const cachedViews = [
   'TimedStrategy',
   'ThresholdControl',
   'OperationLog',
-  'VoiceSetting',
   'Alerts',
   'FaultHandle',
   'CarbonAnalysis',
@@ -259,8 +258,7 @@ const menuConfig = [
     roles: ['admin', 'municipal', 'operator'],
     children: [
       { title: '广播设计', path: '/broadcast/design', icon: 'Microphone' },
-      { title: '广播策略', path: '/broadcast/strategy', icon: 'Timer' },
-      { title: '语音设置', path: '/broadcast/voice', icon: 'Headset' }
+      { title: '广播策略', path: '/broadcast/strategy', icon: 'Timer' }
     ]
   },
   {

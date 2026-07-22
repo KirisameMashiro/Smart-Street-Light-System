@@ -94,6 +94,31 @@ public class MqttPublishService {
         }
     }
 
+    /**
+     * 发布广播播放命令（人流触发广播）
+     * <p>
+     * 发布到主题: smartlight/broadcast/{lightCode}
+     * 设备收到后通过 HTTP 下载 voiceFileUrl 的语音文件进行播放
+     *
+     * @param lightCode    路灯编号
+     * @param content      广播文本内容（设备可做本地 TTS 或显示）
+     * @param voiceFileUrl 预生成语音文件的 HTTP 下载地址
+     */
+    public void publishBroadcastCommand(String lightCode, String content, String voiceFileUrl) {
+        if (!canPublish(lightCode)) return;
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("command", "broadcast");
+            payload.put("lightCode", lightCode);
+            payload.put("content", content);
+            payload.put("voiceFileUrl", voiceFileUrl);
+            doPublish("broadcast", lightCode, payload);
+            log.info("MQTT发布广播命令: lightCode={}, voiceFileUrl={}", lightCode, voiceFileUrl);
+        } catch (Exception e) {
+            log.error("MQTT发布广播命令失败: lightCode={}", lightCode, e);
+        }
+    }
+
     // ==================== 内部方法 ====================
 
     /**
@@ -125,10 +150,17 @@ public class MqttPublishService {
     }
 
     /**
-     * 执行 MQTT 发布
+     * 执行 MQTT 发布（控制主题）
      */
     private void doPublish(String lightCode, Map<String, Object> payload) throws Exception {
-        String topic = mqttConfig.getTopicPrefix() + "control/" + lightCode;
+        doPublish("control", lightCode, payload);
+    }
+
+    /**
+     * 执行 MQTT 发布（指定子主题）
+     */
+    private void doPublish(String subTopic, String lightCode, Map<String, Object> payload) throws Exception {
+        String topic = mqttConfig.getTopicPrefix() + subTopic + "/" + lightCode;
         byte[] bytes = objectMapper.writeValueAsString(payload).getBytes(StandardCharsets.UTF_8);
         MqttMessage message = new MqttMessage(bytes);
         message.setQos(qos);

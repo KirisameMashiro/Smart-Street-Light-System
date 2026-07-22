@@ -31,6 +31,24 @@ public class Broadcast {
 
     private String description;
 
+    // ===== 语音设置（每个广播独立配置） =====
+
+    /** 语音角色 */
+    @TableField(value = "voice_name")
+    private String voiceName;
+
+    /** 语速 0.5~2.0 */
+    @TableField(value = "voice_speed")
+    private java.math.BigDecimal voiceSpeed;
+
+    /** 音量 0~100 */
+    @TableField(value = "voice_volume")
+    private java.math.BigDecimal voiceVolume;
+
+    /** 生成的语音文件路径 */
+    @TableField(value = "voice_file_path")
+    private String voiceFilePath;
+
     @TableField(value = "create_time")
     private LocalDateTime createTime;
 

@@ -51,6 +51,10 @@ public class BroadcastStrategy {
     @TableField("flow_threshold")
     private Integer flowThreshold;
 
+    /** 播放间隔（分钟）：0 表示持续，>0 表示最小间隔 */
+    @TableField("play_interval")
+    private Integer playInterval;
+
     private String description;
 
     @TableField(value = "create_time")

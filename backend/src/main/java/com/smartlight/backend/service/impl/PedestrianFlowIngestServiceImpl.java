@@ -2,6 +2,7 @@ package com.smartlight.backend.service.impl;
 
 import com.smartlight.backend.dto.PedestrianFlowIngestDTO;
 import com.smartlight.backend.entity.PedestrianFlow;
+import com.smartlight.backend.service.BroadcastTriggerService;
 import com.smartlight.backend.service.PedestrianFlowIngestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 public class PedestrianFlowIngestServiceImpl implements PedestrianFlowIngestService {
 
     private final Optional<StringRedisTemplate> stringRedisTemplate;
+    private final Optional<BroadcastTriggerService> broadcastTriggerService;
 
     /** Redis Key 前缀：每盏路灯最新人流量 */
     private static final String KEY_FLOW_LATEST_PREFIX = "flow:latest:";
@@ -55,6 +57,15 @@ public class PedestrianFlowIngestServiceImpl implements PedestrianFlowIngestServ
 
         // 4. 更新 Redis 缓存（最新人流量）
         saveToRedis(entity);
+
+        // 5. 触发广播策略检查（人流触发广播播报）
+        broadcastTriggerService.ifPresent(svc -> {
+            try {
+                svc.checkAndTrigger(dto.getLightId(), dto.getFlowCount());
+            } catch (Exception e) {
+                log.error("广播触发检查异常: lightId={}, error={}", dto.getLightId(), e.getMessage());
+            }
+        });
 
         return entity;
     }

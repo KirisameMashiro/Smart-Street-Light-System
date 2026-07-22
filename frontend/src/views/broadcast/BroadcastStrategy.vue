@@ -54,9 +54,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="160" fixed="right" class-name="table-ops">
+        <el-table-column label="操作" width="220" fixed="right" class-name="table-ops">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDialog(row)">编辑</el-button>
+            <el-button link type="warning" :loading="testingId === row.id" @click="onTestPlay(row)">测试</el-button>
             <el-button link type="danger" @click="onDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -69,7 +70,11 @@
           <el-input v-model="form.name" placeholder="请输入策略名称" />
         </el-form-item>
         <el-form-item label="关联广播" required>
-          <el-select v-model="form.broadcastId" placeholder="请选择广播">
+          <el-select
+            v-model="form.broadcastId"
+            placeholder="请选择广播"
+            @change="onBroadcastChange"
+          >
             <el-option v-for="b in broadcasts" :key="b.id" :label="b.title" :value="b.id" />
           </el-select>
         </el-form-item>
@@ -81,7 +86,9 @@
         </el-form-item>
         <el-form-item :label="form.enableFlow ? '最小播放间隔' : '播放间隔'">
           <el-input-number v-model="form.playInterval" :min="0" :step="1" placeholder="0" />
-          <span style="margin-left: 8px; color: #909399; font-size: 13px">分钟（{{ form.enableFlow ? '两次播放之间的最小间隔' : '0 表示持续播放，>0 表示每隔指定分钟播放一次' }}）</span>
+          <span style="margin-left: 8px; color: #909399; font-size: 13px">
+            分钟（{{ form.enableFlow ? '两次播放之间的最小间隔' : '0 表示持续播放，>0 表示每隔指定分钟播放一次' }}）
+          </span>
         </el-form-item>
         <el-form-item label="重复类型">
           <el-select v-model="form.repeatType" placeholder="请选择重复类型">
@@ -130,21 +137,38 @@
             </el-select>
           </el-form-item>
         </template>
-        <el-form-item label="人流量判断">
-          <el-switch v-model="form.enableFlow" active-text="启用" inactive-text="不启用" />
-        </el-form-item>
-        <template v-if="form.enableFlow">
-          <el-form-item label="判断条件">
-            <el-radio-group v-model="form.flowCondition">
-              <el-radio label="gt">大于</el-radio>
-              <el-radio label="lt">小于</el-radio>
-            </el-radio-group>
+
+        <!-- 人流量条件（仅当所选广播关联了带监控的路灯时才显示） -->
+        <template v-if="hasMonitoring">
+          <el-divider content-position="left">
+            <span style="font-size: 14px; font-weight: 500; color: #303133">人流量触发条件</span>
+            <el-tag v-if="monitorCount > 0" size="small" type="info" style="margin-left: 8px">
+              {{ monitorCount }} 路监控
+            </el-tag>
+          </el-divider>
+
+          <el-form-item label="人流量判断">
+            <el-switch v-model="form.enableFlow" active-text="启用" inactive-text="不启用" />
           </el-form-item>
-          <el-form-item label="人流阈值">
-            <el-input-number v-model="form.flowThreshold" :min="0" :step="1" placeholder="请输入阈值" />
-            <span style="margin-left: 8px; color: #909399; font-size: 13px">人</span>
-          </el-form-item>
+          <template v-if="form.enableFlow">
+            <el-form-item label="判断条件">
+              <el-radio-group v-model="form.flowCondition">
+                <el-radio label="gt">大于</el-radio>
+                <el-radio label="lt">小于</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="人流阈值">
+              <el-input-number v-model="form.flowThreshold" :min="0" :step="1" placeholder="请输入阈值" />
+              <span style="margin-left: 8px; color: #909399; font-size: 13px">人</span>
+            </el-form-item>
+          </template>
         </template>
+        <el-divider v-else-if="form.broadcastId" content-position="left">
+          <span style="font-size: 13px; color: #909399">
+            ℹ️ 所选广播未关联带监控的路灯，不支持人流量触发
+          </span>
+        </el-divider>
+
         <el-form-item label="状态">
           <el-radio-group v-model="form.enabled">
             <el-radio :value="1">启用</el-radio>
@@ -164,17 +188,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
-import { getStrategies, addStrategy, updateStrategy, deleteStrategy, getBroadcasts } from '@/api/broadcast'
+import { getStrategies, addStrategy, updateStrategy, deleteStrategy, getBroadcasts, getBroadcastMonitoring, testPlayStrategy } from '@/api/broadcast'
 
 const list = ref([])
 const broadcasts = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const testingId = ref(null)
 const dialogVisible = ref(false)
 const formRef = ref(null)
+const hasMonitoring = ref(false)
+const monitorCount = ref(0)
 
 const form = reactive({
   id: null,
@@ -228,6 +255,27 @@ function stripSeconds(time) {
   return time.length > 5 ? time.substring(0, 5) : time
 }
 
+async function onBroadcastChange(broadcastId) {
+  if (!broadcastId) {
+    hasMonitoring.value = false
+    monitorCount.value = 0
+    form.enableFlow = false
+    return
+  }
+
+  try {
+    const res = await getBroadcastMonitoring(broadcastId)
+    hasMonitoring.value = res.data?.hasMonitoring || false
+    monitorCount.value = res.data?.monitorCount || 0
+    if (!hasMonitoring.value) {
+      form.enableFlow = false
+    }
+  } catch (error) {
+    hasMonitoring.value = false
+    monitorCount.value = 0
+  }
+}
+
 async function loadBroadcasts() {
   try {
     const res = await getBroadcasts()
@@ -260,6 +308,9 @@ function handleRefresh() {
 function openDialog(row = null) {
   dialogVisible.value = true
   loadBroadcasts()
+  hasMonitoring.value = false
+  monitorCount.value = 0
+
   if (row) {
     Object.assign(form, {
       id: row.id,
@@ -279,6 +330,10 @@ function openDialog(row = null) {
       enabled: row.enabled,
       description: row.description || ''
     })
+    // 编辑时也检查监控状态
+    if (row.broadcastId) {
+      onBroadcastChange(row.broadcastId)
+    }
   } else {
     Object.assign(form, {
       id: null,
@@ -335,24 +390,46 @@ async function onSave() {
 
   saving.value = true
   const payload = {
-    ...form,
+    id: form.id || undefined,
+    name: form.name,
+    broadcastId: form.broadcastId,
     startTime: ensureTimeWithSeconds(form.startTime),
-    endTime: ensureTimeWithSeconds(form.endTime)
+    endTime: ensureTimeWithSeconds(form.endTime),
+    playInterval: form.playInterval,
+    repeatType: form.repeatType,
+    enabled: form.enabled,
+    description: form.description
+  }
+
+  // 仅在广播有监控时才包含人流条件字段
+  if (hasMonitoring.value) {
+    payload.enableFlow = form.enableFlow
+    payload.flowCondition = form.flowCondition
+    payload.flowThreshold = form.flowThreshold
+  } else {
+    payload.enableFlow = false
+    payload.flowCondition = 'gt'
+    payload.flowThreshold = 0
   }
 
   // 自定义按日期时，将日期转换为对应星期几；后端只接收 customDays
-  if (form.repeatType === 'custom' && form.customMode === 'date' && form.customDates?.length) {
-    const daySet = new Set(form.customDates.map(dateStr => {
-      const date = new Date(dateStr)
-      const day = date.getDay()
-      return day === 0 ? 7 : day
-    }))
-    payload.customDays = Array.from(daySet).sort((a, b) => a - b)
+  if (form.repeatType === 'custom') {
+    if (form.customMode === 'date' && form.customDays?.length) {
+      const daySet = new Set(form.customDates.map(dateStr => {
+        const date = new Date(dateStr)
+        const day = date.getDay()
+        return day === 0 ? 7 : day
+      }))
+      payload.customDays = Array.from(daySet).sort((a, b) => a - b)
+    } else if (form.customMode === 'week') {
+      payload.customDays = form.customDays
+    } else {
+      payload.customDays = []
+    }
+  } else {
+    payload.customDays = []
   }
-  delete payload.customMode
-  delete payload.customDates
-  delete payload.customDateRange
-  delete payload.playInterval
+
   try {
     if (form.id) {
       await updateStrategy(payload)
@@ -367,6 +444,18 @@ async function onSave() {
     ElMessage.error(error.response?.data?.message || '保存失败')
   } finally {
     saving.value = false
+  }
+}
+
+async function onTestPlay(row) {
+  testingId.value = row.id
+  try {
+    const res = await testPlayStrategy(row.id)
+    ElMessage.success(res.data || res.message || '测试广播已发送')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.message || '测试广播发送失败')
+  } finally {
+    testingId.value = null
   }
 }
 
