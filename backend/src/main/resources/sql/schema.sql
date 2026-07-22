@@ -376,6 +376,22 @@ CREATE TABLE `broadcast_strategy` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='广播策略表';
 
 -- ============================================================
+-- 21. 语音设置表
+-- ============================================================
+DROP TABLE IF EXISTS `voice_setting`;
+CREATE TABLE `voice_setting` (
+    `id`          BIGINT AUTO_INCREMENT COMMENT '主键ID',
+    `voice_name`  VARCHAR(100) NOT NULL DEFAULT 'default' COMMENT '语音角色/名称',
+    `speed`       DECIMAL(3,1) NOT NULL DEFAULT 1.0 COMMENT '语速 0.5~2.0',
+    `volume`      DECIMAL(3,1) NOT NULL DEFAULT 1.0 COMMENT '音量 0.0~1.0',
+    `enabled`     TINYINT(1) DEFAULT 1 COMMENT '是否启用: 0-禁用, 1-启用',
+    `description` VARCHAR(200) DEFAULT NULL COMMENT '描述',
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='语音设置表';
+
+-- ============================================================
 -- 19. 人流量原始数据表
 -- ============================================================
 DROP TABLE IF EXISTS `pedestrian_flow`;

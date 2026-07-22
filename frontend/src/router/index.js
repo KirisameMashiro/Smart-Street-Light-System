@@ -101,6 +101,12 @@ const routes = [
         component: () => import('@/views/broadcast/BroadcastStrategy.vue'),
         meta: { title: '广播策略', keepAlive: true }
       },
+      {
+        path: 'broadcast/voice',
+        name: 'VoiceSetting',
+        component: () => import('@/views/broadcast/VoiceSetting.vue'),
+        meta: { title: '语音设置', keepAlive: true }
+      },
       // ===== 告警管理 =====
       {
         path: 'alerts',
