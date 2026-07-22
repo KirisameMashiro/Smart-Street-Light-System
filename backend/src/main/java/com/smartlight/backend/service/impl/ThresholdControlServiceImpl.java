@@ -1,9 +1,12 @@
 package com.smartlight.backend.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.smartlight.backend.entity.Light;
 import com.smartlight.backend.entity.ThresholdControl;
+import com.smartlight.backend.entity.TimedStrategy;
 import com.smartlight.backend.mapper.LightMapper;
 import com.smartlight.backend.mapper.ThresholdControlMapper;
+import com.smartlight.backend.mapper.TimedStrategyMapper;
 import com.smartlight.backend.service.MqttPublishService;
 import com.smartlight.backend.service.SystemConfigService;
 import com.smartlight.backend.service.ThresholdControlService;
@@ -14,11 +17,16 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -27,6 +35,7 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
 
     private final ThresholdControlMapper thresholdControlMapper;
     private final LightMapper lightMapper;
+    private final TimedStrategyMapper timedStrategyMapper;
     private final MqttPublishService mqttPublishService;
     private final SystemConfigService systemConfigService;
     private final Optional<StringRedisTemplate> stringRedisTemplate;
@@ -136,10 +145,21 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
 
         List<Light> allLights = lightMapper.selectList(null);
 
+        // 预计算：当前受活跃定时策略控制的路灯ID集合（一轮只查一次DB）
+        Set<Long> strategyControlledLightIds = computeStrategyControlledLightIds(allLights);
+        if (!strategyControlledLightIds.isEmpty()) {
+            log.debug("阈值联动: {} 盏路灯受定时策略保护，本轮跳过", strategyControlledLightIds.size());
+        }
+
         int adjustedCount = 0;
         for (Light light : allLights) {
             // 手动控制保护期内跳过（超时后自动释放）
             if (isUnderManualProtection(light)) {
+                continue;
+            }
+
+            // 受活跃定时策略控制的路灯跳过，定时策略优先级高于阈值联动
+            if (strategyControlledLightIds.contains(light.getId())) {
                 continue;
             }
 
@@ -212,6 +232,94 @@ public class ThresholdControlServiceImpl implements ThresholdControlService {
             return false;
         }
         return true;
+    }
+
+    /**
+     * 预计算当前受活跃定时策略控制的路灯ID集合
+     * <p>
+     * 一轮阈值联动只查一次DB，遍历所有启用策略，将当前活跃
+     * 且覆盖范围内的路灯ID全部收入Set中，后续 O(1) 判定。
+     */
+    private Set<Long> computeStrategyControlledLightIds(List<Light> allLights) {
+        List<TimedStrategy> enabledStrategies = timedStrategyMapper.selectList(
+                new LambdaQueryWrapper<TimedStrategy>().eq(TimedStrategy::getEnabled, true)
+        );
+        if (enabledStrategies.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Set<Long> ids = new HashSet<>();
+        for (TimedStrategy strategy : enabledStrategies) {
+            if (!isTimedStrategyActive(now, strategy)) {
+                continue;
+            }
+            for (Light light : allLights) {
+                if (strategyCoversLight(strategy, light)) {
+                    ids.add(light.getId());
+                }
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * 判断定时策略当前是否处于活跃时段
+     */
+    private boolean isTimedStrategyActive(LocalDateTime now, TimedStrategy strategy) {
+        LocalTime currentTime = now.toLocalTime();
+        LocalTime startTime = strategy.getStartTime();
+        LocalTime endTime = strategy.getEndTime();
+
+        boolean timeMatch;
+        if (startTime.isBefore(endTime)) {
+            timeMatch = !currentTime.isBefore(startTime) && !currentTime.isAfter(endTime);
+        } else {
+            timeMatch = !currentTime.isBefore(startTime) || !currentTime.isAfter(endTime);
+        }
+
+        if (!timeMatch) {
+            return false;
+        }
+
+        if ("timed".equals(strategy.getType())) {
+            if (strategy.getStartDate() == null || strategy.getEndDate() == null) {
+                return false;
+            }
+            LocalDate currentDate = now.toLocalDate();
+            return !currentDate.isBefore(strategy.getStartDate()) && !currentDate.isAfter(strategy.getEndDate());
+        }
+
+        if ("default".equals(strategy.getType())) {
+            List<Integer> weekdays = strategy.getWeekdays();
+            if (weekdays == null || weekdays.isEmpty()) {
+                return false;
+            }
+            int currentDayOfWeek = now.getDayOfWeek().getValue();
+            return weekdays.contains(currentDayOfWeek);
+        }
+
+        return false;
+    }
+
+    /**
+     * 判断定时策略是否覆盖指定的路灯
+     */
+    private boolean strategyCoversLight(TimedStrategy strategy, Light light) {
+        List<TimedStrategy.RegionGroup> groups = strategy.getGroups();
+        if (groups == null || groups.isEmpty()) {
+            return true;
+        }
+        for (TimedStrategy.RegionGroup group : groups) {
+            boolean districtMatch = group.getDistrict() == null || group.getDistrict().isEmpty()
+                    || group.getDistrict().equals(light.getDistrict());
+            boolean roadMatch = group.getRoads() == null || group.getRoads().isEmpty()
+                    || (light.getRoad() != null && group.getRoads().contains(light.getRoad()));
+            if (districtMatch && roadMatch) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Integer findMatchingBrightness(double illuminance, List<ThresholdControl.SegmentConfig> segments) {
