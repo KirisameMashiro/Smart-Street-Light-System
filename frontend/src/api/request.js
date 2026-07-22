@@ -48,8 +48,9 @@ service.interceptors.response.use(
       router.push('/login')
       return Promise.reject(new Error(res.message || 'Unauthorized'))
     }
-    ElMessage.error(res.message || '请求失败')
-    return Promise.reject(new Error(res.message || 'Error'))
+    const friendlyMsg = translateErrorMessage(res.message)
+    ElMessage.error(friendlyMsg || '请求失败')
+    return Promise.reject(new Error(friendlyMsg || 'Error'))
   },
   (error) => {
     const status = error?.response?.status
@@ -60,14 +61,26 @@ service.interceptors.response.use(
       ElMessage.error(`后端接口缺失或未实现：${method} ${url}`)
       return Promise.reject(new Error(`后端接口缺失：${method} ${url}`))
     }
-    const msg =
+    const raw =
       error?.response?.data?.message ||
       error?.response?.statusText ||
       error.message ||
       '网络异常'
+    const msg = translateErrorMessage(raw)
     ElMessage.error(msg)
     return Promise.reject(error)
   }
 )
+
+function translateErrorMessage(raw) {
+  if (!raw) return raw
+  if (raw.includes('Duplicate entry') && raw.includes('uk_light_code')) {
+    return '设备编号已存在，请更换后重试'
+  }
+  if (raw.includes('Duplicate entry')) {
+    return '数据重复，请检查编号或名称是否已存在'
+  }
+  return raw
+}
 
 export default service

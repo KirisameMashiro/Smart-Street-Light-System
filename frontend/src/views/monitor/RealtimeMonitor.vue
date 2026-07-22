@@ -88,11 +88,11 @@
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
               <el-tag
-                :type="LIGHT_STATUS_MAP[row.status]?.type"
+                :type="LIGHT_STATUS_MAP[Number(row.status)]?.type"
                 size="small"
-                :effect="row.status === 2 ? 'dark' : 'light'"
+                :effect="Number(row.status) === 2 ? 'dark' : 'light'"
               >
-                {{ LIGHT_STATUS_MAP[row.status]?.label }}
+                {{ LIGHT_STATUS_MAP[Number(row.status)]?.label }}
               </el-tag>
             </template>
           </el-table-column>
@@ -152,7 +152,19 @@
         <span class="map-info">
           <span class="map-info-item">缩放级别: <b>{{ currentZoom }}</b></span>
           <span class="map-info-item">比例尺: <b>{{ scaleText }}</b></span>
+          <span class="map-info-item">比例: <b>{{ scaleRatio }}</b></span>
         </span>
+        <el-select
+          v-model="selectedZone"
+          placeholder="选择园区"
+          clearable
+          style="width: 140px"
+          size="small"
+          @change="onZoneChange"
+        >
+          <el-option v-for="z in zooZones" :key="z.name" :label="z.name" :value="z.name" />
+        </el-select>
+        <el-button type="primary" size="small" :icon="Plus" @click="openAddLightDialog">添加路灯</el-button>
         <span class="text-muted" style="margin-left: auto">
           在线 <span class="status-dot online"></span> {{ stats.online }}
           故障 <span class="status-dot fault"></span> {{ stats.fault }}
@@ -253,6 +265,48 @@
       </template>
     </el-dialog>
 
+    <!-- 添加路灯弹窗 -->
+    <el-dialog v-model="addLightDialog" title="添加路灯" width="480px" :close-on-click-modal="false">
+      <el-form ref="addLightFormRef" :model="addLightForm" label-width="100px">
+        <el-form-item label="设备编号" required>
+          <el-input v-model="addLightForm.lightCode" placeholder="如 L-CQ-001" />
+        </el-form-item>
+        <el-form-item label="设备名称" required>
+          <el-input v-model="addLightForm.lightName" placeholder="如 熊猫馆路灯001" />
+        </el-form-item>
+        <el-form-item label="安装位置">
+          <el-input v-model="addLightForm.location" placeholder="如 熊猫馆门前" />
+        </el-form-item>
+        <el-form-item label="行政区">
+          <el-select v-model="addLightForm.district" placeholder="选择行政区">
+            <el-option v-for="o in availableDistricts" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="路段">
+          <el-select v-model="addLightForm.road" placeholder="选择路段">
+            <el-option v-for="o in availableRoads" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="设备类型">
+          <el-input v-model="addLightForm.deviceType" placeholder="如 LED路灯" />
+        </el-form-item>
+        <el-form-item label="额定功率(W)">
+          <el-input-number v-model="addLightForm.ratedPower" :min="0" :step="1" placeholder="0" />
+        </el-form-item>
+        <el-form-item label="经纬度">
+          <div class="coord-display">
+            <span>经度: <b>{{ addLightForm.longitude || '未选择' }}</b></span>
+            <span>纬度: <b>{{ addLightForm.latitude || '未选择' }}</b></span>
+            <el-button size="small" type="info" @click="pickLocationOnMap">在地图上选择位置</el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addLightDialog = false">取消</el-button>
+        <el-button type="primary" :loading="addingLight" @click="onAddLight">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 路段跨行政区选择弹窗 -->
     <el-dialog
       v-model="districtSelectDialog"
@@ -291,10 +345,10 @@
 defineOptions({ name: 'RealtimeMonitor' })
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Plus } from '@element-plus/icons-vue'
 import * as L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getLightPage, getAllLights, getLightById } from '@/api/light'
+import { getLightPage, getLightById, addLight } from '@/api/light'
 import { getAllLatestSensorData, getLatestSensorData, getTodayEnergy } from '@/api/sensor'
 import { LIGHT_STATUS_MAP } from '@/utils/constants'
 import { useAppStore } from '@/store/app'
@@ -364,9 +418,9 @@ const availableRoads = computed(() => {
 })
 
 const stats = computed(() => {
-  const online = allLights.value.filter((l) => l.status === 1).length
-  const fault = allLights.value.filter((l) => l.status === 2).length
-  const offline = allLights.value.filter((l) => l.status === 0).length
+  const online = allLights.value.filter((l) => Number(l.status) === 1).length
+  const fault = allLights.value.filter((l) => Number(l.status) === 2).length
+  const offline = allLights.value.filter((l) => Number(l.status) === 0).length
   return { online, fault, offline }
 })
 
@@ -474,50 +528,88 @@ let mapInstance = null
 let tileLayer = null
 let markersLayer = null
 let scaleControl = null
-const markerMap = reactive({})
+let markerMap = {}
 
-const mapZoom = ref(13)
-const mapCenter = ref([31.2304, 121.4737])
-const currentZoom = ref(13)
+const mapZoom = ref(14)
+const mapCenter = ref([29.4253, 106.4978])
+const currentZoom = ref(14)
 const scaleText = ref('0 m')
+const scaleRatio = ref('1:100')
 
 const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
 const gaodeSubdomains = ['1', '2', '3', '4']
 
+const zooZones = [
+  { name: '熊猫馆', lat: 29.4258, lng: 106.4975, zoom: 17 },
+  { name: '大象馆', lat: 29.4265, lng: 106.4982, zoom: 17 },
+  { name: '长颈鹿馆', lat: 29.4262, lng: 106.4978, zoom: 17 },
+  { name: '老虎馆', lat: 29.4255, lng: 106.4985, zoom: 17 },
+  { name: '狮子馆', lat: 29.4252, lng: 106.4980, zoom: 17 },
+  { name: '猴山', lat: 29.4268, lng: 106.4972, zoom: 17 },
+  { name: '鸟语林', lat: 29.4270, lng: 106.4976, zoom: 17 },
+  { name: '两栖爬行动物馆', lat: 29.4250, lng: 106.4970, zoom: 17 },
+  { name: '企鹅馆', lat: 29.4248, lng: 106.4988, zoom: 17 },
+  { name: '金丝猴馆', lat: 29.4260, lng: 106.4984, zoom: 17 },
+  { name: '儿童乐园', lat: 29.4245, lng: 106.4965, zoom: 17 },
+  { name: '正门广场', lat: 29.4235, lng: 106.4960, zoom: 17 },
+  { name: '南门入口', lat: 29.4275, lng: 106.4968, zoom: 17 },
+  { name: '北门入口', lat: 29.4230, lng: 106.4985, zoom: 17 },
+  { name: '天鹅湖', lat: 29.4272, lng: 106.4990, zoom: 17 },
+  { name: '停车场', lat: 29.4232, lng: 106.4955, zoom: 17 }
+]
+
+const selectedZone = ref('')
+
+function onZoneChange(name) {
+  if (!name || !mapInstance) return
+  const zone = zooZones.find(z => z.name === name)
+  if (zone) {
+    mapInstance.setView([zone.lat, zone.lng], zone.zoom, { animate: true })
+    ElMessage.success(`已定位到${name}`)
+  }
+}
+
 function getMarkerColor(status) {
-  if (status === 1) return '#67c23a'
-  if (status === 2) return '#f56c6c'
+  const s = Number(status)
+  if (s === 1) return '#67c23a'
+  if (s === 2) return '#f56c6c'
   return '#909399'
 }
 
 function getStatusIcon(status) {
-  if (status === 1) return '◎'
-  if (status === 2) return '✕'
+  const s = Number(status)
+  if (s === 1) return '◎'
+  if (s === 2) return '✕'
   return '○'
 }
 
 function getMarkerClass(status) {
-  if (status === 1) return 'marker-online'
-  if (status === 2) return 'marker-fault'
+  const s = Number(status)
+  if (s === 1) return 'marker-online'
+  if (s === 2) return 'marker-fault'
   return 'marker-offline'
 }
 
 function createMarkerIcon(light) {
-  const color = getMarkerColor(light.status)
-  const iconHtml = `<div class="light-marker ${getMarkerClass(light.status)}">
-    ${light.status === 1 ? `<div class="marker-glow" style="background-color: ${color}"></div>` : ''}
+  const s = Number(light.status)
+  const color = getMarkerColor(s)
+  const iconHtml = `<div class="light-marker ${getMarkerClass(s)}">
+    ${s === 1 ? `<div class="marker-glow" style="background-color: ${color}"></div>` : ''}
+    ${s === 1 ? `<div class="marker-glow-ring" style="border-color: ${color}"></div>` : ''}
     <div class="marker-outer">
       <div class="marker-inner" style="background-color: ${color}"></div>
     </div>
-    ${light.status === 2 ? '<div class="marker-pulse"></div>' : ''}
+    ${s === 2 ? '<div class="marker-pulse"></div>' : ''}
+    ${s === 2 ? '<div class="marker-pulse-ring"></div>' : ''}
+    <div class="marker-label">${light.lightCode ? light.lightCode.substring(light.lightCode.length - 3) : light.id}</div>
   </div>`
 
   return L.divIcon({
     html: iconHtml,
     className: '',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-    popupAnchor: [0, -20]
+    iconSize: [56, 64],
+    iconAnchor: [28, 56],
+    popupAnchor: [0, -40]
   })
 }
 
@@ -529,7 +621,7 @@ function initMap() {
     mapInstance = null
   }
 
-  Object.keys(markerMap).forEach((key) => delete markerMap[key])
+  markerMap = {}
 
   mapInstance = L.map(mapContainer.value, {
     center: mapCenter.value,
@@ -556,18 +648,39 @@ function initMap() {
     const z = mapInstance.getZoom()
     currentZoom.value = z
     scaleText.value = computeScaleText(z)
+    scaleRatio.value = computeScaleRatio(z)
   })
+
+  mapInstance.on('click', (e) => {
+    handleMapClick(e)
+  })
+
   currentZoom.value = mapInstance.getZoom()
   scaleText.value = computeScaleText(mapInstance.getZoom())
+  scaleRatio.value = computeScaleRatio(mapInstance.getZoom())
 }
 
 function computeScaleText(zoom) {
-  const metersPerPixel = 156543.03392 * Math.cos((31.23 * Math.PI) / 180) / Math.pow(2, zoom)
-  const meters = Math.round(metersPerPixel * 100)
-  if (meters >= 1000) {
-    return (meters / 1000).toFixed(meters >= 5000 ? 0 : 1) + ' km'
+  const metersPerPixel = 156543.03392 * Math.cos((29.4253 * Math.PI) / 180) / Math.pow(2, zoom)
+  const centimeters = Math.round(metersPerPixel * 100 * 100)
+  if (centimeters >= 100000) {
+    const km = centimeters / 100000
+    return km.toFixed(km >= 5 ? 0 : 1) + ' km'
+  } else if (centimeters >= 1000) {
+    return Math.round(centimeters / 100) + ' m'
+  } else if (centimeters >= 10) {
+    return Math.round(centimeters) + ' cm'
+  } else {
+    return centimeters.toFixed(1) + ' cm'
   }
-  return meters + ' m'
+}
+
+function computeScaleRatio(zoom) {
+  const metersPerPixel = 156543.03392 * Math.cos((29.4253 * Math.PI) / 180) / Math.pow(2, zoom)
+  const pixelsPerMeter = 1 / metersPerPixel
+  const scale = Math.round(pixelsPerMeter)
+  if (scale <= 0) return '1:1'
+  return `1:${scale}`
 }
 
 function addTileLayer() {
@@ -589,35 +702,21 @@ function addTileLayer() {
 function renderMarkers() {
   if (!markersLayer) return
 
-  const currentIds = new Set()
+  markersLayer.clearLayers()
+  markerMap = {}
 
   lightsWithLocation.value.forEach((light) => {
-    currentIds.add(light.id)
+    const icon = createMarkerIcon(light)
+    const marker = L.marker(
+      [Number(light.latitude), Number(light.longitude)],
+      { icon }
+    ).addTo(markersLayer)
 
-    if (markerMap[light.id]) {
-      const marker = markerMap[light.id]
-      const icon = createMarkerIcon(light)
-      marker.setIcon(icon)
-    } else {
-      const icon = createMarkerIcon(light)
-      const marker = L.marker(
-        [Number(light.latitude), Number(light.longitude)],
-        { icon }
-      ).addTo(markersLayer)
+    marker.on('click', () => {
+      onMarkerClick(light)
+    })
 
-      marker.on('click', () => {
-        onMarkerClick(light)
-      })
-
-      markerMap[light.id] = marker
-    }
-  })
-
-  Object.keys(markerMap).forEach((id) => {
-    if (!currentIds.has(Number(id))) {
-      markersLayer.removeLayer(markerMap[id])
-      delete markerMap[id]
-    }
+    markerMap[light.id] = marker
   })
 
   updateMapBounds()
@@ -634,13 +733,13 @@ function updateMapBounds() {
     if (bounds && bounds.isValid()) {
       if (layers.length === 1 && layers[0].getLatLng) {
         const ll = layers[0].getLatLng()
-        mapInstance.setView([ll.lat, ll.lng], 15, { animate: true })
+        mapInstance.setView([ll.lat, ll.lng], 17, { animate: true })
       } else {
-        mapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 })
+        mapInstance.fitBounds(bounds, { padding: [60, 60], maxZoom: 18, minZoom: 12 })
       }
     }
   } catch (e) {
-    if (layers[0] && layers[0].getLatLng) {
+    if (layers[0] && layers[0].getLatLng()) {
       mapInstance.setView(layers[0].getLatLng(), 15)
     }
   }
@@ -648,6 +747,22 @@ function updateMapBounds() {
 
 const detailDialog = ref(false)
 const selectedLight = ref(null)
+
+const addLightDialog = ref(false)
+const addLightFormRef = ref(null)
+const addingLight = ref(false)
+const pickingLocation = ref(false)
+const addLightForm = reactive({
+  lightCode: '',
+  lightName: '',
+  location: '',
+  district: '',
+  road: '',
+  deviceType: '',
+  ratedPower: 0,
+  longitude: '',
+  latitude: ''
+})
 
 async function onMarkerClick(light) {
   selectedLight.value = light
@@ -669,6 +784,89 @@ function goToDetail() {
   router.push({ path: `/devices/${id}`, query: { from: 'monitor' } })
 }
 
+function openAddLightDialog() {
+  addLightDialog.value = true
+  Object.assign(addLightForm, {
+    lightCode: '',
+    lightName: '',
+    location: '',
+    district: '',
+    road: '',
+    deviceType: '',
+    ratedPower: 0,
+    longitude: '',
+    latitude: ''
+  })
+}
+
+function pickLocationOnMap() {
+  addLightDialog.value = false
+  pickingLocation.value = true
+  ElMessage.success('请在地图上点击选择路灯安装位置')
+}
+
+function handleMapClick(e) {
+  if (!pickingLocation.value) return
+  const lat = e.latlng.lat
+  const lng = e.latlng.lng
+  addLightForm.longitude = lng.toFixed(6)
+  addLightForm.latitude = lat.toFixed(6)
+  pickingLocation.value = false
+  addLightDialog.value = true
+  ElMessage.success(`已选择位置：经度 ${lng.toFixed(6)}，纬度 ${lat.toFixed(6)}`)
+}
+
+async function onAddLight() {
+  if (!addLightForm.lightCode.trim()) {
+    ElMessage.warning('请输入设备编号')
+    return
+  }
+  if (!addLightForm.lightName.trim()) {
+    ElMessage.warning('请输入设备名称')
+    return
+  }
+  if (!addLightForm.longitude || !addLightForm.latitude) {
+    ElMessage.warning('请选择经纬度位置')
+    return
+  }
+
+  addingLight.value = true
+  try {
+    const payload = {
+      lightCode: addLightForm.lightCode.trim(),
+      lightName: addLightForm.lightName.trim(),
+      location: addLightForm.location.trim(),
+      district: addLightForm.district,
+      road: addLightForm.road,
+      deviceType: addLightForm.deviceType.trim(),
+      ratedPower: addLightForm.ratedPower || 0,
+      longitude: parseFloat(addLightForm.longitude),
+      latitude: parseFloat(addLightForm.latitude),
+      status: 0,
+      brightness: 0,
+      manualControl: 0
+    }
+    await addLight(payload)
+    ElMessage.success('添加成功')
+    addLightDialog.value = false
+    await nextTick()
+    refreshAll(true)
+  } catch (error) {
+    const raw = error.response?.data?.message || ''
+    let msg = '添加失败'
+    if (raw.includes('Duplicate entry') && raw.includes('uk_light_code')) {
+      msg = '设备编号已存在，请更换后重试'
+    } else if (raw.includes('Duplicate entry')) {
+      msg = '数据重复，请检查编号或名称是否已存在'
+    } else if (raw) {
+      msg = raw
+    }
+    ElMessage.error(msg)
+  } finally {
+    addingLight.value = false
+  }
+}
+
 // ====== 跨页面同步：通过 BroadcastChannel 通知其他页面/标签页刷新 ======
 const syncChannel = typeof BroadcastChannel !== 'undefined'
   ? new BroadcastChannel('smartlight_light_detail')
@@ -686,7 +884,7 @@ async function refreshAll(reprobe = false) {
   if (reprobe) sensorApiAvailable.value = null
   loading.value = true
   try {
-    const [pageRes, listRes] = await Promise.all([
+    const [pageRes, allRes] = await Promise.all([
       getLightPage({
         pageNum: listQuery.pageNum,
         pageSize: listQuery.pageSize,
@@ -694,10 +892,10 @@ async function refreshAll(reprobe = false) {
         road: filter.road,
         status: filter.status
       }),
-      getAllLights()
+      getLightPage({ pageNum: 1, pageSize: 9999 })
     ])
     const newPage = pageRes.data || { records: [], total: 0 }
-    const newAll = listRes.data || []
+    const newAll = allRes.data?.records || []
     // 检测列表中状态是否有变化（用于跨标签/页面同步通知）
     const prevStatusMap = new Map(allLights.value.map((l) => [l.id, l.status]))
     page.value = newPage
@@ -980,5 +1178,17 @@ onUnmounted(() => {
 .map-wrapper {
   flex: 1;
   min-height: 250px;
+}
+
+.coord-display {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.coord-display b {
+  color: #409eff;
 }
 </style>

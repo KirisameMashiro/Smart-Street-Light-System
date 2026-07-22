@@ -150,7 +150,7 @@ defineOptions({ name: 'FaultHandle' })
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, RefreshLeft, Refresh, View, Check } from '@element-plus/icons-vue'
-import { getAllLights, updateLight } from '@/api/light'
+import { getAllLights, getLightPage, updateLight } from '@/api/light'
 import { addOperationLog } from '@/api/operation-log'
 import { useUserStore } from '@/store/user'
 import { useAppStore } from '@/store/app'
@@ -181,15 +181,15 @@ const fixForm = reactive({
 // 行政区与路段映射
 const districtRoadMap = {}
 
-const faultCount = computed(() => allLights.value.filter(l => l.status === 2).length)
+const faultCount = computed(() => allLights.value.filter(l => Number(l.status) === 2).length)
 
 const districtOptions = computed(() => {
-  const set = new Set(allLights.value.filter(l => l.status === 2).map(l => l.district).filter(Boolean))
+  const set = new Set(allLights.value.filter(l => Number(l.status) === 2).map(l => l.district).filter(Boolean))
   return Array.from(set)
 })
 
 const roadOptions = computed(() => {
-  const set = new Set(allLights.value.filter(l => l.status === 2).map(l => l.road).filter(Boolean))
+  const set = new Set(allLights.value.filter(l => Number(l.status) === 2).map(l => l.road).filter(Boolean))
   return Array.from(set)
 })
 
@@ -201,8 +201,8 @@ const filteredRoads = computed(() => {
 async function loadData() {
   loading.value = true
   try {
-    const res = await getAllLights()
-    allLights.value = res.data || []
+    const res = await getLightPage({ pageNum: 1, pageSize: 9999 })
+    allLights.value = res.data?.records || []
     buildDistrictRoadMap()
     filterData()
   } finally {
@@ -224,7 +224,7 @@ function buildDistrictRoadMap() {
 }
 
 function filterData() {
-  let list = allLights.value.filter(l => l.status === 2)
+  let list = allLights.value.filter(l => Number(l.status) === 2)
 
   if (searchKeyword.value) {
     const kw = searchKeyword.value.trim().toLowerCase()
