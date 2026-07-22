@@ -63,15 +63,11 @@
         <el-table-column label="适用区域" width="180">
           <template #default="{ row }">
             <template v-if="row.groups?.length">
-              <template v-for="(g, i) in row.groups" :key="i">
-                <template v-if="g.district">{{ g.district }}</template>
-                <template v-if="g.roads?.length">
-                  <span v-if="g.district" class="text-muted"> · </span>
-                  {{ g.roads.join('、') }}
+                <template v-for="(g, i) in row.groups" :key="i">
+                  <template v-if="g.district">{{ g.district }}</template>
+                  <template v-if="i < row.groups.length - 1">；</template>
                 </template>
-                <template v-if="i < row.groups.length - 1">；</template>
               </template>
-            </template>
             <span v-else class="text-muted">-</span>
           </template>
         </el-table-column>
@@ -196,8 +192,7 @@
                   clearable
                   filterable
                   placeholder="选择行政区"
-                  style="width: 35%"
-                  @change="() => { group.roads = [] }"
+                  style="width: 100%"
                 >
                   <el-option
                     v-for="o in DISTRICT_OPTIONS"
@@ -207,29 +202,6 @@
                     :disabled="isDistrictDisabled(o.value, index)"
                   />
                 </el-select>
-                <div class="road-select-wrapper">
-                  <el-select
-                    v-model="group.roads"
-                    multiple
-                    clearable
-                    filterable
-                    placeholder="选择路段"
-                    class="road-select-multi"
-                  >
-                    <el-option
-                      v-for="o in (group.district ? (districtRoadMap[group.district] || []).map(r => ({ value: r, label: r })) : [])"
-                      :key="o.value"
-                      :label="o.label"
-                      :value="o.value"
-                    />
-                  </el-select>
-                  <el-button
-                    type="primary"
-                    size="small"
-                    @click="selectAllRoads(index)"
-                    :disabled="!group.district"
-                  >全选</el-button>
-                </div>
               </div>
               <!-- 分组级阈值配置 -->
               <div v-if="form.useDynamicBrightness" class="group-threshold-section">
@@ -384,7 +356,7 @@
 
 <script setup>
 defineOptions({ name: 'TimedStrategy' })
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Clock, Setting, Delete } from '@element-plus/icons-vue'
 import {
@@ -394,7 +366,7 @@ import {
   deleteStrategy,
   toggleStrategy
 } from '@/api/control'
-import { getDistricts, getRoads, getAllLights } from '@/api/light'
+import { getDistricts } from '@/api/light'
 import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
@@ -404,8 +376,6 @@ const tableData = ref([])
 const total = ref(0)
 
 const DISTRICT_OPTIONS = ref([])
-const ROAD_OPTIONS = ref([])
-const districtRoadMap = ref({})
 
 const query = reactive({
   pageNum: 1,
@@ -525,7 +495,6 @@ async function saveThresholdConfig() {
 function addApplyGroup() {
   form.applyGroups.push({
     district: '',
-    roads: [],
     useCustomThreshold: false,
     lightOffThreshold: 100,
     brightnessSegments: [{ threshold: 30, brightness: 100 }]
@@ -540,15 +509,7 @@ function isDistrictDisabled(districtValue, currentIndex) {
   return form.applyGroups.some((g, idx) => idx !== currentIndex && g.district === districtValue)
 }
 
-function selectAllRoads(index) {
-  const group = form.applyGroups[index]
-  if (!group.district) {
-    ElMessage.warning('请先选择行政区')
-    return
-  }
-  const districtRoads = districtRoadMap.value[group.district] || []
-  group.roads = [...districtRoads]
-}
+
 
 const rules = {
   name: [{ required: true, message: '请输入策略名称', trigger: 'blur' }],
@@ -585,7 +546,6 @@ function openDialog(row) {
     groups.forEach(g => {
       applyGroups.push({
         district: g.district || '',
-        roads: Array.isArray(g.roads) ? [...g.roads] : [],
         useCustomThreshold: !!(g.lightOffThreshold != null || (g.brightnessSegments && g.brightnessSegments.length > 0)),
         lightOffThreshold: g.lightOffThreshold ?? 100,
         brightnessSegments: (g.brightnessSegments && g.brightnessSegments.length > 0)
@@ -594,7 +554,7 @@ function openDialog(row) {
       })
     })
     if (applyGroups.length === 0) {
-      applyGroups.push({ district: '', roads: [], useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] })
+      applyGroups.push({ district: '', useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] })
     }
     Object.assign(form, {
       id: row.id,
@@ -634,7 +594,7 @@ function resetForm() {
     useDynamicBrightness: false,
     lightOffThreshold: 100,
     brightnessSegments: [{ threshold: 30, brightness: 100 }],
-    applyGroups: [{ district: '', roads: [], useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] }],
+    applyGroups: [{ district: '', useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] }],
     enabled: true
   })
   formRef.value?.clearValidate()
@@ -680,45 +640,11 @@ function isTimeRangeOverlap(start1, end1, start2, end2) {
 }
 
 
-function isGroupOverlap(group, otherDistrict, otherRoads) {
+function isDistrictOverlap(group, otherDistrict) {
   const formDistrict = group.district || ''
-  const formRoads = group.roads || []
-
-  if (!formDistrict && !formRoads.length) {
-    return true
-  }
-  if (!otherDistrict && !otherRoads.length) {
-    return true
-  }
-
-  if (formRoads.length > 0 && otherRoads.length > 0) {
-    if (formDistrict && otherDistrict && formDistrict !== otherDistrict) {
-      return false
-    }
-    return formRoads.some(r => otherRoads.includes(r))
-  }
-
-  if (formDistrict && !formRoads.length) {
-    if (otherRoads.length > 0) {
-      return otherRoads.some(r => {
-        const d = districtRoadMap.value[formDistrict] || []
-        return d.includes(r)
-      })
-    }
-    return formDistrict === otherDistrict
-  }
-
-  if (otherDistrict && !otherRoads.length) {
-    if (formRoads.length > 0) {
-      return formRoads.some(r => {
-        const d = districtRoadMap.value[otherDistrict] || []
-        return d.includes(r)
-      })
-    }
-    return formDistrict === otherDistrict
-  }
-
-  return false
+  if (!formDistrict && !otherDistrict) return true
+  if (!formDistrict || !otherDistrict) return true
+  return formDistrict === otherDistrict
 }
 
 function isRoadOverlap(other) {
@@ -732,9 +658,8 @@ function isRoadOverlap(other) {
 
   for (const og of otherGroups) {
     const oDistrict = og.district || ''
-    const oRoads = Array.isArray(og.roads) ? og.roads : []
     for (const group of form.applyGroups) {
-      if (isGroupOverlap(group, oDistrict, oRoads)) return true
+      if (isDistrictOverlap(group, oDistrict)) return true
     }
   }
   return false
@@ -787,10 +712,7 @@ function getConflictDesc(other) {
   }
   if (other.groups?.length) {
     const groupDesc = other.groups.map(g => {
-      const items = []
-      if (g.district) items.push(g.district)
-      if (g.roads?.length) items.push(g.roads.join('、'))
-      return items.join(' · ')
+      return g.district || ''
     }).join('；')
     parts.push(groupDesc)
   }
@@ -872,13 +794,11 @@ async function onSubmit() {
   submitting.value = true
   try {
     const groups = form.applyGroups
-      .filter(g => g.district || (g.roads && g.roads.length > 0))
+      .filter(g => g.district)
       .map(g => {
         const group = {
-          district: g.district || '',
-          roads: g.roads || []
+          district: g.district || ''
         }
-        // 仅当启用自定义阈值且动态亮度开启时，才携带分组级阈值配置
         if (form.useDynamicBrightness && g.useCustomThreshold) {
           group.lightOffThreshold = g.lightOffThreshold
           group.brightnessSegments = g.brightnessSegments
@@ -932,28 +852,8 @@ async function onSubmit() {
 
 async function loadOptions() {
   try {
-    const [districtsRes, roadsRes, lightsRes] = await Promise.all([
-      getDistricts(),
-      getRoads(),
-      getAllLights()
-    ])
-    
+    const districtsRes = await getDistricts()
     DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
-    ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
-    
-    const map = {}
-    const lights = lightsRes.data || []
-    lights.forEach(light => {
-      if (light.district && light.road) {
-        if (!map[light.district]) {
-          map[light.district] = []
-        }
-        if (!map[light.district].includes(light.road)) {
-          map[light.district].push(light.road)
-        }
-      }
-    })
-    districtRoadMap.value = map
   } catch (e) {
     console.error('加载选项数据失败:', e)
   }
