@@ -25,6 +25,34 @@
 
     <!-- 筛选 -->
     <div class="filter-bar">
+      <template v-if="mode === 'list'">
+        <el-select
+          v-model="filter.district"
+          placeholder="动物园区"
+          clearable
+          filterable
+          style="width: 160px"
+          @change="onDistrictChange"
+        >
+          <el-option
+            v-for="o in availableDistricts"
+            :key="o.value"
+            :label="o.label"
+            :value="o.value"
+          />
+        </el-select>
+        <el-select
+          v-model="filter.status"
+          placeholder="状态"
+          clearable
+          style="width: 100px"
+          @change="onFilterChange"
+        >
+          <el-option label="在线" :value="1" />
+          <el-option label="故障" :value="2" />
+          <el-option label="离线" :value="0" />
+        </el-select>
+      </template>
       <span class="text-muted" style="margin-left: auto">
         共 {{ page.total }} 盏
         <template v-if="mode === 'list'">
@@ -692,10 +720,14 @@ function addTileLayer() {
   }).addTo(mapInstance)
 }
 
-function renderMarkers() {
-  if (!markersLayer) return
+function renderMarkers(autoAdjustBounds = true) {
+  if (!mapInstance) return
 
-  markersLayer.clearLayers()
+  if (!markersLayer) {
+    markersLayer = L.featureGroup().addTo(mapInstance)
+  } else {
+    markersLayer.clearLayers()
+  }
   markerMap = {}
 
   lightsWithLocation.value.forEach((light) => {
@@ -712,7 +744,9 @@ function renderMarkers() {
     markerMap[light.id] = marker
   })
 
-  updateMapBounds()
+  if (autoAdjustBounds) {
+    updateMapBounds()
+  }
 }
 
 function updateMapBounds() {
@@ -1009,12 +1043,22 @@ watch(mode, async (m) => {
   if (m === 'map') {
     await nextTick()
     initMap()
-    renderMarkers()
+    renderMarkers(false)
     setTimeout(() => {
       if (mapInstance) {
         mapInstance.invalidateSize()
       }
     }, 100)
+  } else {
+    if (mapInstance) {
+      saveMapState()
+      mapInstance.remove()
+      mapInstance = null
+      tileLayer = null
+      markersLayer = null
+      scaleControl = null
+      markerMap = {}
+    }
   }
 })
 
