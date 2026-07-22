@@ -65,6 +65,10 @@
             <template v-if="row.groups?.length">
               <template v-for="(g, i) in row.groups" :key="i">
                 <template v-if="g.district">{{ g.district }}</template>
+                <template v-if="g.roads?.length">
+                  <span v-if="g.district" class="text-muted"> · </span>
+                  {{ g.roads.join('、') }}
+                </template>
                 <template v-if="i < row.groups.length - 1">；</template>
               </template>
             </template>
@@ -166,7 +170,7 @@
           />
         </el-form-item>
         <el-form-item label="目标亮度" prop="brightness">
-          <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" />
+          <el-slider v-model="form.brightness" :min="0" :max="100" show-input style="width: 100%" :disabled="form.useDynamicBrightness" />
         </el-form-item>
         <el-form-item label="动态亮度">
           <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -191,8 +195,9 @@
                   v-model="group.district"
                   clearable
                   filterable
-                  placeholder="选择动物园区"
-                  style="width: 100%"
+                  placeholder="选择行政区"
+                  style="width: 35%"
+                  @change="() => { group.roads = [] }"
                 >
                   <el-option
                     v-for="o in DISTRICT_OPTIONS"
@@ -202,13 +207,99 @@
                     :disabled="isDistrictDisabled(o.value, index)"
                   />
                 </el-select>
+                <div class="road-select-wrapper">
+                  <el-select
+                    v-model="group.roads"
+                    multiple
+                    clearable
+                    filterable
+                    placeholder="选择路段"
+                    class="road-select-multi"
+                  >
+                    <el-option
+                      v-for="o in (group.district ? (districtRoadMap[group.district] || []).map(r => ({ value: r, label: r })) : [])"
+                      :key="o.value"
+                      :label="o.label"
+                      :value="o.value"
+                    />
+                  </el-select>
+                  <el-button
+                    type="primary"
+                    size="small"
+                    @click="selectAllRoads(index)"
+                    :disabled="!group.district"
+                  >全选</el-button>
+                </div>
+              </div>
+              <!-- 分组级阈值配置 -->
+              <div v-if="form.useDynamicBrightness" class="group-threshold-section">
+                <div class="group-threshold-toggle">
+                  <el-switch v-model="group.useCustomThreshold" size="small" />
+                  <span class="text-muted" style="font-size: 12px; margin-left: 8px;">
+                    自定义阈值（覆盖策略默认值）
+                  </span>
+                </div>
+                <div v-if="group.useCustomThreshold" class="group-threshold-detail">
+                  <div class="threshold-row">
+                    <span class="threshold-label">关灯阈值 (lux)：</span>
+                    <el-input-number
+                      v-model="group.lightOffThreshold"
+                      :min="0"
+                      :max="9999"
+                      :step="10"
+                      size="small"
+                      style="width: 140px;"
+                    />
+                  </div>
+                  <div class="threshold-segments">
+                    <span class="threshold-label">亮度分段：</span>
+                    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1;">
+                      <div
+                        v-for="(seg, idx) in group.brightnessSegments"
+                        :key="idx"
+                        style="display: flex; gap: 6px; align-items: center;"
+                      >
+                        <span style="font-size: 11px; white-space: nowrap;">光照 ≤</span>
+                        <el-input-number
+                          v-model="seg.threshold"
+                          :min="0"
+                          :max="9999"
+                          :step="10"
+                          size="small"
+                          style="width: 100px;"
+                        />
+                        <span style="font-size: 11px; white-space: nowrap;">lux →</span>
+                        <el-input-number
+                          v-model="seg.brightness"
+                          :min="0"
+                          :max="100"
+                          :step="5"
+                          size="small"
+                          style="width: 80px;"
+                        />
+                        <span style="font-size: 11px;">%</span>
+                        <el-button
+                          v-if="group.brightnessSegments.length > 1"
+                          :icon="Delete"
+                          circle
+                          size="small"
+                          type="danger"
+                          @click="group.brightnessSegments.splice(idx, 1)"
+                        />
+                      </div>
+                      <el-button type="primary" size="small" @click="group.brightnessSegments.push({ threshold: 30, brightness: 100 })" style="align-self: flex-start;">
+                        + 添加分段
+                      </el-button>
+                    </div>
+                  </div>
+                </div>
               </div>
               <div v-if="form.applyGroups.length > 1" class="group-actions">
                 <el-button type="danger" size="small" @click="removeApplyGroup(index)">删除</el-button>
               </div>
             </div>
             <el-button type="primary" size="small" @click="addApplyGroup" class="add-group-btn">
-              + 添加动物园区
+              + 添加行政区
             </el-button>
           </div>
         </el-form-item>
@@ -230,12 +321,6 @@
       append-to-body
     >
       <el-form ref="thresholdFormRef" :model="thresholdForm" label-width="120px">
-        <el-form-item label="阈值总开关">
-          <el-switch v-model="thresholdForm.enabled" />
-          <span class="text-muted" style="margin-left: 8px; font-size: 12px;">
-            {{ thresholdForm.enabled ? '动态亮度功能可用' : '动态亮度功能已全局关闭' }}
-          </span>
-        </el-form-item>
         <el-form-item label="关灯光照阈值 (lux)">
           <el-input-number
             v-model="thresholdForm.lightOffThreshold"
@@ -307,18 +392,20 @@ import {
   addStrategy,
   updateStrategy,
   deleteStrategy,
-  toggleStrategy,
-  getThresholdConfig,
-  updateThresholdConfig
+  toggleStrategy
 } from '@/api/control'
-import { getDistricts } from '@/api/light'
-import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS, DISTRICT_OPTIONS } from '@/utils/constants'
+import { getDistricts, getRoads, getAllLights } from '@/api/light'
+import { STRATEGY_TYPE_MAP, WEEKDAY_OPTIONS } from '@/utils/constants'
 import { logOperation } from '@/utils/log'
 
 const loading = ref(false)
 const submitting = ref(false)
 const tableData = ref([])
 const total = ref(0)
+
+const DISTRICT_OPTIONS = ref([])
+const ROAD_OPTIONS = ref([])
+const districtRoadMap = ref({})
 
 const query = reactive({
   pageNum: 1,
@@ -395,6 +482,8 @@ const form = reactive({
   endTime: '06:00:00',
   brightness: 80,
   useDynamicBrightness: false,
+  lightOffThreshold: 100,
+  brightnessSegments: [{ threshold: 30, brightness: 100 }],
   applyGroups: [],
   enabled: true
 })
@@ -404,7 +493,6 @@ const thresholdDialogVisible = ref(false)
 const thresholdSaving = ref(false)
 const thresholdFormRef = ref()
 const thresholdForm = reactive({
-  enabled: false,
   lightOffThreshold: 100,
   segments: []
 })
@@ -418,42 +506,29 @@ function removeThresholdSegment(idx) {
 }
 
 async function openThresholdConfig() {
-  try {
-    const res = await getThresholdConfig()
-    const data = res.data || {}
-    thresholdForm.enabled = !!data.enabled
-    thresholdForm.lightOffThreshold = data.lightOffThreshold ?? 100
-    thresholdForm.segments = (data.segments && data.segments.length > 0)
-      ? data.segments.map(s => ({ threshold: s.threshold ?? 30, brightness: s.brightness ?? 100 }))
-      : [{ threshold: 30, brightness: 100 }]
-  } catch (e) {
-    thresholdForm.enabled = false
-    thresholdForm.lightOffThreshold = 100
-    thresholdForm.segments = [{ threshold: 30, brightness: 100 }]
-  }
+  // 从当前策略表单中读取阈值配置（策略级独立管理）
+  thresholdForm.lightOffThreshold = form.lightOffThreshold ?? 100
+  thresholdForm.segments = (form.brightnessSegments && form.brightnessSegments.length > 0)
+    ? form.brightnessSegments.map(s => ({ threshold: s.threshold ?? 30, brightness: s.brightness ?? 100 }))
+    : [{ threshold: 30, brightness: 100 }]
   thresholdDialogVisible.value = true
 }
 
 async function saveThresholdConfig() {
-  thresholdSaving.value = true
-  try {
-    await updateThresholdConfig({
-      enabled: thresholdForm.enabled,
-      lightOffThreshold: thresholdForm.lightOffThreshold,
-      segments: thresholdForm.segments.map(s => ({ threshold: s.threshold, brightness: s.brightness }))
-    })
-    ElMessage.success('阈值配置已保存')
-    thresholdDialogVisible.value = false
-  } catch (e) {
-    // 错误已由拦截器处理
-  } finally {
-    thresholdSaving.value = false
-  }
+  // 保存到当前策略表单中，不调API
+  form.lightOffThreshold = thresholdForm.lightOffThreshold
+  form.brightnessSegments = thresholdForm.segments.map(s => ({ threshold: s.threshold, brightness: s.brightness }))
+  ElMessage.success('阈值配置已保存到当前策略')
+  thresholdDialogVisible.value = false
 }
 
 function addApplyGroup() {
   form.applyGroups.push({
-    district: ''
+    district: '',
+    roads: [],
+    useCustomThreshold: false,
+    lightOffThreshold: 100,
+    brightnessSegments: [{ threshold: 30, brightness: 100 }]
   })
 }
 
@@ -463,6 +538,16 @@ function removeApplyGroup(index) {
 
 function isDistrictDisabled(districtValue, currentIndex) {
   return form.applyGroups.some((g, idx) => idx !== currentIndex && g.district === districtValue)
+}
+
+function selectAllRoads(index) {
+  const group = form.applyGroups[index]
+  if (!group.district) {
+    ElMessage.warning('请先选择行政区')
+    return
+  }
+  const districtRoads = districtRoadMap.value[group.district] || []
+  group.roads = [...districtRoads]
 }
 
 const rules = {
@@ -495,13 +580,22 @@ function openDialog(row) {
   isEdit.value = !!row
   if (row) {
     let applyGroups = []
-    // 直接解析 groups 结构，完美保留动物园区-路段配对
+    // 直接解析 groups 结构，完美保留行政区-路段配对
     const groups = Array.isArray(row.groups) ? row.groups : []
     groups.forEach(g => {
       applyGroups.push({
-        district: g.district || ''
+        district: g.district || '',
+        roads: Array.isArray(g.roads) ? [...g.roads] : [],
+        useCustomThreshold: !!(g.lightOffThreshold != null || (g.brightnessSegments && g.brightnessSegments.length > 0)),
+        lightOffThreshold: g.lightOffThreshold ?? 100,
+        brightnessSegments: (g.brightnessSegments && g.brightnessSegments.length > 0)
+          ? g.brightnessSegments.map(s => ({ threshold: s.threshold ?? 30, brightness: s.brightness ?? 100 }))
+          : [{ threshold: 30, brightness: 100 }]
       })
     })
+    if (applyGroups.length === 0) {
+      applyGroups.push({ district: '', roads: [], useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] })
+    }
     Object.assign(form, {
       id: row.id,
       name: row.name || '',
@@ -513,6 +607,10 @@ function openDialog(row) {
       endTime: row.endTime || '06:00:00',
       brightness: row.brightness ?? 80,
       useDynamicBrightness: !!row.useDynamicBrightness,
+      lightOffThreshold: row.lightOffThreshold ?? 100,
+      brightnessSegments: (row.brightnessSegments && row.brightnessSegments.length > 0)
+        ? row.brightnessSegments.map(s => ({ threshold: s.threshold ?? 30, brightness: s.brightness ?? 100 }))
+        : [{ threshold: 30, brightness: 100 }],
       applyGroups,
       enabled: !!row.enabled
     })
@@ -534,7 +632,9 @@ function resetForm() {
     endTime: '06:00:00',
     brightness: 80,
     useDynamicBrightness: false,
-    applyGroups: [],
+    lightOffThreshold: 100,
+    brightnessSegments: [{ threshold: 30, brightness: 100 }],
+    applyGroups: [{ district: '', roads: [], useCustomThreshold: false, lightOffThreshold: 100, brightnessSegments: [{ threshold: 30, brightness: 100 }] }],
     enabled: true
   })
   formRef.value?.clearValidate()
@@ -580,17 +680,45 @@ function isTimeRangeOverlap(start1, end1, start2, end2) {
 }
 
 
-function isGroupOverlap(group, otherDistrict) {
+function isGroupOverlap(group, otherDistrict, otherRoads) {
   const formDistrict = group.district || ''
+  const formRoads = group.roads || []
 
-  if (!formDistrict) {
+  if (!formDistrict && !formRoads.length) {
     return true
   }
-  if (!otherDistrict) {
+  if (!otherDistrict && !otherRoads.length) {
     return true
   }
 
-  return formDistrict === otherDistrict
+  if (formRoads.length > 0 && otherRoads.length > 0) {
+    if (formDistrict && otherDistrict && formDistrict !== otherDistrict) {
+      return false
+    }
+    return formRoads.some(r => otherRoads.includes(r))
+  }
+
+  if (formDistrict && !formRoads.length) {
+    if (otherRoads.length > 0) {
+      return otherRoads.some(r => {
+        const d = districtRoadMap.value[formDistrict] || []
+        return d.includes(r)
+      })
+    }
+    return formDistrict === otherDistrict
+  }
+
+  if (otherDistrict && !otherRoads.length) {
+    if (formRoads.length > 0) {
+      return formRoads.some(r => {
+        const d = districtRoadMap.value[otherDistrict] || []
+        return d.includes(r)
+      })
+    }
+    return formDistrict === otherDistrict
+  }
+
+  return false
 }
 
 function isRoadOverlap(other) {
@@ -604,8 +732,9 @@ function isRoadOverlap(other) {
 
   for (const og of otherGroups) {
     const oDistrict = og.district || ''
+    const oRoads = Array.isArray(og.roads) ? og.roads : []
     for (const group of form.applyGroups) {
-      if (isGroupOverlap(group, oDistrict)) return true
+      if (isGroupOverlap(group, oDistrict, oRoads)) return true
     }
   }
   return false
@@ -743,10 +872,19 @@ async function onSubmit() {
   submitting.value = true
   try {
     const groups = form.applyGroups
-      .filter(g => g.district)
-      .map(g => ({
-        district: g.district || ''
-      }))
+      .filter(g => g.district || (g.roads && g.roads.length > 0))
+      .map(g => {
+        const group = {
+          district: g.district || '',
+          roads: g.roads || []
+        }
+        // 仅当启用自定义阈值且动态亮度开启时，才携带分组级阈值配置
+        if (form.useDynamicBrightness && g.useCustomThreshold) {
+          group.lightOffThreshold = g.lightOffThreshold
+          group.brightnessSegments = g.brightnessSegments
+        }
+        return group
+      })
 
     const basePayload = {
       id: form.id,
@@ -756,6 +894,8 @@ async function onSubmit() {
       endTime: form.endTime,
       brightness: form.brightness,
       useDynamicBrightness: form.useDynamicBrightness,
+      lightOffThreshold: form.lightOffThreshold,
+      brightnessSegments: form.useDynamicBrightness ? form.brightnessSegments : null,
       enabled: form.enabled,
       groups
     }
@@ -792,8 +932,28 @@ async function onSubmit() {
 
 async function loadOptions() {
   try {
-    const districtsRes = await getDistricts()
+    const [districtsRes, roadsRes, lightsRes] = await Promise.all([
+      getDistricts(),
+      getRoads(),
+      getAllLights()
+    ])
+    
     DISTRICT_OPTIONS.value = (districtsRes.data || []).map(d => ({ value: d, label: d }))
+    ROAD_OPTIONS.value = (roadsRes.data || []).map(r => ({ value: r, label: r }))
+    
+    const map = {}
+    const lights = lightsRes.data || []
+    lights.forEach(light => {
+      if (light.district && light.road) {
+        if (!map[light.district]) {
+          map[light.district] = []
+        }
+        if (!map[light.district].includes(light.road)) {
+          map[light.district].push(light.road)
+        }
+      }
+    })
+    districtRoadMap.value = map
   } catch (e) {
     console.error('加载选项数据失败:', e)
   }
@@ -891,8 +1051,103 @@ onMounted(() => {
   align-items: center;
 }
 
+.road-select-multi :deep(.el-tag) {
+  display: inline-flex;
+  margin: 0 !important;
+  flex-shrink: 0;
+}
+
+.group-actions {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #dcdfe6;
+}
+
 .add-group-btn {
   margin-top: 4px;
   align-self: flex-start;
+}
+
+.group-threshold-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e4e7ed;
+}
+
+.group-threshold-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.group-threshold-detail {
+  margin-top: 8px;
+  padding: 10px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.threshold-label {
+  font-size: 12px;
+  color: #606266;
+  white-space: nowrap;
+}
+
+.threshold-segments {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+</style>
+
+<style>
+.road-select-multi .el-select__tags {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  gap: 2px !important;
+  align-items: center !important;
+}
+
+.road-select-multi .el-select__tags > * {
+  display: inline-flex !important;
+  flex-direction: row !important;
+}
+
+.road-select-multi .el-tag {
+  display: inline-flex !important;
+  margin: 0 !important;
+  flex-shrink: 0;
+  padding: 0 3px !important;
+  height: 20px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+}
+
+.road-select-multi .el-tag .el-tag__close {
+  margin-left: 2px !important;
+  font-size: 10px !important;
+}
+
+.road-select-multi .el-select__wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.road-select-multi .el-select__selection {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 </style>
