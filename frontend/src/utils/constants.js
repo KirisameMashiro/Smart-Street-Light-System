@@ -80,10 +80,10 @@ export const ALERT_STATUS_MAP = {
 }
 
 // ============ 用户角色 ============
-// [后端] admin/operator；[前端扩展] municipal-市政人员（后端 role 为字符串可存储）
+// [后端] admin/operator；[前端扩展] municipal-照明控制人员（后端 role 为字符串可存储）
 export const USER_ROLE_MAP = {
   admin: { label: '系统管理员', type: 'danger' },
-  municipal: { label: '市政人员', type: 'warning' },
+  municipal: { label: '照明控制人员', type: 'warning' },
   operator: { label: '运维人员', type: 'primary' }
 }
 

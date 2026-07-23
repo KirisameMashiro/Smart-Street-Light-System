@@ -225,8 +225,8 @@ const menuConfig = [
     icon: 'Box',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: '设备档案', path: '/devices/archive', icon: 'Document' },
-      { title: '台账统计', path: '/devices/ledger', icon: 'PieChart' }
+      { title: '设备档案', path: '/devices/archive', icon: 'Document', roles: ['admin', 'municipal', 'operator'] },
+      { title: '台账统计', path: '/devices/ledger', icon: 'PieChart', roles: ['admin', 'operator'] }
     ]
   },
   {
@@ -234,29 +234,29 @@ const menuConfig = [
     icon: 'Monitor',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: '实时监测', path: '/monitor/realtime', icon: 'Aim' },
-      { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts' },
-      { title: '人流监测', path: '/monitor/pedestrian-flow', icon: 'UserFilled' },
-      { title: '历史人流趋势', path: '/monitor/pedestrian-flow-trend', icon: 'DataLine' }
+      { title: '实时监测', path: '/monitor/realtime', icon: 'Aim', roles: ['admin', 'municipal', 'operator'] },
+      { title: '历史光照趋势', path: '/monitor/illuminance-trend', icon: 'TrendCharts', roles: ['admin', 'municipal', 'operator'] },
+      { title: '人流监测', path: '/monitor/pedestrian-flow', icon: 'UserFilled', roles: ['admin', 'municipal'] },
+      { title: '历史人流趋势', path: '/monitor/pedestrian-flow-trend', icon: 'DataLine', roles: ['admin', 'municipal'] }
     ]
   },
   {
     title: '照明控制',
     icon: 'Switch',
-    roles: ['admin', 'municipal', 'operator'],
+    roles: ['admin', 'municipal'],
     children: [
-      { title: '远程控制', path: '/control/remote', icon: 'SetUp' },
-      { title: '照明策略', path: '/control/strategy', icon: 'Clock' },
-      { title: '操作日志', path: '/control/log', icon: 'List' }
+      { title: '远程控制', path: '/control/remote', icon: 'SetUp', roles: ['admin', 'municipal'] },
+      { title: '照明策略', path: '/control/strategy', icon: 'Clock', roles: ['admin', 'municipal'] },
+      { title: '操作日志', path: '/control/log', icon: 'List', roles: ['admin', 'municipal'] }
     ]
   },
   {
     title: '广播管理',
     icon: 'Mic',
-    roles: ['admin', 'municipal', 'operator'],
+    roles: ['admin', 'municipal'],
     children: [
-      { title: '广播设计', path: '/broadcast/design', icon: 'Microphone' },
-      { title: '广播策略', path: '/broadcast/strategy', icon: 'Timer' }
+      { title: '广播设计', path: '/broadcast/design', icon: 'Microphone', roles: ['admin', 'municipal'] },
+      { title: '广播策略', path: '/broadcast/strategy', icon: 'Timer', roles: ['admin', 'municipal'] }
     ]
   },
   {
@@ -269,26 +269,26 @@ const menuConfig = [
     title: '故障处理',
     path: '/faults',
     icon: 'FirstAidKit',
-    roles: ['admin', 'municipal', 'operator']
+    roles: ['admin', 'operator']
   },
   {
     title: '智能中心',
     icon: 'MagicStick',
     roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: '预测调光', path: '/ai/predict', icon: 'MagicStick' },
-      { title: 'AI 运维助手', path: '/ai/assistant', icon: 'ChatDotRound' },
+      { title: '预测调光', path: '/ai/predict', icon: 'MagicStick', roles: ['admin', 'municipal'] },
+      { title: 'AI 运维助手', path: '/ai/assistant', icon: 'ChatDotRound', roles: ['admin', 'operator'] },
       { title: '知识库管理', path: '/ai/knowledge', icon: 'Collection', roles: ['admin'] }
     ]
   },
   {
     title: '系统管理',
     icon: 'Setting',
-    roles: ['admin'],
+    roles: ['admin', 'municipal', 'operator'],
     children: [
-      { title: '用户管理', path: '/system/users', icon: 'User' },
-      { title: '操作审计', path: '/system/audit', icon: 'DocumentChecked' },
-      { title: '参数配置', path: '/system/config', icon: 'Tools' }
+      { title: '用户管理', path: '/system/users', icon: 'User', roles: ['admin'] },
+      { title: '操作审计', path: '/system/audit', icon: 'DocumentChecked', roles: ['admin'] },
+      { title: '参数配置', path: '/system/config', icon: 'Tools', roles: ['admin', 'municipal', 'operator'] }
     ]
   }
 ]

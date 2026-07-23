@@ -24,13 +24,13 @@ const routes = [
         path: 'devices/archive',
         name: 'DeviceArchive',
         component: () => import('@/views/devices/DeviceArchive.vue'),
-        meta: { title: '设备档案', keepAlive: true }
+        meta: { title: '设备档案', roles: ['admin', 'municipal', 'operator'], keepAlive: true }
       },
       {
         path: 'devices/ledger',
         name: 'DeviceLedger',
         component: () => import('@/views/devices/DeviceLedger.vue'),
-        meta: { title: '台账统计', keepAlive: true }
+        meta: { title: '台账统计', roles: ['admin', 'operator'], keepAlive: true }
       },
       {
         path: 'devices/:id',
@@ -43,70 +43,70 @@ const routes = [
         path: 'monitor/realtime',
         name: 'RealtimeMonitor',
         component: () => import('@/views/monitor/RealtimeMonitor.vue'),
-        meta: { title: '实时监测', keepAlive: true }
+        meta: { title: '实时监测', roles: ['admin', 'municipal', 'operator'], keepAlive: true }
       },
       {
         path: 'monitor/pedestrian-flow',
         name: 'PedestrianFlowMonitor',
         component: () => import('@/views/monitor/PedestrianFlowMonitor.vue'),
-        meta: { title: '人流监测', keepAlive: true }
+        meta: { title: '人流监测', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'monitor/pedestrian-flow-trend',
         name: 'PedestrianFlowTrend',
         component: () => import('@/views/monitor/PedestrianFlowTrend.vue'),
-        meta: { title: '历史人流趋势', keepAlive: true }
+        meta: { title: '历史人流趋势', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'monitor/illuminance-trend',
         name: 'IlluminanceTrend',
         component: () => import('@/views/monitor/IlluminanceTrend.vue'),
-        meta: { title: '历史光照趋势', keepAlive: true }
+        meta: { title: '历史光照趋势', roles: ['admin', 'municipal', 'operator'], keepAlive: true }
       },
       // ===== 照明控制 =====
       {
         path: 'control/remote',
         name: 'RemoteControl',
         component: () => import('@/views/control/RemoteControl.vue'),
-        meta: { title: '远程控制', keepAlive: true }
+        meta: { title: '远程控制', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'control/strategy',
         name: 'TimedStrategy',
         component: () => import('@/views/control/TimedStrategy.vue'),
-        meta: { title: '照明策略', keepAlive: true }
+        meta: { title: '照明策略', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'control/log',
         name: 'OperationLog',
         component: () => import('@/views/control/OperationLog.vue'),
-        meta: { title: '操作日志', keepAlive: true }
+        meta: { title: '操作日志', roles: ['admin', 'municipal'], keepAlive: true }
       },
       // ===== 广播管理 =====
       {
         path: 'broadcast/design',
         name: 'BroadcastDesign',
         component: () => import('@/views/broadcast/BroadcastDesign.vue'),
-        meta: { title: '广播设计', keepAlive: true }
+        meta: { title: '广播设计', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'broadcast/strategy',
         name: 'BroadcastStrategy',
         component: () => import('@/views/broadcast/BroadcastStrategy.vue'),
-        meta: { title: '广播策略', keepAlive: true }
+        meta: { title: '广播策略', roles: ['admin', 'municipal'], keepAlive: true }
       },
       // ===== 告警管理 =====
       {
         path: 'alerts',
         name: 'Alerts',
         component: () => import('@/views/Alerts.vue'),
-        meta: { title: '报警管理', keepAlive: true }
+        meta: { title: '报警管理', roles: ['admin', 'municipal', 'operator'], keepAlive: true }
       },
       {
         path: 'faults',
         name: 'FaultHandle',
         component: () => import('@/views/FaultHandle.vue'),
-        meta: { title: '故障处理', keepAlive: true }
+        meta: { title: '故障处理', roles: ['admin', 'operator'], keepAlive: true }
       },
       // ===== 碳减排分析 =====
       {
@@ -120,26 +120,26 @@ const routes = [
         path: 'ai/predict',
         name: 'AiPredict',
         component: () => import('@/views/ai/AiPredict.vue'),
-        meta: { title: '预测调光', keepAlive: true }
+        meta: { title: '预测调光', roles: ['admin', 'municipal'], keepAlive: true }
       },
       {
         path: 'ai/assistant',
         name: 'AiAssistant',
         component: () => import('@/views/ai/AiAssistant.vue'),
-        meta: { title: 'AI 运维助手', keepAlive: true }
+        meta: { title: 'AI 运维助手', roles: ['admin', 'operator'], keepAlive: true }
       },
       {
         path: 'ai/knowledge',
         name: 'AiKnowledge',
         component: () => import('@/views/ai/AiKnowledge.vue'),
-        meta: { title: '知识库管理', adminOnly: true, keepAlive: true }
+        meta: { title: '知识库管理', roles: ['admin'], keepAlive: true }
       },
       // ===== 系统管理 =====
       {
         path: 'system/users',
         name: 'Users',
         component: () => import('@/views/Users.vue'),
-        meta: { title: '用户管理', adminOnly: true, keepAlive: true }
+        meta: { title: '用户管理', roles: ['admin'], keepAlive: true }
       },
       {
         path: 'system/account',
@@ -151,13 +151,13 @@ const routes = [
         path: 'system/audit',
         name: 'OperationAudit',
         component: () => import('@/views/system/OperationAudit.vue'),
-        meta: { title: '操作审计', adminOnly: true, keepAlive: true }
+        meta: { title: '操作审计', roles: ['admin'], keepAlive: true }
       },
       {
         path: 'system/config',
         name: 'SystemConfig',
         component: () => import('@/views/system/SystemConfig.vue'),
-        meta: { title: '参数配置', adminOnly: true, keepAlive: true }
+        meta: { title: '参数配置', roles: ['admin', 'municipal', 'operator'], keepAlive: true }
       }
     ]
   },
@@ -189,8 +189,12 @@ router.beforeEach((to, from, next) => {
     return next({ path: '/login', query: { redirect: to.fullPath } })
   }
 
-  if (to.meta.adminOnly && !userStore.isAdmin) {
-    return next({ path: '/dashboard' })
+  const roles = to.meta.roles
+  if (roles && roles.length > 0) {
+    const userRole = userStore.user?.role || 'operator'
+    if (!roles.includes(userRole)) {
+      return next({ path: '/dashboard' })
+    }
   }
 
   next()

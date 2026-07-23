@@ -14,7 +14,7 @@
         <el-table-column type="index" label="#" width="60" />
         <el-table-column prop="username" label="用户名" width="130" />
         <el-table-column prop="realName" label="真实姓名" width="130" />
-        <el-table-column label="角色" width="110">
+        <el-table-column label="角色" width="140">
           <template #default="{ row }">
             <el-tag :type="USER_ROLE_MAP[row.role]?.type" size="small">
               {{ USER_ROLE_MAP[row.role]?.label }}
